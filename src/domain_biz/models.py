@@ -1,14 +1,14 @@
 from datetime import datetime
+
 from sqlalchemy import (
     String, 
     Text, 
     DateTime, 
     CheckConstraint, 
     ForeignKey, 
-    UniqueConstraint,  # 组合唯一约束
-    Computed,          # 自动计算列
-    CHAR,              # 固定长度字符串
-    func
+    UniqueConstraint,  
+    Computed,          
+    CHAR,              
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -99,6 +99,9 @@ class BizMaster(Base):
         onupdate=func.now(), 
         comment="レコード最終更新日時"
     )
+
+    is_active: Mapped[bool] = mapped_column(default=True, comment="有効フラグ（論理削除）")
+
 
     @validates('client_code')
     def validate_business_code(self, key, value):
