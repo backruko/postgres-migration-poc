@@ -1,5 +1,10 @@
 # src/infrastructure/config.py
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+env_state = os.getenv("ENVIRONMENT", "dev")
+
+env_file_to_load = ".env.test" if env_state == "test" else ".env"
 
 class Settings(BaseSettings):
     # 環境を指定。デフォルトは "dev"
@@ -9,7 +14,7 @@ class Settings(BaseSettings):
 
     # .env ファイルを自動的に読み込む設定
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=env_file_to_load, 
         env_file_encoding="utf-8",
         extra="ignore"  # .envに未定義の変数があっても無視する（安全対策）
     )

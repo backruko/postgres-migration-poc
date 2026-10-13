@@ -1,5 +1,15 @@
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, Integer,CheckConstraint
+from sqlalchemy import (
+    String, 
+    Text, 
+    DateTime, 
+    CheckConstraint, 
+    ForeignKey, 
+    UniqueConstraint,  # 组合唯一约束
+    Computed,          # 自动计算列
+    CHAR,              # 固定长度字符串
+    func
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.orm import validates 
@@ -15,9 +25,15 @@ class BizMaster(Base):
     __tablename__ = "biz_master"
 
     __table_args__ = (
+        # 1. 組み合わせユニーク：同一クライアント内で同じ連番は絶対に使わせない
+        UniqueConstraint(
+            'client_code', 'business_seq', 
+            name='uq_client_business_seq'
+        ),
+        # 2. 値域チェック：連番は必ず1以上の正の整数（0や負の数はDBが弾く）
         CheckConstraint(
-            "business_code LIKE client_code || '%'", 
-            name='check_biz_code_prefix_match'
+            'business_seq > 0', 
+            name='chk_business_seq_positive'
         ),
     )
 
@@ -29,22 +45,30 @@ class BizMaster(Base):
     )
     
     # --- Business Keys & Foreign References ---
+    client_code: Mapped[str] = mapped_column(
+        CHAR(4), # 4文字固定
+        ForeignKey("client_master.code"),  
+        index=True, 
+        comment="顧客コード（ClientMaster外部キー）"
+    )
+
+    business_seq: Mapped[int] = mapped_column(
+        comment="業務連番（同一顧客内で一意。例: 1, 2, 101）"
+    )
+
+    # 自動計算される業務コード（DBが自動で組み立てる）
+    # 例: client_code='ABCD', business_seq=1 -> 'ABCD0001'
     business_code: Mapped[str] = mapped_column(
-        String(50), 
+        String(100), 
+        Computed("client_code || LPAD(business_seq::text, 4, '0')", persisted=True),
         unique=True, 
         index=True, 
-        comment="業務コード（システム全体で一意となるビジネスキー）"
+        comment="業務コード（DB自動計算。例: ABCD0001）"
     )
-    client_code: Mapped[str] = mapped_column(
-        String(50), 
-        index=True, 
-        comment="顧客コード（該当業務を所有・委託するクライアントの識別子）"
-    )
-    
+       
     # --- Basic Attributes ---
     name: Mapped[str] = mapped_column(
         String(100), 
-        nullable=False, 
         comment="業務名称（例: 〇〇様向け日次照合業務）"
     )
     schedule_rule: Mapped[str | None] = mapped_column(
@@ -76,10 +100,8 @@ class BizMaster(Base):
         comment="レコード最終更新日時"
     )
 
-    @validates('client_code', 'business_code')
+    @validates('client_code')
     def validate_business_code(self, key, value):
-        # client_codeが既に設定されている場合、先頭のプレフィックスが一致するか検証（チェック）する
         if value is not None:
             return value.strip().upper() 
-        # 検証を通過した値を返す（これを忘れると値が代入されません）
         return value

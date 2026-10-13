@@ -20,6 +20,7 @@ from src.infrastructure.database import Base
 # 注意: モデルがBaseを継承して作られていることをAlembicに知らせるために、
 # ここで全てのmodels.pyをインポートしておく必要があります（後で作成した際に追加します）
 import src.domain_biz.models 
+import src.domain_client.models 
 # import src.domain_schedule.models 
 # -------------------------
 
