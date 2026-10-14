@@ -6,13 +6,13 @@ from sqlalchemy import (
     DateTime, 
     CheckConstraint, 
     ForeignKey, 
-    UniqueConstraint,  
+    Index,  
     Computed,          
     CHAR,              
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
-from sqlalchemy.orm import validates 
+from sqlalchemy.orm import validates, relationship
 from src.infrastructure.database import Base
 
 class BizMaster(Base):
@@ -24,17 +24,12 @@ class BizMaster(Base):
     """
     __tablename__ = "biz_master"
 
-    __table_args__ = (
-        # 1. 組み合わせユニーク：同一クライアント内で同じ連番は絶対に使わせない
-        UniqueConstraint(
-            'client_code', 'business_seq', 
-            name='uq_client_business_seq'
-        ),
-        # 2. 値域チェック：連番は必ず1以上の正の整数（0や負の数はDBが弾く）
-        CheckConstraint(
-            'business_seq > 0', 
-            name='chk_business_seq_positive'
-        ),
+#　（N+1問題）対策
+# bizes = session.query(BizMaster).options(selectinload(BizMaster.sop_versions)).all()
+
+    sop_versions: Mapped[list["SOPVersion"]] = relationship(
+        "SOPVersion",
+        back_populates="biz_master"
     )
 
     # --- Primary Key ---
@@ -62,19 +57,13 @@ class BizMaster(Base):
         String(100), 
         Computed("client_code || LPAD(business_seq::text, 4, '0')", persisted=True),
         unique=True, 
-        index=True, 
-        comment="業務コード（DB自動計算。例: ABCD0001）"
+        comment="業務コード (DB自動計算。例: ABCD0001)"
     )
        
     # --- Basic Attributes ---
     name: Mapped[str] = mapped_column(
         String(100), 
         comment="業務名称（例: 〇〇様向け日次照合業務）"
-    )
-    schedule_rule: Mapped[str | None] = mapped_column(
-        String(100), 
-        nullable=True, 
-        comment="実行スケジュール規則（例: Every_Monday）"
     )
     manager_email: Mapped[str | None] = mapped_column(
         String(100), 
@@ -100,11 +89,52 @@ class BizMaster(Base):
         comment="レコード最終更新日時"
     )
 
-    is_active: Mapped[bool] = mapped_column(default=True, comment="有効フラグ（論理削除）")
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), 
+        default=None, 
+        comment="削除日時（未削除の場合はNULL）"
+    )
 
+
+    __table_args__ = (
+        # 1. 組み合わせユニーク：同一クライアント内で同じ連番は絶対に使わせない
+        Index(
+            'uq_client_business_seq_alive',  
+            'client_code', 
+            'business_seq', 
+            unique=True,
+            postgresql_where=deleted_at.is_(None)  
+        ),
+
+        #  business_code も未削除のデータの中だけでユニークにする
+        Index(
+            'uq_business_code_alive',
+            'business_code', 
+            unique=True,
+            postgresql_where=deleted_at.is_(None)
+        ),
+        # 2. 値域チェック：連番は必ず1以上の正の整数（0や負の数はDBが弾く）
+        CheckConstraint(
+            'business_seq > 0', 
+            name='chk_business_seq_positive'
+        ),
+    )
 
     @validates('client_code')
-    def validate_business_code(self, key, value):
+    def validate_client_code(self, key, value):
         if value is not None:
             return value.strip().upper() 
         return value
+
+
+class SOPVersion(Base):
+    __tablename__ = "sop_version"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    
+    biz_master_id: Mapped[int] = mapped_column(ForeignKey("biz_master.id"))
+    
+    biz_master: Mapped["BizMaster"] = relationship(
+        "BizMaster",
+        back_populates="sop_versions"
+    )
