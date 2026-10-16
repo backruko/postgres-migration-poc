@@ -1,14 +1,17 @@
-from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
+import re
+import time
+from datetime import datetime
+from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union, cast
 
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
-# SQLAlchemyのベースモデルをインポートします（プロジェクトのパスに合わせて変更してください）
-# 例: from src.infrastructure.database import Base
-from sqlalchemy.orm import DeclarativeBase 
-class Base(DeclarativeBase):
-    pass
+from src.infrastructure.database import Base
+from src.infrastructure.mixin import SoftDeleteMixin
+from src.infrastructure.exceptions import DuplicatedRecordError
 
 # ジェネリクス用の型変数を定義します
 # ModelType: SQLAlchemyのORMモデル
@@ -36,7 +39,8 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """
         IDを指定して、単一のレコードを取得します。
         """
-        return db.query(self.model).filter(self.model.id == id).first()
+        stmt = select(self.model).where(self.model.id == id)
+        return db.scalars(stmt).first()
 
     def get_multi(
         self, db: Session, *, skip: int = 0, limit: int = 100
@@ -47,7 +51,8 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         :param skip: スキップするレコード数（オフセット）
         :param limit: 取得する最大レコード数
         """
-        return db.query(self.model).offset(skip).limit(limit).all()
+        stmt = select(self.model).offset(skip).limit(limit)
+        return list(db.scalars(stmt).all())
 
     def create(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType:
         """
@@ -61,10 +66,16 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         
         # データベースに保存します
         db.add(db_obj)
-        db.commit()
-        db.refresh(db_obj)
-        
-        return db_obj
+        try:
+            db.commit()
+            db.refresh(db_obj)
+            return db_obj
+        except IntegrityError:
+            db.rollback()
+            # ここで500エラーを防ぎ、自作例外に変換して投げます！
+            raise DuplicatedRecordError(
+                message=f"Create failed: Record already exists in the database."
+            )
 
     def update(
         self,
@@ -77,7 +88,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         既存のレコードを更新します。
 
         :param db_obj: 更新対象の現在のデータベースオブジェクト（取得済みのもの）
-        :param obj_in: 更新したいデータ（Pydanticモデル、または辞書）
+        :param obj_in: 更新したいデータ （Pydanticモデル、または辞書）
         """
         # 現在のデータベースオブジェクトを辞書に変換します
         obj_data = jsonable_encoder(db_obj)
@@ -106,11 +117,86 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         IDを指定して、レコードをデータベースから削除します。
         """
         # 削除対象のレコードを取得します
-        obj = db.query(self.model).get(id)
+        # 2.1.4スタイル: db.get はキャッシュを優先し全局scopeをすり抜ける危険があるため、
+        # 通常モデル用であっても select(...).where(...) で確実に最新データを取得します。
+        stmt = select(self.model).where(self.model.id == id)
+        obj = db.scalars(stmt).first()
         
-        # データベースから削除します
-        db.delete(obj)
-        db.commit()
+        # 削除対象が存在する場合のみ実行
+        if obj:
+            db.delete(obj)
+            db.commit()
         
         # 削除したオブジェクトの情報を返します（必要に応じてフロントエンドに返すため）
         return obj
+
+
+class SoftCRUDBase(CRUDBase[ModelType, CreateSchemaType, UpdateSchemaType]):
+
+    def __init__(self, model: Type[ModelType], default_scramble_fields: list[str] | None = None):
+        super().__init__(model)
+        self.default_scramble_fields = default_scramble_fields or []
+    
+    def remove(self, db: Session, *, id: int) -> Optional[ModelType]:
+        #  2.1.4スタイル: 全局scopeが有効なので、
+        # すでに削除済みのレコードはここで自動的に見つからなくなり（Noneを返す）、安全なガードがかかります。
+        stmt = select(self.model).where(self.model.id == id)
+        obj = db.scalars(stmt).first()
+        
+        if not obj:
+            return None
+        
+        cast(SoftDeleteMixin, obj).soft_delete()
+        
+         # 指定されたユニークフィールドのスクランブル化
+        if self.default_scramble_fields:
+            timestamp = int(time.time())
+            for field in self.default_scramble_fields:
+                old_val = getattr(obj, field, None)
+                if old_val and isinstance(old_val, str):
+                    setattr(obj, field, f"{old_val}_del_{timestamp}")
+
+        db.add(obj)
+        db.commit()
+        db.refresh(obj)
+        return obj
+
+    def restore(self, db: Session, *, id: int) -> Optional[ModelType]:
+        """
+        IDを指定して、論理削除されたレコードを復元します。
+        """
+        # 普通にselectすると全局scopeに阻まれて削除済みデータが取得できないため、
+        # .execution_options(include_deleted=True) を付与して一時的にscopeを「解除」します。
+        stmt = (
+            select(self.model)
+            .where(self.model.id == id)
+            .execution_options(include_deleted=True)
+        )
+        obj = db.scalars(stmt).first()
+
+        # すでにscopeを解除して全件対象になっているため、
+        # まだ削除されていない有効なデータ（is_deleted == False）を誤って復元しないようチェックします。
+        if not obj or not obj.is_deleted:
+            return None
+        
+        # 復元処理の実行
+        cast(SoftDeleteMixin, obj).restore() 
+
+        if self.default_scramble_fields:
+            for field in self.default_scramble_fields:
+                current_val = getattr(obj, field, None)
+                if current_val and isinstance(current_val, str):
+                    # 正規表現で 末尾の "_del_数字" を探して置換（削除）する
+                    # 例: "user@example.com_del_1700000000" -> "user@example.com"
+                    restored_val = re.sub(r"_del_\d+$", "", current_val)
+                    setattr(obj, field, restored_val)
+        
+        try:
+            db.commit()
+            db.refresh(obj)
+            return obj
+        except IntegrityError:
+            db.rollback()
+            raise DuplicatedRecordError(
+                message=f"Restore failed: Unique constraint conflict. The original value is already taken by another active record."
+            )

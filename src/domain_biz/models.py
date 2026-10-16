@@ -92,7 +92,7 @@ class BizMaster(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), 
         default=None, 
-        comment="削除日時（未削除の場合はNULL）"
+        comment="削除日時(未削除の場合はNULL)"
     )
 
 

@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from src.domain_client.schemas import ClientCreate, ClientUpdate 
+
 from src.infrastructure.repositories import client_repo
+from src.infrastructure.exceptions import NotFoundError 
 
 def create_client(db: Session, client_in: ClientCreate):
     # ① DB操作（CRUD）は、すべて client_repo に任せる！
@@ -20,12 +22,16 @@ def get_clients(db: Session):
 def delete_client(db: Session, client_id: int):
     deleted_client = client_repo.remove(db=db, id=client_id)
 
+    if not deleted_client:
+        raise NotFoundError(f"Client with id {client_id} not found.")
+        
     return deleted_client
 
 def update_client(db: Session, client_id: int, client_in: ClientUpdate):
     db_client = client_repo.get(db=db, id=client_id)
     if not db_client:
-        return None
-    updated_client = client_repo.update(db=db, db_obj=db_client, obj_in=client_in)
+        raise NotFoundError(f"Client(id={client_id}) not found") 
+    
+    return client_repo.update(db=db, db_obj=db_client, obj_in=client_in)
 
-    return updated_client
+    
