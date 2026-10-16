@@ -3,6 +3,7 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session, with_loader_c
 from src.infrastructure.config import settings
 
 from src.infrastructure.mixin import SoftDeleteMixin
+from src.domain_biz import BizMaster, SOPVersion 
 
 # データベースエンジンの作成
 engine = create_engine(settings.database_url, echo=True)
@@ -30,7 +31,15 @@ def _add_soft_delete_filter(execute_state):
                 include_aliases=True
             )
         )
-
+    # SOPVersionのクエリ時、親が消えているものを自動で除外するスコープ
+        # これにより、SOPVersion単体を取得しようとしても、親が消えていればNoneになります
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(
+                SOPVersion,
+                lambda cls: cls.biz_master.has(BizMaster.is_deleted == False),
+                include_aliases=True
+            )
+        )
 # FastAPI用のDBセッション取得関数
 def get_db():
     db = SessionLocal()

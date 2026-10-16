@@ -37,3 +37,17 @@ class ClientMaster(Base):
     __table_args__ = (
         UniqueConstraint('code', name='uq_client_id'),
     )
+
+    @validates('code')
+    def validate_code(self, key, value):
+        if value is not None:
+            # 1. 自動で前後の空白を削除し、大文字に変換
+            cleaned_value = value.strip().upper()
+            
+            # 2. 4文字固定（Char4）の厳格なバリデーション
+            if len(cleaned_value) != 4:
+                raise ValueError(f"Client code must be exactly 4 characters after stripping. Got: '{cleaned_value}' ({len(cleaned_value)} chars)")
+            
+            return cleaned_value
+            
+        return value

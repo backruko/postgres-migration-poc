@@ -5,6 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field
 # ここには「作成時」や「取得時」に必ず存在する【必須の基本項目】だけを定義します。
 # ==========================================
 class ClientBase(BaseModel):
+    #  Pydantic V2の model_config で、すべての文字列入力を自動でstripする設定
+    model_config = ConfigDict(str_strip_whitespace=True)
+    
     code: str = Field(..., min_length=4, max_length=4, description="client code must be 4 Characters")
     name: str = Field(..., max_length=50, description="client Name")
 

@@ -1,8 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 
 class BizMasterBase(BaseModel):
-    client_code: str
+    client_code: str = Field(..., min_length=2, max_length=10)
     business_seq: int
     name: str
     manager_email: str | None = None
