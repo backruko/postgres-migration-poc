@@ -8,7 +8,8 @@ from sqlalchemy import (
     ForeignKey, 
     Index,  
     Computed,          
-    CHAR,              
+    CHAR,
+    text              
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -93,12 +94,6 @@ class BizMaster(Base, SoftDeleteMixin):
         comment="レコード最終更新日時"
     )
 
-    deleted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), 
-        default=None, 
-        comment="削除日時(未削除の場合はNULL)"
-    )
-
 
     __table_args__ = (
         # 1. 組み合わせユニーク：同一クライアント内で同じ連番は絶対に使わせない
@@ -107,7 +102,7 @@ class BizMaster(Base, SoftDeleteMixin):
             'client_code', 
             'business_seq', 
             unique=True,
-            postgresql_where=deleted_at.is_(None)  
+            postgresql_where=text("deleted_at IS NULL")
         ),
 
         #  business_code も未削除のデータの中だけでユニークにする
@@ -115,7 +110,7 @@ class BizMaster(Base, SoftDeleteMixin):
             'uq_business_code_alive',
             'business_code', 
             unique=True,
-            postgresql_where=deleted_at.is_(None)
+            postgresql_where=text("deleted_at IS NULL")
         ),
         # 2. 値域チェック：連番は必ず1以上の正の整数（0や負の数はDBが弾く）
         CheckConstraint(
@@ -135,7 +130,7 @@ class SOPVersion(Base):
     __tablename__ = "sop_version"
     # ...（これまでの id, biz_master_id, version_number などの定義）...
 
-    # 💡 追加: 下位のステップテンプレートとのリレーション設定
+    # 下位のステップテンプレートとのリレーション設定
     step_templates: Mapped[list["SOPStepTemplate"]] = relationship(
         "SOPStepTemplate",
         back_populates="sop_version",

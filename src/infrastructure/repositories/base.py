@@ -1,5 +1,3 @@
-import re
-import time
 from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union, cast
 
@@ -132,10 +130,6 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
 
 class SoftCRUDBase(CRUDBase[ModelType, CreateSchemaType, UpdateSchemaType]):
-
-    def __init__(self, model: Type[ModelType], default_scramble_fields: list[str] | None = None):
-        super().__init__(model)
-        self.default_scramble_fields = default_scramble_fields or []
     
     def remove(self, db: Session, *, id: int) -> Optional[ModelType]:
         #  2.1.4スタイル: 全局scopeが有効なので、
@@ -148,14 +142,6 @@ class SoftCRUDBase(CRUDBase[ModelType, CreateSchemaType, UpdateSchemaType]):
         
         cast(SoftDeleteMixin, obj).soft_delete()
         
-         # 指定されたユニークフィールドのスクランブル化
-        if self.default_scramble_fields:
-            timestamp = int(time.time())
-            for field in self.default_scramble_fields:
-                old_val = getattr(obj, field, None)
-                if old_val and isinstance(old_val, str):
-                    setattr(obj, field, f"{old_val}_del_{timestamp}")
-
         db.add(obj)
         db.commit()
         db.refresh(obj)
@@ -181,15 +167,6 @@ class SoftCRUDBase(CRUDBase[ModelType, CreateSchemaType, UpdateSchemaType]):
         
         # 復元処理の実行
         cast(SoftDeleteMixin, obj).restore() 
-
-        if self.default_scramble_fields:
-            for field in self.default_scramble_fields:
-                current_val = getattr(obj, field, None)
-                if current_val and isinstance(current_val, str):
-                    # 正規表現で 末尾の "_del_数字" を探して置換（削除）する
-                    # 例: "user@example.com_del_1700000000" -> "user@example.com"
-                    restored_val = re.sub(r"_del_\d+$", "", current_val)
-                    setattr(obj, field, restored_val)
         
         try:
             db.commit()
