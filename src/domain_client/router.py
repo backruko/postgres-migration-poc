@@ -21,27 +21,9 @@ def get_clients_endpoint(db: Session = Depends(get_db)):
     return get_clients(db=db)
 
 @router.patch("/{client_id}", response_model=ClientResponse)
-def update_client_endpoint(client_id: int, client_in: ClientUpdate, db: Session = Depends(get_db)):
-
-    updated_client = update_client(db=db, client_id=client_id, client_in=client_in)
-    
-    if not updated_client:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Client not found"
-        )
-        
-    return updated_client
+def update_client_endpoint(client_id: int, client_in: ClientUpdate, db: Session = Depends(get_db)):   
+    return update_client(db=db, client_id=client_id, client_in=client_in)
 
 @router.delete("/{client_id}", response_model=ClientResponse)
 def delete_client_endpoint(client_id: int, db: Session = Depends(get_db)):
-
-    deleted_client = delete_client(db=db, client_id=client_id)
-    
-    if not deleted_client:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Client not found"
-        )
-        
-    return deleted_client
+    return delete_client(db=db, client_id=client_id)

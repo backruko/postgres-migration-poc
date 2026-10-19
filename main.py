@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from src.infrastructure.exceptions import DuplicatedRecordError, NotFoundError 
 
@@ -10,15 +10,15 @@ app = FastAPI(title="Schedule System")
 @app.exception_handler(DuplicatedRecordError)
 async def duplicated_record_exception_handler(request: Request, exc: DuplicatedRecordError):
     return JSONResponse(
-        status_code=400,
-        content={"detail": exc.message},
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": str(exc)},
     )
 
 @app.exception_handler(NotFoundError)
 async def not_found_exception_handler(request: Request, exc: NotFoundError):
     return JSONResponse(
-        status_code=404,  
-        content={"detail": exc.message},
+        status_code=status.HTTP_404_NOT_FOUND, 
+        content={"detail": str(exc)}, 
     )
 
 # クライアントのAPIを本体に登録！

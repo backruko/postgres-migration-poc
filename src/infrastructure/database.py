@@ -1,9 +1,9 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session, with_loader_criteria
-from src.infrastructure.config import settings
 
+from src.infrastructure.config import settings
 from src.infrastructure.mixin import SoftDeleteMixin
-from src.domain_biz import BizMaster, SOPVersion 
+
 
 # データベースエンジンの作成
 engine = create_engine(settings.database_url, echo=True)
@@ -22,6 +22,8 @@ def _add_soft_delete_filter(execute_state):
     全てのSQL実行時に割り込み、論理削除されたデータを自動で除外するフィルターを挟みます。
     ただし、`.execution_options(include_deleted=True)` が指定されている場合はスキップします。
     """
+    from src.domain_biz.models import BizMaster, SOPVersion
+    
     # 復元処理（Restore）など、明示的に解除オプションが指定されていないかチェック
     if not execute_state.execution_options.get("include_deleted", False):
         execute_state.statement = execute_state.statement.options(
