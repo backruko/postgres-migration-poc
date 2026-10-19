@@ -1,8 +1,8 @@
 """new biz
 
-Revision ID: 8c48324f3aa0
+Revision ID: 991d76cbce5c
 Revises: 
-Create Date: 2026-10-19 10:38:02.482432
+Create Date: 2026-10-19 16:08:59.029900
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '8c48324f3aa0'
+revision: str = '991d76cbce5c'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -58,9 +58,10 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('biz_master_id', sa.Integer(), nullable=False),
     sa.Column('version_number', sa.Integer(), nullable=False, comment='内部バージョン連番（ソート・最新判定用。例: 1, 2, 3)'),
-    sa.Column('version_tag', sa.String(length=20), nullable=False, comment='表示用バージョンタグ（例: v1.0.0)'),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.CheckConstraint("version_tag ~ '^v[0-9]+\\.[0-9]+\\.[0-9]+$'", name='chk_sop_version_tag_format'),
+    sa.Column('version_tag', sa.String(length=50), nullable=False, comment='表示用バージョンタグ（例: v1.0.0, v1.1.0-draft-teamA)'),
+    sa.Column('status', sa.Enum('DRAFT', 'FUTURE', 'ACTIVE', 'ARCHIVED', name='sop_status_enum'), nullable=False),
+    sa.Column('effective_at', sa.DateTime(timezone=True), nullable=True, comment='有効開始日時（未来実装のバージョンはここを指定）'),
+    sa.Column('expired_at', sa.DateTime(timezone=True), nullable=True, comment='有効終了日時（この日時を過ぎたら自動で無効化）'),
     sa.CheckConstraint('version_number > 0', name='chk_sop_version_number_positive'),
     sa.ForeignKeyConstraint(['biz_master_id'], ['biz_master.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
