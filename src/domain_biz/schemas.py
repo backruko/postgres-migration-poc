@@ -12,6 +12,11 @@ class BizMasterBase(BaseModel):
     manager_email: str | None = Field(None, max_length=100, description="Person in Charge of")
     description: str | None = Field(None, description="Business Description")
 
+    @field_validator('client_code')  # 这里的名字必须和上面的字段名一模一样
+    @classmethod
+    def to_uppercase(cls, v: str) -> str:
+        return v.upper() if v else v
+
 class BizMasterCreate(BizMasterBase):
     business_seq: int = Field(..., gt=0, description="sequence num > 0")
 

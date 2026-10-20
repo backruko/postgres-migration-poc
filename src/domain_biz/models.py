@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import enum
 from datetime import datetime
 
@@ -214,6 +215,21 @@ class SOPVersion(Base):
         # 人間の入力ミスによって全く同じ名前の草稿が作られるのを防ぎます。
         Index("uq_biz_version_tag", "biz_master_id", "version_tag", unique=True),
     )
+
+    @property
+    def dynamic_status(self) -> str:
+        if self.status == SOPStatus.DRAFT:
+            return "DRAFT"
+            
+        now = datetime.now(timezone.utc)
+        
+        if self.effective_at and self.effective_at > now:
+            return "FUTURE"
+            
+        if self.expired_at and self.expired_at <= now:
+            return "ARCHIVED"
+            
+        return "ACTIVE" 
 
 
 # ==========================================

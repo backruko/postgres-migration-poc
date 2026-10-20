@@ -164,13 +164,13 @@ def get_steps_by_version(db: Session, version_id: int) -> list[SOPStepTemplate]:
 def get_current_active_version(db: Session, biz_id: int) -> SOPVersion:
     """現在日時を基準に、自動的に『今有効な現行バージョン』を1件取得します。"""
     now = datetime.now(timezone.utc)
-    
+
     stmt = (
         select(SOPVersion)
         .where(
             SOPVersion.biz_master_id == biz_id,
-            SOPVersion.status == SOPStatus.ACTIVE,
-            or_(SOPVersion.effective_at == None, SOPVersion.effective_at <= now),
+            SOPVersion.status != SOPStatus.DRAFT, 
+            SOPVersion.effective_at <= now,
             or_(SOPVersion.expired_at == None, SOPVersion.expired_at > now)
         )
         .order_by(SOPVersion.version_number.desc())
