@@ -9,7 +9,7 @@ from src.domain_biz.schemas import (
     SOPVersionCreate, SOPVersionUpdate,
     SOPStepTemplateCreate, SOPStepTemplateUpdate
 )
-from src.infrastructure.exceptions import DuplicatedRecordError  # 自作例外のインポート
+from src.core.exceptions import DuplicatedRecordError  # 自作例外のインポート
 
 
 # ==========================================

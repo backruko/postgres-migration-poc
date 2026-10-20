@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session, with_loader_criteria
 
 from src.infrastructure.config import settings
-from src.infrastructure.mixin import SoftDeleteMixin
+from src.core.mixin import SoftDeleteMixin
 
 
 # データベースエンジンの作成
@@ -14,7 +14,7 @@ class Base(DeclarativeBase):
     pass
 
 # ==========================================
-# 💡 【追加】全局scope（グローバルフィルター）の制御コード
+# 【追加】全局scope（グローバルフィルター）の制御コード
 # ==========================================
 @event.listens_for(SessionLocal, "do_orm_execute")
 def _add_soft_delete_filter(execute_state):

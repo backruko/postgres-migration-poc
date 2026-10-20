@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.domain_client.schemas import ClientCreate, ClientUpdate 
 from src.infrastructure.repositories import client_repo
-from src.infrastructure.exceptions import NotFoundError, ReferencedRecordError
+from src.core.exceptions import NotFoundError, RecordReferencedException
 
 def create_client(db: Session, client_in: ClientCreate):
     # ① DB操作（CRUD）は、すべて client_repo に任せる！
@@ -28,7 +28,7 @@ def delete_client(db: Session, client_id: int):
         # DBのロールバック（これがないと以降のDB操作がすべて失敗します）
         db.rollback()
         # 外部キー制約違反などの場合
-        raise ReferencedRecordError("このクライアントは他のデータ(biz_master等)で使用されているため削除できません。")
+        raise RecordReferencedException("このクライアントは他のデータ(biz_master等)で使用されているため削除できません。")
 
 def update_client(db: Session, client_id: int, client_in: ClientUpdate):
     db_client = client_repo.get(db=db, id=client_id)

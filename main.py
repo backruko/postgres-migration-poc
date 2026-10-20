@@ -1,63 +1,48 @@
+import logging
+
+# ログの設定（ファイルとコンソールの両方に出力する）
+logging.basicConfig(
+    level=logging.INFO,  # INFOレベル以上のログを出力
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("app.log", encoding="utf-8"),  # ファイルに保存
+        logging.StreamHandler()                            # コンソールにも表示
+    ]
+)
+
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from src.infrastructure.exceptions import (
-    BusinessError,
-    DuplicatedRecordError,
-    NotFoundError,
-    ReferencedRecordError,
-    BadRequestError
+from src.core.exceptions import BusinessException
+from src.infrastructure.exception_handler.handlers import (
+    business_exception_handler,
+    global_exception_handler
 )
+
 from src.domain_client.router import router as client_router
 from src.domain_biz.router import router as biz_router 
 
 app = FastAPI(title="Schedule System")
 
-@app.exception_handler(DuplicatedRecordError)
-async def duplicated_record_exception_handler(request: Request, exc: DuplicatedRecordError):
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": str(exc)},
+# --------- エラーハンドラーの登録 ---------
+# BusinessExceptionが起きたら business_exception_handler を呼ぶ
+app.add_exception_handler(BusinessException, business_exception_handler)
+
+# その他の想定外のExceptionが起きたら global_exception_handler を呼ぶ
+app.add_exception_handler(Exception, global_exception_handler)
+# ----------------------------------------
+
+# 動作確認用のテストAPI
+from src.core.exceptions import UnauthorizedError
+from src.core.error_codes import ErrorCode
+
+@app.get("/test-error")
+async def test_error():
+    # Service層の代わりにここでエラーを発生させてみる
+    raise UnauthorizedError(
+        message="パスワードが間違っています(テスト)",
+        error_code=ErrorCode.INVALID_CREDENTIALS
     )
-
-@app.exception_handler(NotFoundError)
-async def not_found_exception_handler(request: Request, exc: NotFoundError):
-    return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND, 
-        content={"detail": str(exc)}, 
-    )
-
-@app.exception_handler(ReferencedRecordError)
-async def referenced_record_exception_handler(request: Request, exc: ReferencedRecordError):
-    return JSONResponse(
-        status_code=400,
-        content={"detail": str(exc)},
-    )
-
-
-
-# @app.exception_handler(BusinessError)
-# async def business_error_handler(request: Request, exc: BusinessError):
-#     """
-#     BusinessErrorを継承したすべての例外をここで横取りしてフォーマットを統一する
-#     """
-#     # 基本は 400 Bad Request
-#     http_status = status.HTTP_400_BAD_REQUEST
-    
-#     # 404など、特定のステータスコードにしたい例外だけ分岐する
-#     if isinstance(exc, NotFoundError):
-#         http_status = status.HTTP_404_NOT_FOUND
-        
-#     # フロントエンドが必ず受け取るJSONの構造（ErrorResponseの形）
-#     response_content = {
-#         "error_code": exc.code,
-#         "detail": exc.message
-#     }
-    
-#     return JSONResponse(
-#         status_code=http_status,
-#         content=response_content
-#     )
 
 # クライアントのAPIを本体に登録！
 app.include_router(client_router)

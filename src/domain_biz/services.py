@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from src.infrastructure.repositories import biz_master_repo, client_repo, sop_version_repo, sop_step_repo
 from src.domain_biz.models import BizMaster, SOPVersion, SOPStepTemplate, SOPStatus
 from src.domain_biz.schemas import BizMasterCreate, BizMasterUpdate, SOPVersionCreate, SOPStepTemplateCreate
-from src.infrastructure.exceptions import BadRequestError, NotFoundError, DuplicatedRecordError
+from src.core.exceptions import BadRequestError, NotFoundError, DuplicatedRecordError
 
 # ==========================================
 # BizMaster Service

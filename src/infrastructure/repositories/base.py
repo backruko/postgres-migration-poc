@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from src.infrastructure.database import Base
-from src.infrastructure.mixin import SoftDeleteMixin
-from src.infrastructure.exceptions import DuplicatedRecordError
+from src.core.mixin import SoftDeleteMixin
+from src.core.exceptions import DuplicatedRecordError
 
 # ジェネリクス用の型変数を定義します
 # ModelType: SQLAlchemyのORMモデル

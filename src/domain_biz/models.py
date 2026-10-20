@@ -21,7 +21,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import validates, relationship
 
 from src.infrastructure.database import Base
-from src.infrastructure.mixin import SoftDeleteMixin
+from src.core.mixin import SoftDeleteMixin
 
 class BizMaster(Base, SoftDeleteMixin):
     """
