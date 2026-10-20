@@ -9,11 +9,14 @@ from src.core.error_codes import ErrorCode
 
 logger = logging.getLogger(__name__)
 
-async def business_exception_handler(request: Request, exc: BusinessException) -> JSONResponse:
+async def business_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     BusinessException (およびその子クラス) をキャッチして、
     フロントエンド向けの統一されたJSONフォーマットに変換する
     """
+    # add_exception_handler の型は Exception を要求するため、ここで絞り込む
+    assert isinstance(exc, BusinessException)
+
     # ログ出力 (必要に応じて)
     logger.warning(f"Business Error: {exc.error_code} - {exc.message}")
 

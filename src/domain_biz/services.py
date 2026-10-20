@@ -131,19 +131,6 @@ def create_new_sop_version(db: Session, biz_id: int, version_in: SOPVersionCreat
 # SOPStepTemplate Service
 # ==========================================
 
-def create_step_template(db: Session, version_id: int, step_in: SOPStepTemplateCreate) -> SOPStepTemplate:
-    """特定のSOPバージョン内に、作業手順(ステップ)を新規作成します。"""
-    # 1. 親(SOPVersion)が存在するかチェック（親の親であるBizMasterが消えている場合も自動で弾かれます）
-    db_version = sop_version_repo.get(db, id=version_id)
-    if not db_version:
-        raise NotFoundError(f"SOPVersion(id={version_id}) not found. Cannot create step.")
-        
-    try:
-        return sop_step_repo.create_with_version(db, obj_in=step_in, sop_version_id=version_id)
-    except IntegrityError:
-        # 同一バージョン内で step_num が重複した場合(uq_sop_version_step_num)をキャッチ
-        raise DuplicatedRecordError(f"Step number {step_in.step_num} already exists in this version.")
-
 def get_steps_by_version(db: Session, version_id: int) -> list[SOPStepTemplate]:
     """特定のSOPバージョンに含まれるステップ一覧を、実行順序(step_num)通りに並べて取得します。"""
     db_version = sop_version_repo.get(db, id=version_id)
@@ -291,6 +278,8 @@ def cancel_future_version(db: Session, biz_id: int, future_version_id: int) -> S
     future_version = sop_version_repo.get(db, id=future_version_id)
     if not future_version or future_version.status != SOPStatus.FUTURE:
         raise NotFoundError("取り消し対象の未来実装(FUTURE)バージョンが見つかりません。")
+    if future_version.effective_at is None:
+        raise BadRequestError("未来実装(FUTURE)バージョンに発効日が設定されていません。")
 
     # 【連動処理】この予約のせいで期限を区切られていた現行版を逆探知する
     stmt_active = select(SOPVersion).where(

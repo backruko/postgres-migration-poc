@@ -19,4 +19,4 @@ class Settings(BaseSettings):
         extra="ignore"  # .envに未定義の変数があっても無視する（安全対策）
     )
 
-settings = Settings()
+settings = Settings()  # pyright: ignore[reportCallIssue]  # database_url は .env から読み込まれる

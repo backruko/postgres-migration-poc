@@ -1,5 +1,7 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session, with_loader_criteria
+from sqlalchemy.orm import DeclarativeBase, Mapped, sessionmaker, Session, with_loader_criteria
 
 from src.infrastructure.config import settings
 from src.core.mixin import SoftDeleteMixin
@@ -11,7 +13,9 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # 全てのモデルの親となる基本クラス
 class Base(DeclarativeBase):
-    pass
+    # 全モデルが id を持つ前提を型チェッカーに伝える（実行時にはカラムを追加しない）
+    if TYPE_CHECKING:
+        id: Mapped[int]
 
 # ==========================================
 # 【追加】全局scope（グローバルフィルター）の制御コード

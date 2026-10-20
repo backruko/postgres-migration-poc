@@ -30,42 +30,6 @@ class SOPVersionRepository(CRUDBase[SOPVersion, SOPVersionCreate, SOPVersionUpda
         db.refresh(db_obj)
         return db_obj
 
-    def restore(self, db: Session, *, id: int) -> SOPVersion | None:
-        """
-        IDを指定して、論理削除されたレコードを復元します。
-        """
-        #  グローバルスコープに阻まれて削除済みデータが取得できないのを防ぐため、
-        # .execution_options(include_deleted=True) を付与して一時的にスコープを「解除」します。
-        stmt = (
-            select(self.model)
-            .where(self.model.id == id)
-            .execution_options(include_deleted=True)
-        )
-        obj = db.scalars(stmt).first()
-
-        # すでにスコープを解除して全件対象になっているため、
-        # まだ削除されていない有効なデータを誤って復元しないようチェックします。
-        # ※ もしSOPVersion自身が論理削除をせず、親の論理削除のみに連動する場合は、
-        # 親（BizMaster）の状態をチェックするロジックになります。
-        if not obj or not getattr(obj, "is_deleted", False):
-            return None
-        
-        # 復元処理の実行（Mixin等に定義されているrestore、または直接フラグを戻す）
-        if hasattr(obj, "restore"):
-            obj.restore()
-        else:
-            obj.is_deleted = False
-        
-        try:
-            db.commit()
-            db.refresh(obj)
-            return obj
-        except IntegrityError:
-            db.rollback()
-            raise DuplicatedRecordError(
-                message=f"Restore failed: Unique constraint conflict. The original value is already taken by another active record."
-            )
-
 
 # ==========================================
 #  SOPStepTemplate Repository

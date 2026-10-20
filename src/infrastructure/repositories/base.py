@@ -110,7 +110,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         
         return db_obj
 
-    def remove(self, db: Session, *, id: int) -> ModelType:
+    def remove(self, db: Session, *, id: int) -> Optional[ModelType]:
         """
         IDを指定して、レコードをデータベースから削除します。
         """
@@ -162,7 +162,7 @@ class SoftCRUDBase(CRUDBase[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         # すでにscopeを解除して全件対象になっているため、
         # まだ削除されていない有効なデータ（is_deleted == False）を誤って復元しないようチェックします。
-        if not obj or not obj.is_deleted:
+        if not obj or not cast(SoftDeleteMixin, obj).is_deleted:
             return None
         
         # 復元処理の実行
