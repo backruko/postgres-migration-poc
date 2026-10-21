@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     String,
     Text,
     Time,
@@ -22,12 +23,13 @@ from sqlalchemy import (
     event,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TSTZRANGE, Range
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSTZRANGE, Range
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.sql import func
 
 from src.infrastructure.database import Base
 from src.core.mixin import SoftDeleteMixin
+from src.domain_plan.engine import DayUnit, HolidayPolicy
 
 
 class TemplateType(str, enum.Enum):
@@ -42,6 +44,7 @@ class VoidReason(str, enum.Enum):
     SOURCE_DATE_CHANGED = "source_date_changed"      # 参照元の日付（指定日・シート日付）が変更された
     MANUAL = "manual"
     REVERTED = "reverted"                            # 手動変更を取り消し、ルールの管理下に戻した
+    CALENDAR_CHANGED = "calendar_changed"            # 営業日カレンダー（休日・週末）が変更された
 
 
 class InstanceOrigin(str, enum.Enum):
@@ -77,6 +80,50 @@ def validate_timezone_name(value: str) -> str:
 
 
 # ==========================================
+# 0. BusinessCalendar（営業日カレンダー: 週末 + 休日。例: 日本の銀行休業日）
+# ==========================================
+class BusinessCalendar(Base):
+    __tablename__ = "business_calendar"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True, comment="カレンダーコード（例: JP_BANK）")
+    name: Mapped[str] = mapped_column(String(100), comment="カレンダー名")
+    weekend_days: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer), server_default=text("'{6,7}'"), comment="週末とする ISO 曜日（1=月 ... 7=日）"
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    holidays: Mapped[list["BusinessCalendarHoliday"]] = relationship(
+        back_populates="calendar", cascade="all, delete-orphan", passive_deletes=True,
+        order_by="BusinessCalendarHoliday.holiday_date",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "weekend_days <@ ARRAY[1,2,3,4,5,6,7] AND cardinality(weekend_days) < 7",
+            name="ck_business_calendar_weekend_days",
+        ),
+    )
+
+
+class BusinessCalendarHoliday(Base):
+    __tablename__ = "business_calendar_holiday"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    calendar_id: Mapped[int] = mapped_column(ForeignKey("business_calendar.id", ondelete="CASCADE"), index=True)
+    holiday_date: Mapped[date] = mapped_column(Date, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(100), comment="休日名（例: 元日）")
+
+    calendar: Mapped["BusinessCalendar"] = relationship(back_populates="holidays")
+
+    __table_args__ = (UniqueConstraint("calendar_id", "holiday_date", name="uq_business_calendar_holiday"),)
+
+
+# ==========================================
 # 1. ReferenceSheet（顧客の年間計画シート）
 # ==========================================
 class ReferenceSheet(Base):
@@ -107,12 +154,30 @@ class ReferenceSheet(Base):
 
 
 class ReferenceSheetMarker(Base):
-    """シート上のイベント種別（A〜G, 'Delivery' など）"""
+    """
+    シート上のイベント種別（A〜G, 'Delivery' など）。
+    日付は「取り込み（顧客のファイル）」か「ルールから生成（例: 毎月27日、休日なら翌営業日）」のどちらか。
+    生成マーカーでも、人が編集・追加・取消した日付は常に優先され、再生成で上書きされません。
+    """
     __tablename__ = "reference_sheet_marker"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     sheet_id: Mapped[int] = mapped_column(ForeignKey("reference_sheet.id", ondelete="CASCADE"), index=True)
     marker: Mapped[str] = mapped_column(String(50), comment="イベント記号")
+    description: Mapped[str | None] = mapped_column(String(200), comment="イベントの説明（例: 決済代行会社への送付）")
+
+    # --- 生成ルール（設定されている場合、日付はルールから生成される） ---
+    rrule: Mapped[str | None] = mapped_column(Text, comment="日付生成ルール（例: FREQ=MONTHLY;BYMONTHDAY=27）")
+    anchor_date: Mapped[date | None] = mapped_column(Date, comment="ルールの起点日（DTSTART）")
+    business_calendar_id: Mapped[int | None] = mapped_column(
+        ForeignKey("business_calendar.id", ondelete="RESTRICT", name="fk_reference_sheet_marker_business_calendar_id"),
+        index=True, comment="生成時に使う営業日カレンダー",
+    )
+    holiday_policy: Mapped[HolidayPolicy] = mapped_column(
+        Enum(HolidayPolicy, name="plan_holiday_policy_enum"),
+        default=HolidayPolicy.AS_IS, server_default=HolidayPolicy.AS_IS.name, nullable=False,
+        comment="生成日が非営業日の場合の扱い",
+    )
 
     sheet: Mapped["ReferenceSheet"] = relationship(back_populates="markers")
     events: Mapped[list["ReferenceSheetEvent"]] = relationship(
@@ -120,8 +185,23 @@ class ReferenceSheetMarker(Base):
         order_by="ReferenceSheetEvent.event_date",
     )
 
-    # テンプレート側の複合FKの参照先
-    __table_args__ = (UniqueConstraint("sheet_id", "marker", name="uq_reference_sheet_marker"),)
+    __table_args__ = (
+        # テンプレート側の複合FKの参照先
+        UniqueConstraint("sheet_id", "marker", name="uq_reference_sheet_marker"),
+        CheckConstraint("(rrule IS NULL) = (anchor_date IS NULL)", name="ck_reference_sheet_marker_rule_fields"),
+        CheckConstraint(
+            "holiday_policy = 'AS_IS' OR business_calendar_id IS NOT NULL",
+            name="ck_reference_sheet_marker_calendar_required",
+        ),
+    )
+
+    @property
+    def is_generated(self) -> bool:
+        return self.rrule is not None
+
+    @validates("rrule")
+    def validate_rrule(self, key, value):
+        return validate_rrule_text(value) if value is not None else value
 
     @validates("marker")
     def validate_marker(self, key, value):
@@ -143,9 +223,28 @@ class ReferenceSheetEvent(Base):
     )
     event_date: Mapped[date] = mapped_column(Date, nullable=False)
 
+    # --- 生成マーカー用 ---
+    rule_date: Mapped[date | None] = mapped_column(Date, comment="生成元のルール上の日付（発生枠の識別子）")
+    is_manual: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), comment="人が編集・追加・取消した日付（再生成で上書きしない）"
+    )
+    is_cancelled: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), comment="人が取り消した生成日（再生成で復活させないための記録）"
+    )
+
     marker_def: Mapped["ReferenceSheetMarker"] = relationship(back_populates="events")
 
-    __table_args__ = (UniqueConstraint("marker_id", "event_date", name="uq_reference_sheet_event"),)
+    __table_args__ = (
+        # 再生成で日付を入れ替える際に一時的な重複が起きるため、コミット時に検査する
+        UniqueConstraint(
+            "marker_id", "event_date", name="uq_reference_sheet_event", deferrable=True, initially="DEFERRED"
+        ),
+        Index(
+            "uq_reference_sheet_event_rule_date", "marker_id", "rule_date",
+            unique=True, postgresql_where=text("rule_date IS NOT NULL"),
+        ),
+        CheckConstraint("NOT is_cancelled OR (is_manual AND rule_date IS NOT NULL)", name="ck_reference_sheet_event_cancel"),
+    )
 
 
 # ==========================================
@@ -175,7 +274,22 @@ class PlanTemplate(Base, SoftDeleteMixin):
     # --- REFERENCE_SHEET_BASED 用 ---
     reference_sheet_id: Mapped[int | None] = mapped_column(comment="参照する年間計画シート")
     reference_event_marker: Mapped[str | None] = mapped_column(String(50), comment="参照するイベント記号")
-    offset_minutes: Mapped[int | None] = mapped_column(comment="(event_date + start_time) からのずれ")
+    offset_days: Mapped[int | None] = mapped_column(comment="基準日のずれ（日数。単位は offset_day_unit）")
+    offset_day_unit: Mapped[DayUnit | None] = mapped_column(
+        Enum(DayUnit, name="plan_offset_day_unit_enum"), comment="offset_days の単位（暦日 / 営業日）"
+    )
+    offset_minutes: Mapped[int | None] = mapped_column(comment="(基準日 + start_time) からの時刻のずれ")
+
+    # --- 休日の扱い（全タイプ共通） ---
+    business_calendar_id: Mapped[int | None] = mapped_column(
+        ForeignKey("business_calendar.id", ondelete="RESTRICT", name="fk_plan_template_business_calendar_id"),
+        index=True, comment="営業日カレンダー",
+    )
+    holiday_policy: Mapped[HolidayPolicy] = mapped_column(
+        Enum(HolidayPolicy, name="plan_holiday_policy_enum"),
+        default=HolidayPolicy.AS_IS, server_default=HolidayPolicy.AS_IS.name, nullable=False,
+        comment="非営業日に当たった場合の扱い",
+    )
 
     # --- 表示用メタデータ（例: {"bg_color": "#FF0000", "icon": "money-bag"}）。生成ルールには影響しない ---
     ui_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, comment="カレンダー表示用スタイル（インスタンス側で上書き可）")
@@ -210,8 +324,15 @@ class PlanTemplate(Base, SoftDeleteMixin):
         ),
         CheckConstraint(
             "template_type <> 'REFERENCE_SHEET_BASED' OR "
-            "(reference_sheet_id IS NOT NULL AND reference_event_marker IS NOT NULL AND offset_minutes IS NOT NULL)",
+            "(reference_sheet_id IS NOT NULL AND reference_event_marker IS NOT NULL AND offset_minutes IS NOT NULL "
+            "AND offset_days IS NOT NULL AND offset_day_unit IS NOT NULL)",
             name="ck_plan_template_sheet_fields",
+        ),
+        # 振替・スキップ・営業日オフセットにはカレンダーが必要
+        CheckConstraint(
+            "(holiday_policy = 'AS_IS' AND offset_day_unit IS DISTINCT FROM 'BUSINESS') "
+            "OR business_calendar_id IS NOT NULL",
+            name="ck_plan_template_calendar_required",
         ),
         CheckConstraint("duration_minutes > 0", name="ck_plan_template_duration_positive"),
         Index("ix_plan_template_sheet_marker", "reference_sheet_id", "reference_event_marker"),

@@ -1,12 +1,18 @@
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from src.core.schemas.error import COMMON_ERRORS
 from src.infrastructure.database import get_db
 from src.domain_plan.schemas import (
+    BusinessCalendarCreate,
+    BusinessCalendarResponse,
+    BusinessCalendarUpdate,
     CacheRebuildResponse,
+    CalendarChangeResult,
+    HolidayResponse,
+    HolidaysAdd,
     ExplicitDatesAdd,
     PlanInstanceCancel,
     PlanInstanceOverride,
@@ -22,18 +28,59 @@ from src.domain_plan.schemas import (
     ReferenceSheetEventResponse,
     ReferenceSheetEventsCreate,
     ReferenceSheetEventUpdate,
+    ReferenceSheetImport,
+    ReferenceSheetImportResult,
     ReferenceSheetMarkerCreate,
     ReferenceSheetMarkerResponse,
+    ReferenceSheetMarkerUpdate,
     ReferenceSheetResponse,
 )
 from src.domain_plan.services import (
+    add_holidays, create_calendar, delete_holiday, get_calendar, get_calendars, get_holidays, update_calendar,
     add_explicit_dates, add_marker, add_one_off_instance, add_sheet_events, cancel_instance, create_sheet, create_template, delete_sheet_event,
     delete_template, get_instances, get_occurrences, get_sheet, get_sheets, get_template, get_templates,
-    override_instance, rebuild_cache, remove_explicit_date, restore_template, revert_instance, update_sheet_event,
+    import_sheet, override_instance, revert_sheet_event, update_marker, rebuild_cache, remove_explicit_date, restore_template, revert_instance, update_sheet_event,
     update_template,
 )
 
 router = APIRouter(prefix="/plans", tags=["plans"])
+
+# ==========================================
+# BusinessCalendar（営業日カレンダー）エンドポイント
+# ==========================================
+
+@router.post("/calendars", response_model=BusinessCalendarResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+def create_calendar_endpoint(calendar_in: BusinessCalendarCreate, db: Session = Depends(get_db)):
+    return create_calendar(db=db, calendar_in=calendar_in)
+
+@router.get("/calendars", response_model=list[BusinessCalendarResponse], responses={**COMMON_ERRORS})
+def get_calendars_endpoint(db: Session = Depends(get_db)):
+    return get_calendars(db=db)
+
+@router.get("/calendars/{calendar_id}", response_model=BusinessCalendarResponse, responses={**COMMON_ERRORS})
+def get_calendar_endpoint(calendar_id: int, db: Session = Depends(get_db)):
+    return get_calendar(db=db, calendar_id=calendar_id)
+
+@router.patch("/calendars/{calendar_id}", response_model=BusinessCalendarResponse, responses={**COMMON_ERRORS})
+def update_calendar_endpoint(calendar_id: int, calendar_in: BusinessCalendarUpdate, db: Session = Depends(get_db)):
+    """週末の曜日を変更すると、このカレンダーを使う全テンプレートの未来の予定が再計算されます。"""
+    return update_calendar(db=db, calendar_id=calendar_id, calendar_in=calendar_in)
+
+@router.get("/calendars/{calendar_id}/holidays", response_model=list[HolidayResponse], responses={**COMMON_ERRORS})
+def get_holidays_endpoint(calendar_id: int, year: int | None = None, db: Session = Depends(get_db)):
+    return get_holidays(db=db, calendar_id=calendar_id, year=year)
+
+@router.post("/calendars/{calendar_id}/holidays", response_model=CalendarChangeResult, responses={**COMMON_ERRORS})
+def add_holidays_endpoint(calendar_id: int, holidays_in: HolidaysAdd, db: Session = Depends(get_db)):
+    """
+    休日を一括登録します（登録済みの日付は名前のみ更新）。
+    このカレンダーを使う全テンプレートの未来の予定が、休日ポリシーに従って再計算されます。
+    """
+    return add_holidays(db=db, calendar_id=calendar_id, holidays_in=holidays_in)
+
+@router.delete("/calendars/{calendar_id}/holidays/{holiday_date}", response_model=CalendarChangeResult, responses={**COMMON_ERRORS})
+def delete_holiday_endpoint(calendar_id: int, holiday_date: date, db: Session = Depends(get_db)):
+    return delete_holiday(db=db, calendar_id=calendar_id, holiday_date=holiday_date)
 
 # ==========================================
 # ReferenceSheet（年間計画シート）エンドポイント
@@ -42,6 +89,23 @@ router = APIRouter(prefix="/plans", tags=["plans"])
 @router.post("/sheets", response_model=ReferenceSheetResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
 def create_sheet_endpoint(sheet_in: ReferenceSheetCreate, db: Session = Depends(get_db)):
     return create_sheet(db=db, sheet_in=sheet_in)
+
+@router.post("/sheets/import", response_model=ReferenceSheetImportResult, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+def import_sheet_endpoint(
+    import_in: ReferenceSheetImport,
+    response: Response,
+    replace_events: bool = Query(False, description="true: delete dates not in the file so the sheet matches it exactly"),
+    db: Session = Depends(get_db),
+):
+    """
+    年間計画シート（マーカーと日付）を一括で取り込みます。
+    新規作成時は 201、既存シート（client_code + sheet_name が一致）の更新時は 200 を返します。
+    同じファイルを再度取り込んでも変化はありません。全件1トランザクションで、エラー時は何も反映されません。
+    """
+    result = import_sheet(db=db, import_in=import_in, replace_events=replace_events)
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return result
 
 @router.get("/sheets", response_model=list[ReferenceSheetResponse], responses={**COMMON_ERRORS})
 def get_sheets_endpoint(client_code: str, db: Session = Depends(get_db)):
@@ -55,6 +119,15 @@ def get_sheet_endpoint(sheet_id: int, db: Session = Depends(get_db)):
 def add_marker_endpoint(sheet_id: int, marker_in: ReferenceSheetMarkerCreate, db: Session = Depends(get_db)):
     return add_marker(db=db, sheet_id=sheet_id, marker_in=marker_in)
 
+@router.patch("/sheets/{sheet_id}/markers/{marker}", response_model=ReferenceSheetMarkerResponse, responses={**COMMON_ERRORS})
+def update_marker_endpoint(sheet_id: int, marker: str, marker_in: ReferenceSheetMarkerUpdate, db: Session = Depends(get_db)):
+    """
+    マーカーの説明・生成ルールを変更します。
+    rule を指定するとルールから日付を再生成します（人が編集・追加・取消した日付は常に維持）。
+    rule に null を指定すると生成をやめ、現在の日付を通常の日付として残します。
+    """
+    return update_marker(db=db, sheet_id=sheet_id, marker=marker, marker_in=marker_in)
+
 @router.post("/sheets/{sheet_id}/markers/{marker}/events", response_model=ReferenceSheetMarkerResponse, responses={**COMMON_ERRORS})
 def add_sheet_events_endpoint(sheet_id: int, marker: str, events_in: ReferenceSheetEventsCreate, db: Session = Depends(get_db)):
     """
@@ -67,8 +140,14 @@ def add_sheet_events_endpoint(sheet_id: int, marker: str, events_in: ReferenceSh
 def update_sheet_event_endpoint(event_id: int, event_in: ReferenceSheetEventUpdate, db: Session = Depends(get_db)):
     return update_sheet_event(db=db, event_id=event_id, event_in=event_in)
 
+@router.post("/sheets/events/{event_id}/revert", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS})
+def revert_sheet_event_endpoint(event_id: int, db: Session = Depends(get_db)):
+    """生成マーカーの日付に対する人の編集・取消を取り消し、ルールの日付に戻します。"""
+    return revert_sheet_event(db=db, event_id=event_id)
+
 @router.delete("/sheets/events/{event_id}", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS})
 def delete_sheet_event_endpoint(event_id: int, db: Session = Depends(get_db)):
+    """日付を削除します。生成マーカーのルール由来の日付は、再生成で復活しないよう「取消」として記録されます。"""
     return delete_sheet_event(db=db, event_id=event_id)
 
 # ==========================================
@@ -123,6 +202,40 @@ def get_instances_endpoint(template_id: int, skip: int = 0, limit: int = 100, db
 @router.post("/templates/{template_id}/cache/rebuild", response_model=CacheRebuildResponse, responses={**COMMON_ERRORS})
 def rebuild_cache_endpoint(template_id: int, db: Session = Depends(get_db)):
     return CacheRebuildResponse(template_id=template_id, occurrences=rebuild_cache(db=db, template_id=template_id))
+
+@router.post("/templates/{template_id}/instances", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+def add_one_off_instance_endpoint(template_id: int, one_off_in: PlanOneOffCreate, db: Session = Depends(get_db)):
+    """
+    発生枠に紐づかない単発のインスタンスを追加します(scheduled_end 省略時はテンプレートの所要時間)。
+    テンプレートのルールを変更しても維持されます。
+    """
+    return add_one_off_instance(db=db, template_id=template_id, one_off_in=one_off_in)
+
+# ==========================================
+# PlanInstance 手動変更エンドポイント
+# ==========================================
+
+@router.post("/instances/{instance_id}/override", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+def override_instance_endpoint(instance_id: int, override_in: PlanInstanceOverride, db: Session = Depends(get_db)):
+    """
+    特定の1件だけ時刻を変更します(延期・前倒し)。テンプレートのルールは変わりません。
+    元のインスタンスは MANUAL で無効化され、新しい時刻のインスタンスが追記されます(履歴は不変)。
+    以後テンプレートやシート日付が変更されても、この手動変更は維持されます。
+    """
+    return override_instance(db=db, instance_id=instance_id, override_in=override_in)
+
+@router.post("/instances/{instance_id}/cancel", response_model=PlanInstanceResponse, responses={**COMMON_ERRORS})
+def cancel_instance_endpoint(instance_id: int, cancel_in: PlanInstanceCancel | None = None, db: Session = Depends(get_db)):
+    """特定の1件だけ取り消します。以後の再生成でも復活しません。"""
+    return cancel_instance(db=db, instance_id=instance_id, cancel_in=cancel_in or PlanInstanceCancel())
+
+@router.post("/instances/{instance_id}/revert", response_model=PlanRevertResponse, responses={**COMMON_ERRORS})
+def revert_instance_endpoint(instance_id: int, revert_in: PlanInstanceRevert | None = None, db: Session = Depends(get_db)):
+    """
+    手動変更・取消を取り消し、その発生枠をテンプレートのルールに戻します。
+    置き換えの連鎖のどのインスタンスIDを指定しても構いません。
+    """
+    return revert_instance(db=db, instance_id=instance_id, revert_in=revert_in or PlanInstanceRevert())
 
 # ==========================================
 # Occurrence(カレンダー表示用)エンドポイント

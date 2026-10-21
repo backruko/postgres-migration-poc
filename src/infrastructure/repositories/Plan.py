@@ -16,6 +16,8 @@ from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError
 from src.domain_plan.engine import Occurrence
 from src.domain_plan.models import (
+    BusinessCalendar,
+    BusinessCalendarHoliday,
     InstanceOrigin,
     PlanExplicitDate,
     PlanInstance,
@@ -34,6 +36,32 @@ from src.infrastructure.repositories.base import CRUDBase, SoftCRUDBase
 
 
 # ==========================================
+#  BusinessCalendar Repository
+# ==========================================
+class BusinessCalendarRepository(CRUDBase[BusinessCalendar, BaseModel, BaseModel]):
+
+    def get_by_code(self, db: Session, *, code: str) -> BusinessCalendar | None:
+        return db.scalars(select(self.model).where(self.model.code == code)).first()
+
+    def get_all(self, db: Session) -> list[BusinessCalendar]:
+        return list(db.scalars(select(self.model).order_by(self.model.code)).all())
+
+    def get_holidays(
+        self, db: Session, *, calendar_id: int, start: date | None = None, end: date | None = None
+    ) -> list[BusinessCalendarHoliday]:
+        stmt = select(BusinessCalendarHoliday).where(BusinessCalendarHoliday.calendar_id == calendar_id)
+        if start is not None:
+            stmt = stmt.where(BusinessCalendarHoliday.holiday_date >= start)
+        if end is not None:
+            stmt = stmt.where(BusinessCalendarHoliday.holiday_date <= end)
+        return list(db.scalars(stmt.order_by(BusinessCalendarHoliday.holiday_date)).all())
+
+    def get_holiday_dates(self, db: Session, *, calendar_id: int) -> set[date]:
+        stmt = select(BusinessCalendarHoliday.holiday_date).where(BusinessCalendarHoliday.calendar_id == calendar_id)
+        return set(db.scalars(stmt).all())
+
+
+# ==========================================
 #  ReferenceSheet Repository
 # ==========================================
 class ReferenceSheetRepository(CRUDBase[ReferenceSheet, BaseModel, BaseModel]):
@@ -42,12 +70,22 @@ class ReferenceSheetRepository(CRUDBase[ReferenceSheet, BaseModel, BaseModel]):
         stmt = select(self.model).where(self.model.client_code == client_code).order_by(self.model.period_start)
         return list(db.scalars(stmt).all())
 
+    def get_by_client_and_name(self, db: Session, *, client_code: str, name: str) -> ReferenceSheet | None:
+        stmt = select(self.model).where(self.model.client_code == client_code, self.model.name == name)
+        return db.scalars(stmt).first()
+
     def get_marker(self, db: Session, *, sheet_id: int, marker: str) -> ReferenceSheetMarker | None:
         stmt = select(ReferenceSheetMarker).where(
             ReferenceSheetMarker.sheet_id == sheet_id,
             ReferenceSheetMarker.marker == marker,
         )
         return db.scalars(stmt).first()
+
+    def get_generated_markers_by_calendar(self, db: Session, *, calendar_id: int) -> list[ReferenceSheetMarker]:
+        stmt = select(ReferenceSheetMarker).where(
+            ReferenceSheetMarker.business_calendar_id == calendar_id, ReferenceSheetMarker.rrule.is_not(None)
+        )
+        return list(db.scalars(stmt.order_by(ReferenceSheetMarker.id)).all())
 
     def get_event(self, db: Session, *, event_id: int) -> ReferenceSheetEvent | None:
         stmt = select(ReferenceSheetEvent).where(ReferenceSheetEvent.id == event_id)
@@ -58,7 +96,11 @@ class ReferenceSheetRepository(CRUDBase[ReferenceSheet, BaseModel, BaseModel]):
         stmt = (
             select(ReferenceSheetEvent.id, ReferenceSheetEvent.event_date)
             .join(ReferenceSheetMarker, ReferenceSheetEvent.marker_id == ReferenceSheetMarker.id)
-            .where(ReferenceSheetMarker.sheet_id == sheet_id, ReferenceSheetMarker.marker == marker)
+            .where(
+                ReferenceSheetMarker.sheet_id == sheet_id,
+                ReferenceSheetMarker.marker == marker,
+                ReferenceSheetEvent.is_cancelled.is_(False),  # 人が取り消した生成日は除外
+            )
         )
         return [(row.id, row.event_date) for row in db.execute(stmt)]
 
@@ -94,6 +136,11 @@ class PlanTemplateRepository(SoftCRUDBase[PlanTemplate, BaseModel, PlanTemplateU
         stmt = select(self.model).where(self.model.reference_sheet_id == sheet_id)
         if marker is not None:
             stmt = stmt.where(self.model.reference_event_marker == marker)
+        return list(db.scalars(stmt.order_by(self.model.id).with_for_update()).all())
+
+    def get_by_calendar(self, db: Session, *, calendar_id: int) -> list[PlanTemplate]:
+        """営業日カレンダーを使用している有効なテンプレートを行ロック付きで取得します"""
+        stmt = select(self.model).where(self.model.business_calendar_id == calendar_id)
         return list(db.scalars(stmt.order_by(self.model.id).with_for_update()).all())
 
     def add_explicit_dates(self, db: Session, *, template: PlanTemplate, dates: Iterable[date]) -> int:
@@ -348,6 +395,7 @@ class PlanOccurrenceCacheRepository:
 # ==========================================
 #  インスタンス化とエクスポート
 # ==========================================
+business_calendar_repo = BusinessCalendarRepository(BusinessCalendar)
 reference_sheet_repo = ReferenceSheetRepository(ReferenceSheet)
 plan_template_repo = PlanTemplateRepository(PlanTemplate)
 plan_instance_repo = PlanInstanceRepository(PlanInstance)

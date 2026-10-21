@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -6,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.infrastructure.repositories import (
     biz_master_repo,
+    business_calendar_repo,
     client_repo,
     plan_cache_repo,
     plan_instance_repo,
@@ -16,7 +18,10 @@ from src.infrastructure.repositories import (
 )
 from src.domain_biz.models import BizMaster
 from src.domain_plan import engine
+from src.domain_plan.engine import DayUnit, HolidayPolicy
 from src.domain_plan.models import (
+    BusinessCalendar,
+    BusinessCalendarHoliday,
     InstanceOrigin,
     PlanExplicitDate,
     PlanInstance,
@@ -30,7 +35,12 @@ from src.domain_plan.models import (
     VoidReason,
 )
 from src.domain_plan.schemas import (
+    MarkerRule,
+    BusinessCalendarCreate,
+    BusinessCalendarUpdate,
+    CalendarChangeResult,
     ExplicitDatesTemplateCreate,
+    HolidaysAdd,
     PlanInstanceCancel,
     PlanInstanceOverride,
     PlanInstanceResponse,
@@ -43,7 +53,11 @@ from src.domain_plan.schemas import (
     ReferenceSheetEventResponse,
     ReferenceSheetEventsCreate,
     ReferenceSheetEventUpdate,
+    ReferenceSheetImport,
+    ReferenceSheetImportResult,
     ReferenceSheetMarkerCreate,
+    ReferenceSheetMarkerUpdate,
+    ReferenceSheetResponse,
     ReferenceSheetTemplateCreate,
     ui_metadata_to_dict,
 )
@@ -59,7 +73,9 @@ MAX_LOOKAHEAD = timedelta(days=730)
 FAR_FUTURE = datetime.max.replace(tzinfo=timezone.utc)
 
 RRULE_FIELDS = {"anchor_date", "rrule"}
-SHEET_FIELDS = {"reference_sheet_id", "reference_event_marker", "offset_minutes"}
+SHEET_FIELDS = {"reference_sheet_id", "reference_event_marker", "offset_days", "offset_day_unit", "offset_minutes"}
+# null を指定できる（＝解除できる）項目
+NULLABLE_UPDATE_FIELDS = {"business_calendar_id"}
 
 
 def _now() -> datetime:
@@ -69,14 +85,33 @@ def _now() -> datetime:
 # ==========================================
 # 生成エンジン（内部処理）
 # ==========================================
-def _load_holidays(db: Session, template: PlanTemplate) -> list[date]:
-    """休日カレンダー（銀行休業日など）のフック。カレンダーテーブル導入時にここで読み込みます。"""
-    return []
+def _load_calendar(db: Session, template: PlanTemplate) -> engine.BusinessCalendar | None:
+    """テンプレートの営業日カレンダー（週末 + 休日）をエンジン用に読み込みます。"""
+    return _load_engine_calendar(db, template.business_calendar_id)
+
+
+def _load_engine_calendar(db: Session, calendar_id: int | None) -> engine.BusinessCalendar | None:
+    if calendar_id is None:
+        return None
+    calendar = business_calendar_repo.get(db, id=calendar_id)
+    assert calendar is not None  # FK により存在は保証される
+    return engine.BusinessCalendar(
+        weekend_days=frozenset(calendar.weekend_days),
+        holidays=frozenset(business_calendar_repo.get_holiday_dates(db, calendar_id=calendar.id)),
+    )
 
 
 def _expand(db: Session, template: PlanTemplate, lower: datetime, upper: datetime) -> list[engine.Occurrence]:
     """テンプレートの種類に応じて入力を集め、エンジンで [lower, upper) の発生日時を算出します。"""
-    holidays = _load_holidays(db, template)
+    try:
+        return _expand_with_engine(db, template, lower, upper)
+    except engine.CalendarError as e:
+        raise BadRequestError(f"PlanTemplate(id={template.id}): {e}")
+
+
+def _expand_with_engine(db: Session, template: PlanTemplate, lower: datetime, upper: datetime) -> list[engine.Occurrence]:
+    calendar = _load_calendar(db, template)
+    policy = template.holiday_policy
 
     if template.template_type == TemplateType.RRULE:
         # CHECK制約により RRULE の場合は必ず値がある
@@ -89,7 +124,8 @@ def _expand(db: Session, template: PlanTemplate, lower: datetime, upper: datetim
             duration_minutes=template.duration_minutes,
             window_start=lower,
             window_end=upper,
-            holidays=holidays,
+            calendar=calendar,
+            holiday_policy=policy,
         )
 
     if template.template_type == TemplateType.EXPLICIT_DATES:
@@ -100,12 +136,14 @@ def _expand(db: Session, template: PlanTemplate, lower: datetime, upper: datetim
             duration_minutes=template.duration_minutes,
             window_start=lower,
             window_end=upper,
-            holidays=holidays,
+            calendar=calendar,
+            holiday_policy=policy,
         )
 
     # REFERENCE_SHEET_BASED: (シート, マーカー) の具体的な日付を取得して算出
     assert template.reference_sheet_id is not None and template.reference_event_marker is not None
-    assert template.offset_minutes is not None
+    assert template.offset_minutes is not None and template.offset_days is not None
+    assert template.offset_day_unit is not None
     events = reference_sheet_repo.get_event_dates(
         db, sheet_id=template.reference_sheet_id, marker=template.reference_event_marker
     )
@@ -113,11 +151,14 @@ def _expand(db: Session, template: PlanTemplate, lower: datetime, upper: datetim
         events=events,
         start_time=template.start_time,
         offset_minutes=template.offset_minutes,
+        offset_days=template.offset_days,
+        offset_day_unit=template.offset_day_unit,
         tz_name=template.timezone,
         duration_minutes=template.duration_minutes,
         window_start=lower,
         window_end=upper,
-        holidays=holidays,
+        calendar=calendar,
+        holiday_policy=policy,
     )
 
 
@@ -225,6 +266,103 @@ def _commit(db: Session, message: str) -> None:
 
 
 # ==========================================
+# BusinessCalendar Service
+# ==========================================
+def create_calendar(db: Session, calendar_in: BusinessCalendarCreate) -> BusinessCalendar:
+    if business_calendar_repo.get_by_code(db, code=calendar_in.code):
+        raise DuplicatedRecordError(f"BusinessCalendar with code '{calendar_in.code}' already exists.")
+    calendar = BusinessCalendar(**calendar_in.model_dump())
+    db.add(calendar)
+    _commit(db, f"BusinessCalendar with code '{calendar_in.code}' already exists.")
+    db.refresh(calendar)
+    return calendar
+
+
+def get_calendar(db: Session, calendar_id: int) -> BusinessCalendar:
+    calendar = business_calendar_repo.get(db, id=calendar_id)
+    if not calendar:
+        raise NotFoundError(f"BusinessCalendar(id={calendar_id}) not found.")
+    return calendar
+
+
+def get_calendars(db: Session) -> list[BusinessCalendar]:
+    return business_calendar_repo.get_all(db)
+
+
+def _propagate_calendar_change(db: Session, calendar_id: int) -> int:
+    """
+    カレンダーの変更を反映します（同一トランザクション内）。
+    1. このカレンダーで生成しているシートのマーカー日付を再生成（手動の日付は維持）
+    2. このカレンダーを使うテンプレート、および日付が変わったマーカーを参照するテンプレートの未来分を再照合
+    """
+    targets = {t.id: t for t in plan_template_repo.get_by_calendar(db, calendar_id=calendar_id)}
+    for marker in reference_sheet_repo.get_generated_markers_by_calendar(db, calendar_id=calendar_id):
+        if _generate_marker_events(db, marker):
+            for t in plan_template_repo.get_by_sheet_marker(db, sheet_id=marker.sheet_id, marker=marker.marker):
+                targets[t.id] = t
+    for template in targets.values():
+        _regenerate(db, template, VoidReason.CALENDAR_CHANGED)
+    return len(targets)
+
+
+def update_calendar(db: Session, calendar_id: int, calendar_in: BusinessCalendarUpdate) -> BusinessCalendar:
+    calendar = get_calendar(db, calendar_id)
+    if calendar_in.name is not None:
+        calendar.name = calendar_in.name
+    if calendar_in.weekend_days is not None and sorted(calendar.weekend_days) != calendar_in.weekend_days:
+        calendar.weekend_days = calendar_in.weekend_days
+        db.flush()
+        _propagate_calendar_change(db, calendar.id)
+    db.commit()
+    db.refresh(calendar)
+    return calendar
+
+
+def get_holidays(db: Session, calendar_id: int, year: int | None = None) -> list[BusinessCalendarHoliday]:
+    get_calendar(db, calendar_id)
+    if year is None:
+        return business_calendar_repo.get_holidays(db, calendar_id=calendar_id)
+    return business_calendar_repo.get_holidays(
+        db, calendar_id=calendar_id, start=date(year, 1, 1), end=date(year, 12, 31)
+    )
+
+
+def add_holidays(db: Session, calendar_id: int, holidays_in: HolidaysAdd) -> CalendarChangeResult:
+    """休日を一括登録します（登録済みの日付は名前のみ更新）。日付が増えた場合は使用中のテンプレートへ反映します。"""
+    calendar = get_calendar(db, calendar_id)
+    existing = {h.holiday_date: h for h in calendar.holidays}
+
+    result = CalendarChangeResult()
+    for h in holidays_in.holidays:
+        current = existing.get(h.holiday_date)
+        if current is None:
+            calendar.holidays.append(BusinessCalendarHoliday(holiday_date=h.holiday_date, name=h.name))
+            result.holidays_added += 1
+        elif current.name != h.name:
+            current.name = h.name
+            result.holidays_renamed += 1
+
+    db.flush()
+    if result.holidays_added:
+        result.templates_regenerated = _propagate_calendar_change(db, calendar.id)
+    _commit(db, "Some holidays already exist in this calendar.")
+    return result
+
+
+def delete_holiday(db: Session, calendar_id: int, holiday_date: date) -> CalendarChangeResult:
+    calendar = get_calendar(db, calendar_id)
+    target = next((h for h in calendar.holidays if h.holiday_date == holiday_date), None)
+    if target is None:
+        raise NotFoundError(f"Holiday {holiday_date} not found in BusinessCalendar(id={calendar_id}).")
+
+    calendar.holidays.remove(target)
+    db.flush()
+    result = CalendarChangeResult(holidays_deleted=1, templates_regenerated=_propagate_calendar_change(db, calendar.id))
+    db.commit()
+    return result
+
+
+# ==========================================
 # ReferenceSheet Service
 # ==========================================
 def create_sheet(db: Session, sheet_in: ReferenceSheetCreate) -> ReferenceSheet:
@@ -254,10 +392,236 @@ def add_marker(db: Session, sheet_id: int, marker_in: ReferenceSheetMarkerCreate
     if reference_sheet_repo.get_marker(db, sheet_id=sheet_id, marker=marker_in.marker):
         raise DuplicatedRecordError(f"Marker '{marker_in.marker}' already exists on this sheet.")
 
-    sheet.markers.append(ReferenceSheetMarker(marker=marker_in.marker))
+    marker = ReferenceSheetMarker(marker=marker_in.marker, description=marker_in.description)
+    sheet.markers.append(marker)
+    if marker_in.rule is not None:
+        _apply_marker_rule(db, marker, marker_in.rule)
+        db.flush()
+        _generate_marker_events(db, marker)
     _commit(db, f"Marker '{marker_in.marker}' already exists on this sheet.")
     db.refresh(sheet)
     return sheet
+
+
+# ==========================================
+# 生成マーカー（ルールから基準日を生成）
+# ==========================================
+def _apply_marker_rule(db: Session, marker: ReferenceSheetMarker, rule: MarkerRule | None) -> None:
+    if rule is None:
+        marker.rrule = marker.anchor_date = marker.business_calendar_id = None
+        marker.holiday_policy = HolidayPolicy.AS_IS
+        return
+    _get_calendar_if_set(db, rule.business_calendar_id)
+    marker.rrule = rule.rrule
+    marker.anchor_date = rule.anchor_date
+    marker.business_calendar_id = rule.business_calendar_id
+    marker.holiday_policy = rule.holiday_policy
+
+
+def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
+    """
+    生成マーカーの日付をルールに合わせます。変更があれば True を返します（flush 済み）。
+    人の判断が常に優先されます:
+    - 人が編集・取消した日付（is_manual）は変更しない。その発生枠をルールで作り直すこともしない
+    - 人が置いた日付と同じ日には、ルールの日付を置かない
+    ルールの日付は rule_date（発生枠）で照合するため、日付が動いても同じ行（id）が更新され、
+    参照しているテンプレート側の手動変更もそのまま維持されます。
+    """
+    if not marker.is_generated:
+        return False
+    assert marker.rrule is not None and marker.anchor_date is not None
+    sheet = marker.sheet
+    try:
+        desired = engine.expand_rule_dates(
+            rrule=marker.rrule,
+            anchor_date=marker.anchor_date,
+            period_start=sheet.period_start,
+            period_end=sheet.period_end,
+            calendar=_load_engine_calendar(db, marker.business_calendar_id),
+            holiday_policy=marker.holiday_policy,
+        )
+    except engine.CalendarError as e:
+        raise BadRequestError(f"Marker '{marker.marker}': {e}")
+
+    by_rule_date = {e.rule_date: e for e in marker.events if e.rule_date is not None}
+    human_dates = {e.event_date for e in marker.events if e.is_manual}
+
+    targets: dict[date, date] = {}
+    for rd in desired:
+        current = by_rule_date.get(rd.rule_date)
+        if current is not None and current.is_manual:
+            continue
+        if rd.actual_date in human_dates:
+            continue
+        targets[rd.rule_date] = rd.actual_date
+
+    changed = False
+    for event in list(marker.events):
+        if not event.is_manual and event.rule_date is not None and event.rule_date not in targets:
+            marker.events.remove(event)  # delete-orphan により削除
+            changed = True
+    for rule_date, actual in targets.items():
+        current = by_rule_date.get(rule_date)
+        if current is None:
+            marker.events.append(ReferenceSheetEvent(event_date=actual, rule_date=rule_date))
+            changed = True
+        elif current.event_date != actual:
+            current.event_date = actual
+            changed = True
+    db.flush()
+    return changed
+
+
+def _regenerate_sheet_markers(db: Session, sheet: ReferenceSheet) -> list[str]:
+    """シートの全生成マーカーを再生成し、日付が変わったマーカー名を返します（シート期間の変更時など）"""
+    return [m.marker for m in sheet.markers if _generate_marker_events(db, m)]
+
+
+def update_marker(db: Session, sheet_id: int, marker: str, marker_in: ReferenceSheetMarkerUpdate) -> ReferenceSheetMarker:
+    get_sheet(db, sheet_id)
+    marker_obj = reference_sheet_repo.get_marker(db, sheet_id=sheet_id, marker=marker)
+    if not marker_obj:
+        raise NotFoundError(f"Marker '{marker}' not found on ReferenceSheet(id={sheet_id}).")
+
+    if "description" in marker_in.model_fields_set:
+        marker_obj.description = marker_in.description
+
+    changed = False
+    if "rule" in marker_in.model_fields_set:
+        if marker_in.rule is None:
+            # 生成をやめる: 取消の記録は削除し、残りは通常の（取り込みと同じ扱いの）日付にする
+            for event in list(marker_obj.events):
+                if event.is_cancelled:
+                    marker_obj.events.remove(event)
+                else:
+                    event.rule_date = None
+                    event.is_manual = False
+            _apply_marker_rule(db, marker_obj, None)
+        else:
+            _apply_marker_rule(db, marker_obj, marker_in.rule)
+            db.flush()
+            changed = _generate_marker_events(db, marker_obj)
+    db.flush()
+    if changed:
+        _propagate_sheet_change(db, sheet_id, marker)
+    _commit(db, "Marker dates conflict with each other.")
+    db.refresh(marker_obj)
+    return marker_obj
+
+
+def import_sheet(db: Session, import_in: ReferenceSheetImport, replace_events: bool = False) -> ReferenceSheetImportResult:
+    """
+    年間計画シートを一括で取り込みます（1トランザクション。失敗時は何も反映されません）。
+    - (client_code, sheet_name) のシートが無ければ新規作成、あれば更新（同じファイルの再取り込みは何も変えない）
+    - マーカー: 無いものは追加、説明が変わったものは更新（ファイルに無いマーカーは、テンプレートが参照し得るため削除しない）
+    - 日付: 無いものは追加。replace_events=True の場合はファイルに無い日付を削除し、シートをファイルと完全一致させる
+    - 日付が変わったマーカーを参照しているテンプレートは、未来分を自動で再照合する
+    """
+    if not client_repo.get_by_code(db, code=import_in.client_code):
+        raise NotFoundError(f"Client with code '{import_in.client_code}' does not exist.")
+
+    sheet = reference_sheet_repo.get_by_client_and_name(db, client_code=import_in.client_code, name=import_in.sheet_name)
+    created = sheet is None
+    if sheet is None:
+        sheet = ReferenceSheet(
+            client_code=import_in.client_code,
+            name=import_in.sheet_name,
+            period_start=import_in.period_start,
+            period_end=import_in.period_end,
+        )
+        db.add(sheet)
+    else:
+        # 期間を狭める場合、残る日付が新しい期間の外に出ないことを確認
+        if not replace_events:
+            # 生成マーカーのルール由来の日付は、新しい期間で作り直されるため対象外
+            kept_outside = sorted(
+                e.event_date
+                for m in sheet.markers
+                for e in m.events
+                if not (import_in.period_start <= e.event_date <= import_in.period_end)
+                and (not m.is_generated or e.is_manual)
+            )
+            if kept_outside:
+                raise BadRequestError(
+                    f"{len(kept_outside)} existing event date(s) fall outside the new period "
+                    f"(e.g. {[d.isoformat() for d in kept_outside[:10]]}). Use replace_events=true to remove them."
+                )
+        sheet.period_start = import_in.period_start
+        sheet.period_end = import_in.period_end
+
+    # --- マーカー ---
+    markers = {m.marker: m for m in sheet.markers}
+    markers_created = markers_updated = 0
+    for m in import_in.markers:
+        existing = markers.get(m.marker)
+        if existing is None:
+            existing = ReferenceSheetMarker(marker=m.marker, description=m.description)
+            sheet.markers.append(existing)
+            markers[m.marker] = existing
+            markers_created += 1
+        elif existing.description != m.description:
+            existing.description = m.description
+            markers_updated += 1
+
+    # --- 日付 ---
+    wanted: dict[str, set[date]] = defaultdict(set)
+    for e in import_in.events:
+        wanted[e.marker].add(e.event_date)
+
+    generated_in_file = sorted(name for name in wanted if markers[name].is_generated)
+    if generated_in_file:
+        raise BadRequestError(
+            f"Markers {generated_in_file} are generated from a rule; edit their dates with the events API instead of importing."
+        )
+
+    events_created = events_deleted = 0
+    changed_markers: list[str] = []
+    for name, marker_obj in markers.items():
+        if marker_obj.is_generated:
+            continue  # 生成マーカーの日付はルール（と人の編集）が管理する
+        if name not in wanted and not replace_events:
+            continue
+        current = {e.event_date: e for e in marker_obj.events}
+        to_add = sorted(wanted[name] - current.keys())
+        to_delete = [current[d] for d in current.keys() - wanted[name]] if replace_events else []
+        for d in to_add:
+            marker_obj.events.append(ReferenceSheetEvent(event_date=d))
+        for event in to_delete:
+            marker_obj.events.remove(event)  # delete-orphan により削除
+        if to_add or to_delete:
+            changed_markers.append(name)
+        events_created += len(to_add)
+        events_deleted += len(to_delete)
+
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise DuplicatedRecordError("The sheet could not be imported due to a conflicting record.")
+
+    # 期間が変わった場合は生成マーカーも作り直す
+    if not created:
+        changed_markers += _regenerate_sheet_markers(db, sheet)
+
+    # --- 参照しているテンプレートへ反映（新規シートは参照されていないため対象なし） ---
+    templates_regenerated = 0
+    if not created:
+        for name in changed_markers:
+            for template in plan_template_repo.get_by_sheet_marker(db, sheet_id=sheet.id, marker=name):
+                _regenerate(db, template, VoidReason.SOURCE_DATE_CHANGED)
+                templates_regenerated += 1
+
+    _commit(db, "The sheet could not be imported due to a conflicting record.")
+    db.refresh(sheet)
+    return ReferenceSheetImportResult(
+        created=created,
+        markers_created=markers_created,
+        markers_updated=markers_updated,
+        events_created=events_created,
+        events_deleted=events_deleted,
+        templates_regenerated=templates_regenerated,
+        sheet=ReferenceSheetResponse.model_validate(sheet),
+    )
 
 
 def _check_in_sheet_period(sheet: ReferenceSheet, dates: list[date]) -> None:
@@ -269,10 +633,12 @@ def _check_in_sheet_period(sheet: ReferenceSheet, dates: list[date]) -> None:
         )
 
 
-def _propagate_sheet_change(db: Session, sheet_id: int, marker: str) -> None:
+def _propagate_sheet_change(db: Session, sheet_id: int, marker: str) -> int:
     """シート日付の変更を、そのマーカーを参照している全テンプレートへ反映します（同一トランザクション内）。"""
-    for template in plan_template_repo.get_by_sheet_marker(db, sheet_id=sheet_id, marker=marker):
+    templates = plan_template_repo.get_by_sheet_marker(db, sheet_id=sheet_id, marker=marker)
+    for template in templates:
         _regenerate(db, template, VoidReason.SOURCE_DATE_CHANGED)
+    return len(templates)
 
 
 def add_sheet_events(
@@ -284,11 +650,16 @@ def add_sheet_events(
         raise NotFoundError(f"Marker '{marker}' not found on ReferenceSheet(id={sheet_id}).")
     _check_in_sheet_period(sheet, events_in.dates)
 
-    existing = {e.event_date for e in marker_obj.events}
-    new_dates = sorted(set(events_in.dates) - existing)
-    if new_dates:
+    existing = {e.event_date: e for e in marker_obj.events}
+    new_dates = sorted(set(events_in.dates) - existing.keys())
+    # 生成マーカーで取り消した日付を再度追加した場合は、取消を解除する（人の判断のまま）
+    reactivated = [existing[d] for d in set(events_in.dates) if d in existing and existing[d].is_cancelled]
+    if new_dates or reactivated:
         for d in new_dates:
-            marker_obj.events.append(ReferenceSheetEvent(event_date=d))
+            # 生成マーカーへの追加は人の判断（再生成で消さない）
+            marker_obj.events.append(ReferenceSheetEvent(event_date=d, is_manual=marker_obj.is_generated))
+        for event in reactivated:
+            event.is_cancelled = False
         db.flush()
         _propagate_sheet_change(db, sheet_id, marker)
         _commit(db, "Some dates already exist for this marker.")
@@ -301,10 +672,14 @@ def update_sheet_event(db: Session, event_id: int, event_in: ReferenceSheetEvent
     if not event:
         raise NotFoundError(f"ReferenceSheetEvent(id={event_id}) not found.")
     marker_obj = event.marker_def
+    if event.is_cancelled:
+        raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) has been cancelled. Revert it or add the date again.")
     _check_in_sheet_period(marker_obj.sheet, [event_in.event_date])
 
     if event.event_date != event_in.event_date:
         event.event_date = event_in.event_date
+        if marker_obj.is_generated:
+            event.is_manual = True  # 人の編集は再生成で上書きしない
         try:
             db.flush()
         except IntegrityError:
@@ -320,14 +695,50 @@ def delete_sheet_event(db: Session, event_id: int) -> ReferenceSheetEventRespons
     event = reference_sheet_repo.get_event(db, event_id=event_id)
     if not event:
         raise NotFoundError(f"ReferenceSheetEvent(id={event_id}) not found.")
-    deleted = ReferenceSheetEventResponse.model_validate(event)
     sheet_id, marker = event.marker_def.sheet_id, event.marker_def.marker
 
-    db.delete(event)
-    db.flush()
+    if event.rule_date is not None:
+        # ルール由来の日付は、再生成で復活しないよう「取消」として記録を残す
+        if event.is_cancelled:
+            raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) is already cancelled.")
+        event.is_cancelled = True
+        event.is_manual = True
+        db.flush()
+        result = ReferenceSheetEventResponse.model_validate(event)
+    else:
+        result = ReferenceSheetEventResponse.model_validate(event)
+        db.delete(event)
+        db.flush()
     _propagate_sheet_change(db, sheet_id, marker)
     db.commit()
-    return deleted
+    return result
+
+
+def revert_sheet_event(db: Session, event_id: int) -> ReferenceSheetEvent:
+    """生成マーカーの日付に対する人の編集・取消を取り消し、ルールの日付に戻します。"""
+    event = reference_sheet_repo.get_event(db, event_id=event_id)
+    if not event:
+        raise NotFoundError(f"ReferenceSheetEvent(id={event_id}) not found.")
+    marker_obj = event.marker_def
+    if not marker_obj.is_generated or event.rule_date is None:
+        raise BadRequestError("Only dates generated from a marker rule can be reverted. Delete manually added dates instead.")
+    if not event.is_manual:
+        raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) has not been edited or cancelled.")
+
+    event.is_manual = False
+    event.is_cancelled = False
+    db.flush()
+    _generate_marker_events(db, marker_obj)
+    if event not in marker_obj.events:
+        # ルールがこの発生枠をもう作らない、またはその日に人が置いた日付があるため、戻すと日付が消えてしまう
+        db.rollback()
+        raise BadRequestError(
+            f"The rule no longer produces a free date for ReferenceSheetEvent(id={event_id}). Edit or delete it instead."
+        )
+    _propagate_sheet_change(db, marker_obj.sheet_id, marker_obj.marker)
+    _commit(db, "Marker dates conflict with each other.")
+    db.refresh(event)
+    return event
 
 
 # ==========================================
@@ -354,6 +765,25 @@ def _validate_sheet_reference(db: Session, biz: BizMaster, sheet_id: int, marker
         raise NotFoundError(f"Marker '{marker}' not found on ReferenceSheet(id={sheet_id}).")
 
 
+def _get_calendar_if_set(db: Session, calendar_id: int | None) -> BusinessCalendar | None:
+    if calendar_id is None:
+        return None
+    calendar = business_calendar_repo.get(db, id=calendar_id)
+    if not calendar:
+        raise NotFoundError(f"BusinessCalendar(id={calendar_id}) not found.")
+    return calendar
+
+
+def _check_calendar_settings(template: PlanTemplate) -> None:
+    """振替・スキップ・営業日オフセットにはカレンダーが必要（DBのCHECK制約と同じ条件を、分かりやすいエラーで返す）"""
+    if template.business_calendar_id is not None:
+        return
+    if template.holiday_policy != HolidayPolicy.AS_IS:
+        raise BadRequestError(f"holiday_policy '{template.holiday_policy.value}' requires business_calendar_id.")
+    if template.offset_day_unit == DayUnit.BUSINESS:
+        raise BadRequestError("offset_day_unit 'business' requires business_calendar_id.")
+
+
 def _get_locked_template(db: Session, template_id: int) -> PlanTemplate:
     template = plan_template_repo.get_locked(db, id=template_id)
     if not template:
@@ -365,6 +795,7 @@ def create_template(db: Session, template_in: PlanTemplateCreate) -> PlanTemplat
     biz = _get_biz(db, template_in.biz_master_id)
     if isinstance(template_in, ReferenceSheetTemplateCreate):
         _validate_sheet_reference(db, biz, template_in.reference_sheet_id, template_in.reference_event_marker)
+    _get_calendar_if_set(db, template_in.business_calendar_id)
 
     template = PlanTemplate(**template_in.model_dump(exclude={"dates", "ui_metadata"}))
     template.ui_metadata = ui_metadata_to_dict(template_in.ui_metadata)
@@ -406,7 +837,7 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
         raise BadRequestError(
             f"Fields {sorted(not_applicable)} are not applicable to template type '{template.template_type.value}'."
         )
-    null_fields = sorted(k for k, v in update_data.items() if v is None)
+    null_fields = sorted(k for k, v in update_data.items() if v is None and k not in NULLABLE_UPDATE_FIELDS)
     if null_fields:
         raise BadRequestError(f"Fields {null_fields} must not be null.")
 
@@ -421,8 +852,12 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
     name_changed = "name" in update_data and update_data["name"] != template.name
     generation_changed = any(getattr(template, k) != v for k, v in update_data.items() if k != "name")
 
+    if "business_calendar_id" in update_data:
+        _get_calendar_if_set(db, update_data["business_calendar_id"])
+
     for field, value in update_data.items():
         setattr(template, field, value)
+    _check_calendar_settings(template)
     if ui_changed:
         # 表示のみの変更のためリビジョンは上げず、キャッシュの実効値だけ更新する
         template.ui_metadata = ui_metadata_to_dict(template_in.ui_metadata)
