@@ -21,6 +21,7 @@ from src.infrastructure.exception_handler.handlers import (
 
 from src.domain_client.router import router as client_router
 from src.domain_biz.router import router as biz_router 
+from src.domain_plan.router import router as plan_router
 
 app = FastAPI(title="Schedule System")
 
@@ -47,6 +48,7 @@ async def test_error():
 # クライアントのAPIを本体に登録！
 app.include_router(client_router)
 app.include_router(biz_router) 
+app.include_router(plan_router)
 
 @app.get("/")
 def read_root():

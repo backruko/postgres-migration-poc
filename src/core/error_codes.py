@@ -9,6 +9,7 @@ class ErrorCode(str, Enum):
     
     # 汎用エラー (400)
     BAD_REQUEST = "BAD_REQUEST"
+    IMMUTABLE_RECORD = "IMMUTABLE_RECORD"
     
     # 認証・権限系 (401, 403)
     UNAUTHORIZED = "UNAUTHORIZED"
@@ -21,6 +22,7 @@ class ErrorCode(str, Enum):
     
     # 競合・DB制約系 (409)
     RECORD_ALREADY_EXISTS = "RECORD_ALREADY_EXISTS"
+    INSTANCE_ALREADY_VOIDED = "INSTANCE_ALREADY_VOIDED"
     DELETE_FAILED_RECORD_IN_USE = "DELETE_FAILED_RECORD_IN_USE"
     
     # サーバー内部エラー (500)
