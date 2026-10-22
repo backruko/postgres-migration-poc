@@ -1,6 +1,7 @@
 from datetime import date, datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Body, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from src.core.schemas.error import COMMON_ERRORS
@@ -10,6 +11,9 @@ from src.domain_plan.schemas import (
     BusinessCalendarResponse,
     BusinessCalendarUpdate,
     CacheRebuildResponse,
+    ClientCalendarResponse,
+    ClientOccurrenceResponse,
+    PLAN_TEMPLATE_CREATE_EXAMPLES,
     CalendarChangeResult,
     HolidayResponse,
     HolidaysAdd,
@@ -38,7 +42,7 @@ from src.domain_plan.schemas import (
 from src.domain_plan.services import (
     add_holidays, create_calendar, delete_holiday, get_calendar, get_calendars, get_holidays, update_calendar,
     add_explicit_dates, add_marker, add_one_off_instance, add_sheet_events, cancel_instance, create_sheet, create_template, delete_sheet_event,
-    delete_template, get_instances, get_occurrences, get_sheet, get_sheets, get_template, get_templates,
+    delete_template, get_client_calendar, get_client_occurrences, get_instances, get_occurrences, get_sheet, get_sheets, get_template, get_templates,
     import_sheet, override_instance, revert_sheet_event, update_marker, rebuild_cache, remove_explicit_date, restore_template, revert_instance, update_sheet_event,
     update_template,
 )
@@ -155,7 +159,12 @@ def delete_sheet_event_endpoint(event_id: int, db: Session = Depends(get_db)):
 # ==========================================
 
 @router.post("/templates", response_model=PlanTemplateResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
-def create_template_endpoint(template_in: PlanTemplateCreate, db: Session = Depends(get_db)):
+def create_template_endpoint(
+    
+    # template_in: Annotated[PlanTemplateCreate, Body(openapi_examples=PLAN_TEMPLATE_CREATE_EXAMPLES)],
+    template_in: PlanTemplateCreate = Body(..., openapi_examples=PLAN_TEMPLATE_CREATE_EXAMPLES),
+    db: Session = Depends(get_db),
+):  
     """
     テンプレートを作成し、今から90日先までのインスタンスを生成します。
     template_type により必須項目が変わります（rrule / explicit_dates / reference_sheet_based）。
@@ -249,3 +258,26 @@ def get_occurrences_endpoint(
     db: Session = Depends(get_db),
 ):
     return get_occurrences(db=db, biz_id=biz_id, start=start, end=end)
+
+@router.get("/clients/{client_code}/occurrences", response_model=list[ClientOccurrenceResponse], responses={**COMMON_ERRORS})
+def get_client_occurrences_endpoint(
+    client_code: str,
+    start: datetime = Query(..., description="タイムゾーン付き (例: 2026-11-01T00:00:00+09:00)"),
+    end: datetime = Query(..., description="タイムゾーン付き、start から最大366日"),
+    db: Session = Depends(get_db),
+):
+    """顧客に属する全業務の予定を、開始時刻順に一覧で取得します（業務コード・業務名付き）。"""
+    return get_client_occurrences(db=db, client_code=client_code, start=start, end=end)
+
+@router.get("/clients/{client_code}/calendar", response_model=ClientCalendarResponse, responses={**COMMON_ERRORS})
+def get_client_calendar_endpoint(
+    client_code: str,
+    month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="表示する月 (例: 2026-11)"),
+    timezone: str = Query("Asia/Tokyo", description="日付の振り分けに使うタイムゾーン"),
+    db: Session = Depends(get_db),
+):
+    """
+    顧客に属する全業務の予定を、月カレンダーの形で返します。
+    その月の全日（予定の無い日も含む）と、日ごとの予定（開始時刻順）を返すため、そのままカレンダーに描画できます。
+    """
+    return get_client_calendar(db=db, client_code=client_code, month=month, tz_name=timezone)

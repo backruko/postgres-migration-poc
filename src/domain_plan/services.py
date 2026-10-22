@@ -20,6 +20,7 @@ from src.domain_biz.models import BizMaster
 from src.domain_plan import engine
 from src.domain_plan.engine import DayUnit, HolidayPolicy
 from src.domain_plan.models import (
+    validate_timezone_name,
     BusinessCalendar,
     BusinessCalendarHoliday,
     InstanceOrigin,
@@ -45,7 +46,11 @@ from src.domain_plan.schemas import (
     PlanInstanceOverride,
     PlanInstanceResponse,
     PlanInstanceRevert,
+    PlanOccurrenceResponse,
     PlanOneOffCreate,
+    CalendarDay,
+    ClientCalendarResponse,
+    ClientOccurrenceResponse,
     PlanRevertResponse,
     PlanTemplateCreate,
     PlanTemplateUpdate,
@@ -1142,18 +1147,27 @@ def get_occurrences(db: Session, biz_id: int, start: datetime, end: datetime) ->
     範囲内の予定をシャドウテーブルから取得します。
     範囲が未生成区間にかかる場合のみ、先にその区間を生成します（生成済みなら読み取りのみ）。
     """
+    _validate_range(start, end)
+    _get_biz(db, biz_id)
+    _materialize_templates(db, plan_template_repo.get_by_biz(db, biz_master_id=biz_id), end)
+    return plan_cache_repo.query_range(db, biz_master_id=biz_id, start=start, end=end)
+
+
+def _validate_range(start: datetime, end: datetime) -> None:
     if start.tzinfo is None or end.tzinfo is None:
         raise BadRequestError("start and end must include a timezone offset (e.g. 2026-11-01T00:00:00+09:00).")
     if end <= start:
         raise BadRequestError("end must be after start.")
     if end - start > MAX_QUERY_SPAN:
         raise BadRequestError(f"Range must not exceed {MAX_QUERY_SPAN.days} days.")
-    _get_biz(db, biz_id)
 
+
+def _materialize_templates(db: Session, templates: list[PlanTemplate], end: datetime) -> None:
+    """範囲が未生成区間にかかるテンプレートだけ、先にその区間を生成します（生成済みなら何もしません）。"""
     now = _now()
     until = min(end, now + MAX_LOOKAHEAD)
     materialized = False
-    for template in plan_template_repo.get_by_biz(db, biz_master_id=biz_id):
+    for template in templates:
         if (template.materialized_until or now) < until:
             locked = _get_locked_template(db, template.id)
             _ensure_materialized(db, locked, until)
@@ -1161,7 +1175,59 @@ def get_occurrences(db: Session, biz_id: int, start: datetime, end: datetime) ->
     if materialized:
         _commit(db, "Occurrences could not be generated due to a conflicting record.")
 
-    return plan_cache_repo.query_range(db, biz_master_id=biz_id, start=start, end=end)
+
+def _get_client_code(db: Session, client_code: str) -> str:
+    code = client_code.strip().upper()
+    if not client_repo.get_by_code(db, code=code):
+        raise NotFoundError(f"Client with code '{code}' does not exist.")
+    return code
+
+
+def get_client_occurrences(db: Session, client_code: str, start: datetime, end: datetime) -> list[ClientOccurrenceResponse]:
+    """顧客に属する全業務の予定を、範囲内で開始時刻順に取得します。"""
+    _validate_range(start, end)
+    code = _get_client_code(db, client_code)
+    _materialize_templates(db, plan_template_repo.get_by_client(db, client_code=code), end)
+
+    return [
+        ClientOccurrenceResponse(
+            **PlanOccurrenceResponse.model_validate(cache).model_dump(), biz_code=biz_code, biz_name=biz_name
+        )
+        for cache, biz_code, biz_name in plan_cache_repo.query_range_for_client(db, client_code=code, start=start, end=end)
+    ]
+
+
+def get_client_calendar(db: Session, client_code: str, month: str, tz_name: str) -> ClientCalendarResponse:
+    """
+    顧客に属する全業務の予定を、月カレンダーの形（その月の全日 + 日ごとの予定）で返します。
+    日付は指定タイムゾーンでの開始日で振り分けます（前月から続く予定は月初の日に表示）。
+    """
+    try:
+        tz = ZoneInfo(validate_timezone_name(tz_name))
+        year, mon = (int(x) for x in month.split("-"))
+        first_day = date(year, mon, 1)
+    except ValueError as e:
+        raise BadRequestError(str(e))
+    next_first = date(year + mon // 12, mon % 12 + 1, 1)
+    start = datetime.combine(first_day, datetime.min.time(), tzinfo=tz)
+    end = datetime.combine(next_first, datetime.min.time(), tzinfo=tz)
+
+    occurrences = get_client_occurrences(db, client_code, start, end)
+
+    by_day: dict[date, list[ClientOccurrenceResponse]] = defaultdict(list)
+    for occ in occurrences:
+        by_day[max(occ.starts_at.astimezone(tz).date(), first_day)].append(occ)
+
+    days = []
+    d = first_day
+    while d < next_first:
+        days.append(CalendarDay(date=d, weekday=d.isoweekday(), occurrences=by_day.get(d, [])))
+        d += timedelta(days=1)
+
+    return ClientCalendarResponse(
+        client_code=client_code.strip().upper(), month=f"{year:04d}-{mon:02d}", timezone=tz_name,
+        start=start, end=end, total=len(occurrences), days=days,
+    )
 
 
 def rebuild_cache(db: Session, template_id: int) -> int:

@@ -13,6 +13,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from src.core.error_codes import ErrorCode
+from src.domain_biz.models import BizMaster
 from src.core.exceptions import BadRequestError
 from src.domain_plan.engine import Occurrence
 from src.domain_plan.models import (
@@ -129,6 +130,16 @@ class PlanTemplateRepository(SoftCRUDBase[PlanTemplate, BaseModel, PlanTemplateU
 
     def get_by_biz(self, db: Session, *, biz_master_id: int) -> list[PlanTemplate]:
         stmt = select(self.model).where(self.model.biz_master_id == biz_master_id).order_by(self.model.id)
+        return list(db.scalars(stmt).all())
+
+    def get_by_client(self, db: Session, *, client_code: str) -> list[PlanTemplate]:
+        """顧客に属する全業務の有効なテンプレート（論理削除された業務・テンプレートは全局scopeで除外）"""
+        stmt = (
+            select(self.model)
+            .join(BizMaster, BizMaster.id == self.model.biz_master_id)
+            .where(BizMaster.client_code == client_code)
+            .order_by(self.model.id)
+        )
         return list(db.scalars(stmt).all())
 
     def get_by_sheet_marker(self, db: Session, *, sheet_id: int, marker: str | None = None) -> list[PlanTemplate]:
@@ -390,6 +401,24 @@ class PlanOccurrenceCacheRepository:
             .order_by(PlanOccurrenceCache.starts_at, PlanOccurrenceCache.instance_id)
         )
         return list(db.scalars(stmt).all())
+
+    def query_range_for_client(
+        self, db: Session, *, client_code: str, start: datetime, end: datetime
+    ) -> list[tuple[PlanOccurrenceCache, str, str]]:
+        """
+        顧客に属する全業務の予定を重なり検索します（業務コード・業務名付き）。
+        論理削除された業務は全局scopeで除外されます。
+        """
+        stmt = (
+            select(PlanOccurrenceCache, BizMaster.business_code, BizMaster.name)
+            .join(BizMaster, BizMaster.id == PlanOccurrenceCache.biz_master_id)
+            .where(
+                BizMaster.client_code == client_code,
+                PlanOccurrenceCache.period.op("&&")(func.tstzrange(start, end, "[)")),
+            )
+            .order_by(PlanOccurrenceCache.starts_at, BizMaster.business_code, PlanOccurrenceCache.instance_id)
+        )
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
 
 
 # ==========================================

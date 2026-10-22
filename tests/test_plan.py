@@ -758,3 +758,58 @@ def test_generated_marker_rejects_import_and_can_stop_generating(db, biz_id):
     m = services.update_marker(db, sheet.id, "取引日", ReferenceSheetMarkerUpdate(rule=None))
     assert not m.is_generated and len(m.events) == count
     assert all(e.rule_date is None and not e.is_manual for e in m.events)
+
+
+# ==========================================
+# 顧客単位のカレンダー（全業務）
+# ==========================================
+def test_client_calendar_includes_all_businesses_of_the_client(db, biz_id):
+    code = client_code_of(db, biz_id)
+    other_biz = biz_master_repo.create(
+        db, obj_in=BizMasterCreate(client_code=code, name="second biz", business_seq=2, manager_email=None, description=None)
+    )
+    daily_template(db, biz_id, name="Daily A", rrule="FREQ=WEEKLY;BYDAY=MO")
+    daily_template(db, other_biz.id, name="Daily B", rrule="FREQ=WEEKLY;BYDAY=FR", start_time=time(15, 0))
+
+    # 別の顧客の予定は含まれない
+    foreign_code = "T" + uuid.uuid4().hex[:3].upper()
+    client_repo.create(db, obj_in=ClientCreate(code=foreign_code, name="other client"))
+    foreign_biz = biz_master_repo.create(
+        db, obj_in=BizMasterCreate(client_code=foreign_code, name="x", business_seq=1, manager_email=None, description=None)
+    )
+    daily_template(db, foreign_biz.id, name="Foreign")
+
+    today = date.today()
+    next_month = date(today.year + today.month // 12, today.month % 12 + 1, 1)
+    month = f"{next_month.year:04d}-{next_month.month:02d}"
+    cal = services.get_client_calendar(db, code.lower(), month, "Asia/Tokyo")  # 顧客コードは大文字小文字を区別しない
+
+    assert cal.client_code == code and cal.month == month
+    assert cal.days[0].date == next_month and len(cal.days) in (28, 29, 30, 31)
+    assert cal.days[-1].date.month == next_month.month
+    occs = [o for d in cal.days for o in d.occurrences]
+    assert cal.total == len(occs) > 0
+    assert {o.title for o in occs} == {"Daily A", "Daily B"}
+    assert {o.biz_name for o in occs} == {"test biz", "second biz"}
+    for day in cal.days:
+        assert day.weekday == day.date.isoweekday()
+        for o in day.occurrences:
+            assert o.starts_at.astimezone(JST).date() == day.date
+            assert day.weekday == (1 if o.title == "Daily A" else 5)
+        assert [o.starts_at for o in day.occurrences] == sorted(o.starts_at for o in day.occurrences)
+
+    # 論理削除した業務の予定は表示されない
+    biz_master_repo.remove(db, id=other_biz.id)
+    cal = services.get_client_calendar(db, code, month, "Asia/Tokyo")
+    assert {o.title for d in cal.days for o in d.occurrences} == {"Daily A"}
+
+
+def test_client_calendar_validation(db, biz_id):
+    with pytest.raises(NotFoundError):
+        services.get_client_calendar(db, "ZZZZ", "2026-11", "Asia/Tokyo")
+    with pytest.raises(BadRequestError):
+        services.get_client_calendar(db, client_code_of(db, biz_id), "2026-11", "Mars/Base")
+    with pytest.raises(BadRequestError):
+        services.get_client_occurrences(
+            db, client_code_of(db, biz_id), datetime(2026, 11, 1), datetime(2026, 12, 1)  # タイムゾーン無し
+        )

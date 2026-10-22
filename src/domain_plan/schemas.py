@@ -364,6 +364,57 @@ PlanTemplateCreate = Annotated[
     Field(discriminator="template_type"),
 ]
 
+# Swagger UI は Union の先頭の型からしか例を作らないため、タイプごとの例を明示する（ドロップダウンで切替）
+PLAN_TEMPLATE_CREATE_EXAMPLES: dict[str, Any] = {
+    "rrule": {
+        "summary": "RRULE: 毎週月曜 9:00（祝日は翌営業日）",
+        "value": {
+            "biz_master_id": 1,
+            "name": "週次レポート",
+            "template_type": "rrule",
+            "timezone": "Asia/Tokyo",
+            "start_time": "09:00:00",
+            "duration_minutes": 60,
+            "anchor_date": "2026-01-05",
+            "rrule": "FREQ=WEEKLY;BYDAY=MO",
+            "business_calendar_id": 1,
+            "holiday_policy": "following",
+            "ui_metadata": {"bg_color": "#1E88E5", "text_color": "#FFFFFF", "icon": "report"},
+        },
+    },
+    "explicit_dates": {
+        "summary": "EXPLICIT_DATES: 顧客指定日",
+        "value": {
+            "biz_master_id": 1,
+            "name": "顧客指定の照合作業",
+            "template_type": "explicit_dates",
+            "timezone": "Asia/Tokyo",
+            "start_time": "14:00:00",
+            "duration_minutes": 30,
+            "dates": ["2026-11-10", "2026-11-25"],
+        },
+    },
+    "reference_sheet_based": {
+        "summary": "REFERENCE_SHEET_BASED: 本締の3営業日前 9:00",
+        "value": {
+            "biz_master_id": 1,
+            "name": "本締前の準備",
+            "template_type": "reference_sheet_based",
+            "timezone": "Asia/Tokyo",
+            "start_time": "09:00:00",
+            "duration_minutes": 60,
+            "reference_sheet_id": 1,
+            "reference_event_marker": "本締",
+            "offset_days": -3,
+            "offset_day_unit": "business",
+            "offset_minutes": 0,
+            "business_calendar_id": 1,
+            "holiday_policy": "as_is",
+            "ui_metadata": {"bg_color": "#FF0000", "icon": "money-bag", "is_bold": True},
+        },
+    },
+}
+
 
 # ==========================================
 # 3. Update（部分更新。template_type と biz_master_id は変更不可）
@@ -523,3 +574,25 @@ class PlanOccurrenceResponse(BaseModel):
     ui_metadata: dict[str, Any] | None = Field(description="effective styling (template merged with instance)")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ClientOccurrenceResponse(PlanOccurrenceResponse):
+    """顧客単位の表示用（どの業務の予定かが分かるよう業務コード・業務名を付与）"""
+    biz_code: str
+    biz_name: str
+
+
+class CalendarDay(BaseModel):
+    date: date
+    weekday: int = Field(description="ISO weekday (1=Mon ... 7=Sun)")
+    occurrences: list[ClientOccurrenceResponse]
+
+
+class ClientCalendarResponse(BaseModel):
+    client_code: str
+    month: str = Field(description="YYYY-MM")
+    timezone: str
+    start: datetime
+    end: datetime
+    total: int = Field(description="number of occurrences in the month")
+    days: list[CalendarDay] = Field(description="every day of the month (empty days included)")
