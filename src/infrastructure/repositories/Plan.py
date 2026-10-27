@@ -10,12 +10,15 @@ from typing import Any, Iterable, Sequence
 
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from src.core.error_codes import ErrorCode
+from src.domain_biz.models import BizMaster
 from src.core.exceptions import BadRequestError
 from src.domain_plan.engine import Occurrence
 from src.domain_plan.models import (
+    BusinessCalendar,
+    BusinessCalendarHoliday,
     InstanceOrigin,
     PlanExplicitDate,
     PlanInstance,
@@ -34,6 +37,32 @@ from src.infrastructure.repositories.base import CRUDBase, SoftCRUDBase
 
 
 # ==========================================
+#  BusinessCalendar Repository
+# ==========================================
+class BusinessCalendarRepository(CRUDBase[BusinessCalendar, BaseModel, BaseModel]):
+
+    def get_by_code(self, db: Session, *, code: str) -> BusinessCalendar | None:
+        return db.scalars(select(self.model).where(self.model.code == code)).first()
+
+    def get_all(self, db: Session) -> list[BusinessCalendar]:
+        return list(db.scalars(select(self.model).order_by(self.model.code)).all())
+
+    def get_holidays(
+        self, db: Session, *, calendar_id: int, start: date | None = None, end: date | None = None
+    ) -> list[BusinessCalendarHoliday]:
+        stmt = select(BusinessCalendarHoliday).where(BusinessCalendarHoliday.calendar_id == calendar_id)
+        if start is not None:
+            stmt = stmt.where(BusinessCalendarHoliday.holiday_date >= start)
+        if end is not None:
+            stmt = stmt.where(BusinessCalendarHoliday.holiday_date <= end)
+        return list(db.scalars(stmt.order_by(BusinessCalendarHoliday.holiday_date)).all())
+
+    def get_holiday_dates(self, db: Session, *, calendar_id: int) -> set[date]:
+        stmt = select(BusinessCalendarHoliday.holiday_date).where(BusinessCalendarHoliday.calendar_id == calendar_id)
+        return set(db.scalars(stmt).all())
+
+
+# ==========================================
 #  ReferenceSheet Repository
 # ==========================================
 class ReferenceSheetRepository(CRUDBase[ReferenceSheet, BaseModel, BaseModel]):
@@ -42,12 +71,22 @@ class ReferenceSheetRepository(CRUDBase[ReferenceSheet, BaseModel, BaseModel]):
         stmt = select(self.model).where(self.model.client_code == client_code).order_by(self.model.period_start)
         return list(db.scalars(stmt).all())
 
+    def get_by_client_and_name(self, db: Session, *, client_code: str, name: str) -> ReferenceSheet | None:
+        stmt = select(self.model).where(self.model.client_code == client_code, self.model.name == name)
+        return db.scalars(stmt).first()
+
     def get_marker(self, db: Session, *, sheet_id: int, marker: str) -> ReferenceSheetMarker | None:
         stmt = select(ReferenceSheetMarker).where(
             ReferenceSheetMarker.sheet_id == sheet_id,
             ReferenceSheetMarker.marker == marker,
         )
         return db.scalars(stmt).first()
+
+    def get_generated_markers_by_calendar(self, db: Session, *, calendar_id: int) -> list[ReferenceSheetMarker]:
+        stmt = select(ReferenceSheetMarker).where(
+            ReferenceSheetMarker.business_calendar_id == calendar_id, ReferenceSheetMarker.rrule.is_not(None)
+        )
+        return list(db.scalars(stmt.order_by(ReferenceSheetMarker.id)).all())
 
     def get_event(self, db: Session, *, event_id: int) -> ReferenceSheetEvent | None:
         stmt = select(ReferenceSheetEvent).where(ReferenceSheetEvent.id == event_id)
@@ -58,7 +97,11 @@ class ReferenceSheetRepository(CRUDBase[ReferenceSheet, BaseModel, BaseModel]):
         stmt = (
             select(ReferenceSheetEvent.id, ReferenceSheetEvent.event_date)
             .join(ReferenceSheetMarker, ReferenceSheetEvent.marker_id == ReferenceSheetMarker.id)
-            .where(ReferenceSheetMarker.sheet_id == sheet_id, ReferenceSheetMarker.marker == marker)
+            .where(
+                ReferenceSheetMarker.sheet_id == sheet_id,
+                ReferenceSheetMarker.marker == marker,
+                ReferenceSheetEvent.is_cancelled.is_(False),  # 人が取り消した生成日は除外
+            )
         )
         return [(row.id, row.event_date) for row in db.execute(stmt)]
 
@@ -89,11 +132,36 @@ class PlanTemplateRepository(SoftCRUDBase[PlanTemplate, BaseModel, PlanTemplateU
         stmt = select(self.model).where(self.model.biz_master_id == biz_master_id).order_by(self.model.id)
         return list(db.scalars(stmt).all())
 
+    def get_by_client(self, db: Session, *, client_code: str) -> list[PlanTemplate]:
+        """顧客に属する全業務の有効なテンプレート（論理削除された業務・テンプレートは全局scopeで除外）"""
+        stmt = (
+            select(self.model)
+            .join(BizMaster, BizMaster.id == self.model.biz_master_id)
+            .where(BizMaster.client_code == client_code)
+            .order_by(self.model.id)
+        )
+        return list(db.scalars(stmt).all())
+
+    def get_by_client_with_biz(self, db: Session, *, client_code: str) -> list[tuple[PlanTemplate, str, str]]:
+        """顧客に属する全業務の有効なテンプレート（業務コード・業務名付き）"""
+        stmt = (
+            select(self.model, BizMaster.business_code, BizMaster.name)
+            .join(BizMaster, BizMaster.id == self.model.biz_master_id)
+            .where(BizMaster.client_code == client_code)
+            .order_by(BizMaster.business_code, self.model.id)
+        )
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
     def get_by_sheet_marker(self, db: Session, *, sheet_id: int, marker: str | None = None) -> list[PlanTemplate]:
         """シート（とマーカー）を参照している有効なテンプレートを行ロック付きで取得します"""
         stmt = select(self.model).where(self.model.reference_sheet_id == sheet_id)
         if marker is not None:
             stmt = stmt.where(self.model.reference_event_marker == marker)
+        return list(db.scalars(stmt.order_by(self.model.id).with_for_update()).all())
+
+    def get_by_calendar(self, db: Session, *, calendar_id: int) -> list[PlanTemplate]:
+        """営業日カレンダーを使用している有効なテンプレートを行ロック付きで取得します"""
+        stmt = select(self.model).where(self.model.business_calendar_id == calendar_id)
         return list(db.scalars(stmt.order_by(self.model.id).with_for_update()).all())
 
     def add_explicit_dates(self, db: Session, *, template: PlanTemplate, dates: Iterable[date]) -> int:
@@ -165,6 +233,32 @@ class PlanInstanceRepository(CRUDBase[PlanInstance, BaseModel, BaseModel]):
             )
         )
         return [(row[0], row[1]) for row in db.execute(stmt)]
+
+    def get_cancelled_for_client(
+        self, db: Session, *, client_code: str, start: datetime, end: datetime
+    ) -> list[tuple[PlanInstance, PlanInstanceVoid, PlanTemplate, str, str]]:
+        """
+        顧客の「取り消された予定」（MANUAL で無効化され、置き換えのオーバーライドが無いもの）を開始時刻順に返します。
+        置き換えがあるもの（=日時を変更した元の予定）は取消ではないため含めません。
+        論理削除された業務・テンプレートの予定は全局scopeで除外されます。
+        """
+        child = aliased(PlanInstance)
+        stmt = (
+            select(PlanInstance, PlanInstanceVoid, PlanTemplate, BizMaster.business_code, BizMaster.name)
+            .join(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .join(PlanTemplate, PlanTemplate.id == PlanInstance.template_id)
+            .join(BizMaster, BizMaster.id == PlanTemplate.biz_master_id)
+            .outerjoin(child, child.overrides_instance_id == PlanInstance.id)
+            .where(
+                BizMaster.client_code == client_code,
+                PlanInstanceVoid.reason == VoidReason.MANUAL,
+                child.id.is_(None),
+                PlanInstance.scheduled_start >= start,
+                PlanInstance.scheduled_start < end,
+            )
+            .order_by(PlanInstance.scheduled_start, PlanInstance.id)
+        )
+        return [(row[0], row[1], row[2], row[3], row[4]) for row in db.execute(stmt)]
 
     def get_override_child(self, db: Session, *, instance_id: int) -> PlanInstance | None:
         """このインスタンスを置き換えたオーバーライド（あれば）"""
@@ -344,10 +438,29 @@ class PlanOccurrenceCacheRepository:
         )
         return list(db.scalars(stmt).all())
 
+    def query_range_for_client(
+        self, db: Session, *, client_code: str, start: datetime, end: datetime
+    ) -> list[tuple[PlanOccurrenceCache, str, str]]:
+        """
+        顧客に属する全業務の予定を重なり検索します（業務コード・業務名付き）。
+        論理削除された業務は全局scopeで除外されます。
+        """
+        stmt = (
+            select(PlanOccurrenceCache, BizMaster.business_code, BizMaster.name)
+            .join(BizMaster, BizMaster.id == PlanOccurrenceCache.biz_master_id)
+            .where(
+                BizMaster.client_code == client_code,
+                PlanOccurrenceCache.period.op("&&")(func.tstzrange(start, end, "[)")),
+            )
+            .order_by(PlanOccurrenceCache.starts_at, BizMaster.business_code, PlanOccurrenceCache.instance_id)
+        )
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
 
 # ==========================================
 #  インスタンス化とエクスポート
 # ==========================================
+business_calendar_repo = BusinessCalendarRepository(BusinessCalendar)
 reference_sheet_repo = ReferenceSheetRepository(ReferenceSheet)
 plan_template_repo = PlanTemplateRepository(PlanTemplate)
 plan_instance_repo = PlanInstanceRepository(PlanInstance)

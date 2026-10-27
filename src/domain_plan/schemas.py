@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.domain_plan.engine import DayUnit, HolidayPolicy
 from src.domain_plan.models import (
     InstanceOrigin, TemplateType, VoidReason, validate_rrule_text, validate_timezone_name,
 )
@@ -43,6 +44,86 @@ def ui_metadata_to_dict(value: UIMetadata | None) -> dict[str, Any] | None:
 
 
 # ==========================================
+# BusinessCalendar（営業日カレンダー）
+# ==========================================
+def _check_weekend_days(days: list[int]) -> list[int]:
+    if any(d < 1 or d > 7 for d in days):
+        raise ValueError("weekend_days must be ISO weekdays (1=Mon ... 7=Sun)")
+    if len(set(days)) != len(days):
+        raise ValueError("weekend_days must not contain duplicates")
+    if len(days) >= 7:
+        raise ValueError("at least one weekday must be a business day")
+    return sorted(days)
+
+
+class BusinessCalendarCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    code: str = Field(..., min_length=1, max_length=50, description="e.g. JP_BANK")
+    name: str = Field(..., min_length=1, max_length=100)
+    weekend_days: list[int] = Field(default_factory=lambda: [6, 7], description="ISO weekdays treated as weekend (1=Mon ... 7=Sun)")
+
+    @field_validator("weekend_days")
+    @classmethod
+    def check_weekend_days(cls, v: list[int]) -> list[int]:
+        return _check_weekend_days(v)
+
+
+class BusinessCalendarUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    weekend_days: list[int] | None = None
+
+    @field_validator("weekend_days")
+    @classmethod
+    def check_weekend_days(cls, v: list[int] | None) -> list[int] | None:
+        return _check_weekend_days(v) if v is not None else v
+
+
+class BusinessCalendarResponse(BaseModel):
+    id: int
+    code: str
+    name: str
+    weekend_days: list[int]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class HolidayIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    holiday_date: date
+    name: str | None = Field(default=None, max_length=100)
+
+
+class HolidaysAdd(BaseModel):
+    holidays: list[HolidayIn] = Field(..., min_length=1, max_length=5000)
+
+    @model_validator(mode="after")
+    def check_duplicates(self):
+        dates = [h.holiday_date for h in self.holidays]
+        duplicated = sorted({d for d in dates if dates.count(d) > 1})
+        if duplicated:
+            raise ValueError(f"duplicated holiday dates: {[d.isoformat() for d in duplicated]}")
+        return self
+
+
+class HolidayResponse(BaseModel):
+    holiday_date: date
+    name: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CalendarChangeResult(BaseModel):
+    holidays_added: int = 0
+    holidays_renamed: int = 0
+    holidays_deleted: int = 0
+    templates_regenerated: int = Field(default=0, description="templates using this calendar that were re-reconciled")
+
+
+# ==========================================
 # ReferenceSheet（年間計画シート）
 # ==========================================
 class ReferenceSheetCreate(BaseModel):
@@ -60,10 +141,41 @@ class ReferenceSheetCreate(BaseModel):
         return self
 
 
+class MarkerRule(BaseModel):
+    """生成マーカーのルール。例: 毎月27日、休日なら翌営業日"""
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    rrule: str = Field(..., description="e.g. FREQ=MONTHLY;BYMONTHDAY=27")
+    anchor_date: date = Field(..., description="date the rule starts from (DTSTART)")
+    business_calendar_id: int | None = None
+    holiday_policy: HolidayPolicy = HolidayPolicy.AS_IS
+
+    @field_validator("rrule")
+    @classmethod
+    def check_rrule(cls, v: str) -> str:
+        return validate_rrule_text(v)
+
+    @model_validator(mode="after")
+    def check_calendar_required(self):
+        if self.holiday_policy != HolidayPolicy.AS_IS and self.business_calendar_id is None:
+            raise ValueError(f"holiday_policy '{self.holiday_policy.value}' requires business_calendar_id")
+        return self
+
+
 class ReferenceSheetMarkerCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     marker: str = Field(..., min_length=1, max_length=50, description="event marker (e.g. 'A', 'Delivery')")
+    description: str | None = Field(default=None, max_length=200, description="what the marker means")
+    rule: MarkerRule | None = Field(default=None, description="generate the dates from a rule instead of importing them")
+
+
+class ReferenceSheetMarkerUpdate(BaseModel):
+    """rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、現在の日付を通常の日付として残す"""
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    description: str | None = Field(default=None, max_length=200)
+    rule: MarkerRule | None = None
 
 
 class ReferenceSheetEventsCreate(BaseModel):
@@ -77,6 +189,9 @@ class ReferenceSheetEventUpdate(BaseModel):
 class ReferenceSheetEventResponse(BaseModel):
     id: int
     event_date: date
+    rule_date: date | None = Field(default=None, description="generated markers: the rule date this date came from")
+    is_manual: bool = Field(default=False, description="edited, added or cancelled by a person (kept on regeneration)")
+    is_cancelled: bool = Field(default=False, description="a generated date cancelled by a person")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -84,6 +199,12 @@ class ReferenceSheetEventResponse(BaseModel):
 class ReferenceSheetMarkerResponse(BaseModel):
     id: int
     marker: str
+    description: str | None
+    is_generated: bool
+    rrule: str | None
+    anchor_date: date | None
+    business_calendar_id: int | None
+    holiday_policy: HolidayPolicy
     events: list[ReferenceSheetEventResponse]
 
     model_config = ConfigDict(from_attributes=True)
@@ -101,6 +222,78 @@ class ReferenceSheetResponse(BaseModel):
 
 
 # ==========================================
+# ReferenceSheet 一括インポート（顧客の年間計画シートJSONをそのまま受け付ける形式）
+# ==========================================
+IMPORT_MAX_MARKERS = 100
+IMPORT_MAX_EVENTS = 20000
+
+
+class ReferenceSheetImportMarker(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    marker: str = Field(..., min_length=1, max_length=50)
+    description: str | None = Field(default=None, max_length=200)
+
+
+class ReferenceSheetImportEvent(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    event_date: date
+    marker: str = Field(..., min_length=1, max_length=50)
+
+
+class ReferenceSheetImport(BaseModel):
+    """
+    例: mock_data/desensitized_mock_data.json
+    {"client_code": "MOCK", "sheet_name": "...", "period_start": "...", "period_end": "...",
+     "markers": [{"marker": "本締", "description": "..."}], "events": [{"event_date": "...", "marker": "本締"}]}
+    """
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    client_code: str = Field(..., min_length=4, max_length=4, description="client code must be 4 characters")
+    sheet_name: str = Field(..., min_length=1, max_length=100)
+    period_start: date
+    period_end: date
+    markers: list[ReferenceSheetImportMarker] = Field(..., min_length=1, max_length=IMPORT_MAX_MARKERS)
+    events: list[ReferenceSheetImportEvent] = Field(default_factory=list, max_length=IMPORT_MAX_EVENTS)
+
+    @model_validator(mode="after")
+    def check_consistency(self):
+        """ファイル内の整合性をまとめて検証し、問題をすべて列挙して返します（部分的な取り込みはしません）"""
+        problems: list[str] = []
+        if self.period_end <= self.period_start:
+            problems.append("period_end must be after period_start")
+
+        names = [m.marker for m in self.markers]
+        duplicated = sorted({n for n in names if names.count(n) > 1})
+        if duplicated:
+            problems.append(f"duplicated markers: {duplicated}")
+
+        undeclared = sorted({e.marker for e in self.events} - set(names))
+        if undeclared:
+            problems.append(f"events use undeclared markers: {undeclared}")
+
+        outside = sorted({e.event_date for e in self.events if not (self.period_start <= e.event_date <= self.period_end)})
+        if outside:
+            sample = [d.isoformat() for d in outside[:10]]
+            problems.append(f"{len(outside)} event date(s) outside the sheet period, e.g. {sample}")
+
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+
+class ReferenceSheetImportResult(BaseModel):
+    created: bool = Field(description="true if a new sheet was created, false if an existing one was updated")
+    markers_created: int
+    markers_updated: int = Field(description="markers whose description changed")
+    events_created: int
+    events_deleted: int = Field(description="only with replace_events=true")
+    templates_regenerated: int = Field(description="templates referencing a changed marker that were re-reconciled")
+    sheet: ReferenceSheetResponse
+
+
+# ==========================================
 # PlanTemplate
 # 1. Base（全タイプ共通の必須項目）
 # ==========================================
@@ -112,12 +305,24 @@ class PlanTemplateBase(BaseModel):
     timezone: str = Field(default="Asia/Tokyo", description="IANA timezone name")
     start_time: time = Field(..., description="local start time")
     duration_minutes: int = Field(..., gt=0, description="duration in minutes")
+    business_calendar_id: int | None = Field(default=None, description="business calendar (weekends + holidays)")
+    holiday_policy: HolidayPolicy = Field(
+        default=HolidayPolicy.AS_IS,
+        description="what to do when an occurrence falls on a non-business day "
+                    "(as_is / skip / following / preceding / modified_following / modified_preceding)",
+    )
     ui_metadata: UIMetadata | None = Field(default=None, description="calendar styling (inherited by instances)")
 
     @field_validator("timezone")
     @classmethod
     def check_timezone(cls, v: str) -> str:
         return validate_timezone_name(v)
+
+    @model_validator(mode="after")
+    def check_calendar_required(self):
+        if self.holiday_policy != HolidayPolicy.AS_IS and self.business_calendar_id is None:
+            raise ValueError(f"holiday_policy '{self.holiday_policy.value}' requires business_calendar_id")
+        return self
 
 
 # ==========================================
@@ -143,13 +348,72 @@ class ReferenceSheetTemplateCreate(PlanTemplateBase):
     template_type: Literal[TemplateType.REFERENCE_SHEET_BASED]
     reference_sheet_id: int
     reference_event_marker: str = Field(..., min_length=1, max_length=50)
-    offset_minutes: int = Field(default=0, description="offset from (event_date + start_time)")
+    offset_days: int = Field(default=0, ge=-366, le=366, description="shift of the base date (e.g. -3 = 3 days before)")
+    offset_day_unit: DayUnit = Field(default=DayUnit.CALENDAR, description="calendar days or business days")
+    offset_minutes: int = Field(default=0, description="time offset from (base date + start_time)")
+
+    @model_validator(mode="after")
+    def check_business_offset(self):
+        if self.offset_day_unit == DayUnit.BUSINESS and self.business_calendar_id is None:
+            raise ValueError("offset_day_unit 'business' requires business_calendar_id")
+        return self
 
 
 PlanTemplateCreate = Annotated[
     Union[RRuleTemplateCreate, ExplicitDatesTemplateCreate, ReferenceSheetTemplateCreate],
     Field(discriminator="template_type"),
 ]
+
+# Swagger UI は Union の先頭の型からしか例を作らないため、タイプごとの例を明示する（ドロップダウンで切替）
+PLAN_TEMPLATE_CREATE_EXAMPLES: dict[str, Any] = {
+    "rrule": {
+        "summary": "RRULE: 毎週月曜 9:00（祝日は翌営業日）",
+        "value": {
+            "biz_master_id": 1,
+            "name": "週次レポート",
+            "template_type": "rrule",
+            "timezone": "Asia/Tokyo",
+            "start_time": "09:00:00",
+            "duration_minutes": 60,
+            "anchor_date": "2026-01-05",
+            "rrule": "FREQ=WEEKLY;BYDAY=MO",
+            "business_calendar_id": 1,
+            "holiday_policy": "following",
+            "ui_metadata": {"bg_color": "#1E88E5", "text_color": "#FFFFFF", "icon": "report"},
+        },
+    },
+    "explicit_dates": {
+        "summary": "EXPLICIT_DATES: 顧客指定日",
+        "value": {
+            "biz_master_id": 1,
+            "name": "顧客指定の照合作業",
+            "template_type": "explicit_dates",
+            "timezone": "Asia/Tokyo",
+            "start_time": "14:00:00",
+            "duration_minutes": 30,
+            "dates": ["2026-11-10", "2026-11-25"],
+        },
+    },
+    "reference_sheet_based": {
+        "summary": "REFERENCE_SHEET_BASED: 本締の3営業日前 9:00",
+        "value": {
+            "biz_master_id": 1,
+            "name": "本締前の準備",
+            "template_type": "reference_sheet_based",
+            "timezone": "Asia/Tokyo",
+            "start_time": "09:00:00",
+            "duration_minutes": 60,
+            "reference_sheet_id": 1,
+            "reference_event_marker": "本締",
+            "offset_days": -3,
+            "offset_day_unit": "business",
+            "offset_minutes": 0,
+            "business_calendar_id": 1,
+            "holiday_policy": "as_is",
+            "ui_metadata": {"bg_color": "#FF0000", "icon": "money-bag", "is_bold": True},
+        },
+    },
+}
 
 
 # ==========================================
@@ -170,7 +434,13 @@ class PlanTemplateUpdate(BaseModel):
     # REFERENCE_SHEET_BASED 用
     reference_sheet_id: int | None = None
     reference_event_marker: str | None = Field(default=None, min_length=1, max_length=50)
+    offset_days: int | None = Field(default=None, ge=-366, le=366)
+    offset_day_unit: DayUnit | None = None
     offset_minutes: int | None = None
+
+    # 休日の扱い（business_calendar_id は null でカレンダー解除。as_is 以外のポリシーや営業日オフセットでは不可）
+    business_calendar_id: int | None = None
+    holiday_policy: HolidayPolicy | None = None
 
     # 表示用（null でクリア。部分マージではなく全体を置き換えます）
     ui_metadata: UIMetadata | None = None
@@ -251,7 +521,11 @@ class PlanTemplateResponse(BaseModel):
     rrule: str | None
     reference_sheet_id: int | None
     reference_event_marker: str | None
+    offset_days: int | None
+    offset_day_unit: DayUnit | None
     offset_minutes: int | None
+    business_calendar_id: int | None
+    holiday_policy: HolidayPolicy
     ui_metadata: dict[str, Any] | None
     revision: int
     materialized_until: datetime | None
@@ -278,6 +552,24 @@ class PlanInstanceResponse(BaseModel):
     voided_at: datetime | None
 
 
+class CancelledInstanceResponse(BaseModel):
+    """取り消された予定（「取消済みの予定」画面用）"""
+    instance_id: int
+    template_id: int
+    title: str
+    biz_master_id: int
+    biz_code: str
+    biz_name: str
+    origin: InstanceOrigin
+    scheduled_start: datetime
+    scheduled_end: datetime
+    ui_metadata: dict[str, Any] | None = Field(description="effective styling (template merged with instance)")
+    note: str | None = Field(description="reason given when it was cancelled")
+    cancelled_at: datetime
+    restorable: bool = Field(description="true if POST /plans/instances/{id}/restore would succeed")
+    not_restorable_reason: str | None = Field(default=None, description="why it cannot be restored (when restorable is false)")
+
+
 class PlanRevertResponse(BaseModel):
     voided_instance: PlanInstanceResponse | None = Field(description="the manual override that was voided (none if the slot was cancelled)")
     restored_instance: PlanInstanceResponse | None = Field(description="the instance regenerated from the rule (none if the rule no longer produces it within the materialized range)")
@@ -300,3 +592,53 @@ class PlanOccurrenceResponse(BaseModel):
     ui_metadata: dict[str, Any] | None = Field(description="effective styling (template merged with instance)")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ClientOccurrenceResponse(PlanOccurrenceResponse):
+    """顧客単位の表示用（どの業務の予定かが分かるよう業務コード・業務名を付与）"""
+    biz_code: str
+    biz_name: str
+    revertable: bool = Field(
+        default=False,
+        description="true if POST /plans/instances/{id}/revert would succeed "
+                    "(a manual change of a rule-generated occurrence whose original time is still in the future)",
+    )
+
+
+class CalendarDay(BaseModel):
+    date: date
+    weekday: int = Field(description="ISO weekday (1=Mon ... 7=Sun)")
+    holiday_name: str | None = Field(default=None, description="holiday name (when holiday_calendar is given)")
+    is_business_day: bool | None = Field(default=None, description="null when no holiday_calendar is given")
+    occurrences: list[ClientOccurrenceResponse]
+
+
+class CalendarTemplateInfo(BaseModel):
+    """カレンダーの凡例・明細表示用のテンプレート情報"""
+    template_id: int
+    name: str
+    biz_master_id: int
+    biz_code: str
+    biz_name: str
+    template_type: TemplateType
+    timezone: str
+    start_time: time = Field(description="default local start time (used as the default for special-case entries)")
+    duration_minutes: int
+    rrule: str | None
+    reference_event_marker: str | None
+    offset_days: int | None
+    offset_day_unit: DayUnit | None
+    holiday_policy: HolidayPolicy
+    ui_metadata: dict[str, Any] | None
+
+
+class ClientCalendarResponse(BaseModel):
+    client_code: str
+    month: str = Field(description="YYYY-MM")
+    timezone: str
+    holiday_calendar: str | None = Field(default=None, description="business calendar code used for holiday_name")
+    start: datetime
+    end: datetime
+    total: int = Field(description="number of occurrences in the month")
+    templates: list[CalendarTemplateInfo] = Field(description="all active templates of the client (for legend / filters)")
+    days: list[CalendarDay] = Field(description="every day of the month (empty days included)")

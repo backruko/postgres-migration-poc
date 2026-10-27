@@ -11,6 +11,7 @@ logging.basicConfig(
 )
 
 from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.core.exceptions import BusinessException
@@ -24,6 +25,17 @@ from src.domain_biz.router import router as biz_router
 from src.domain_plan.router import router as plan_router
 
 app = FastAPI(title="Schedule System")
+
+# --------- CORS（.env の CORS_ORIGINS で指定した場合のみ有効） ---------
+from src.infrastructure.config import settings
+
+if settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # --------- エラーハンドラーの登録 ---------
 # BusinessExceptionが起きたら business_exception_handler を呼ぶ
