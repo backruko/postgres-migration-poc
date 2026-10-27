@@ -16,6 +16,9 @@
   --font-display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
   --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* 上部ナビの高さ（固定）。ナビの下に貼り付く要素（曜日の行・明細）の top に使う（+1px はナビの下線） */
+  --nav-h: 44px;
+  --sticky-top: calc(env(safe-area-inset-top, 0px) + var(--nav-h) + 1px);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -51,12 +54,17 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 /* ---------------- 画面の切り替え（上部ナビ） ---------------- */
-.app-nav { background: var(--sheet); border-bottom: 1px solid var(--rule); padding-top: env(safe-area-inset-top, 0px); }
+/* 縦にスクロールしても画面の切り替えを常に表示する（antd のモーダル・ドロップダウン（z-index 1000〜）より下） */
+.app-nav {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--sheet); border-bottom: 1px solid var(--rule); box-shadow: 0 1px 3px rgb(0 0 0 / .06);
+  padding-top: env(safe-area-inset-top, 0px);
+}
 .app-nav-inner {
-  max-width: 1280px; margin: 0 auto; display: flex; gap: 4px;
+  max-width: 1280px; margin: 0 auto; display: flex; gap: 4px; height: var(--nav-h);
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
-.nav-link { padding: 10px 12px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; font-size: 13px; }
+.nav-link { display: inline-flex; align-items: center; padding: 0 12px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; font-size: 13px; }
 .nav-link:hover { color: var(--ink); }
 .nav-link.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
 .nav-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -102,8 +110,11 @@ h1 .client { color: var(--accent); }
 @media (max-width: 980px) { .main { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------------- month grid ---------------- */
-.month { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+/* overflow: hidden だとこの要素がスクロールの基準になり、曜日の行が画面に貼り付かないため clip を使う（角丸の切り抜きは同じ） */
+.month { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; overflow: clip; }
 .dow, .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+/* 月末まで下にスクロールしても列の曜日が分かるよう、曜日の行をナビの直下に貼り付ける（下の予定が透けないよう背景を塗る） */
+.dow { position: sticky; top: var(--sticky-top); z-index: 10; background: var(--sheet); }
 .dow div { padding: 8px 10px; font-size: 12px; letter-spacing: .1em; color: var(--muted); border-bottom: 1px solid var(--rule-strong); }
 .dow .is-sun { color: var(--sun); }
 .dow .is-sat { color: var(--sat); }
@@ -141,7 +152,7 @@ h1 .client { color: var(--accent); }
 .more { font-size: 11px; color: var(--muted); padding-left: 4px; }
 
 /* ---------------- detail ---------------- */
-.detail { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 16px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+.detail { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 16px; position: sticky; top: calc(var(--sticky-top) + 12px); }
 .detail-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .detail h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 22px; }
 .detail-wd { font-size: 15px; margin-left: 6px; color: var(--muted); }
