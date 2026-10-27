@@ -54,3 +54,9 @@ Thumbs.db
 .coverage
 htmlcov/
 .tox/
+
+# ==========================================
+# Frontend (Node)
+# ==========================================
+node_modules/
+frontend/dist/

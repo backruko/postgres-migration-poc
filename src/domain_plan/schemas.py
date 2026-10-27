@@ -552,6 +552,24 @@ class PlanInstanceResponse(BaseModel):
     voided_at: datetime | None
 
 
+class CancelledInstanceResponse(BaseModel):
+    """取り消された予定（「取消済みの予定」画面用）"""
+    instance_id: int
+    template_id: int
+    title: str
+    biz_master_id: int
+    biz_code: str
+    biz_name: str
+    origin: InstanceOrigin
+    scheduled_start: datetime
+    scheduled_end: datetime
+    ui_metadata: dict[str, Any] | None = Field(description="effective styling (template merged with instance)")
+    note: str | None = Field(description="reason given when it was cancelled")
+    cancelled_at: datetime
+    restorable: bool = Field(description="true if POST /plans/instances/{id}/restore would succeed")
+    not_restorable_reason: str | None = Field(default=None, description="why it cannot be restored (when restorable is false)")
+
+
 class PlanRevertResponse(BaseModel):
     voided_instance: PlanInstanceResponse | None = Field(description="the manual override that was voided (none if the slot was cancelled)")
     restored_instance: PlanInstanceResponse | None = Field(description="the instance regenerated from the rule (none if the rule no longer produces it within the materialized range)")
@@ -580,19 +598,47 @@ class ClientOccurrenceResponse(PlanOccurrenceResponse):
     """顧客単位の表示用（どの業務の予定かが分かるよう業務コード・業務名を付与）"""
     biz_code: str
     biz_name: str
+    revertable: bool = Field(
+        default=False,
+        description="true if POST /plans/instances/{id}/revert would succeed "
+                    "(a manual change of a rule-generated occurrence whose original time is still in the future)",
+    )
 
 
 class CalendarDay(BaseModel):
     date: date
     weekday: int = Field(description="ISO weekday (1=Mon ... 7=Sun)")
+    holiday_name: str | None = Field(default=None, description="holiday name (when holiday_calendar is given)")
+    is_business_day: bool | None = Field(default=None, description="null when no holiday_calendar is given")
     occurrences: list[ClientOccurrenceResponse]
+
+
+class CalendarTemplateInfo(BaseModel):
+    """カレンダーの凡例・明細表示用のテンプレート情報"""
+    template_id: int
+    name: str
+    biz_master_id: int
+    biz_code: str
+    biz_name: str
+    template_type: TemplateType
+    timezone: str
+    start_time: time = Field(description="default local start time (used as the default for special-case entries)")
+    duration_minutes: int
+    rrule: str | None
+    reference_event_marker: str | None
+    offset_days: int | None
+    offset_day_unit: DayUnit | None
+    holiday_policy: HolidayPolicy
+    ui_metadata: dict[str, Any] | None
 
 
 class ClientCalendarResponse(BaseModel):
     client_code: str
     month: str = Field(description="YYYY-MM")
     timezone: str
+    holiday_calendar: str | None = Field(default=None, description="business calendar code used for holiday_name")
     start: datetime
     end: datetime
     total: int = Field(description="number of occurrences in the month")
+    templates: list[CalendarTemplateInfo] = Field(description="all active templates of the client (for legend / filters)")
     days: list[CalendarDay] = Field(description="every day of the month (empty days included)")

@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     
     database_url: str
 
+    # フロントエンドを別オリジンで配信する場合に許可するオリジン（例: ["https://plan.example.com"]）
+    # 開発時は Vite のプロキシ経由で同一オリジンになるため不要
+    cors_origins: list[str] = []
+
     # .env ファイルを自動的に読み込む設定
     model_config = SettingsConfigDict(
         env_file=env_file_to_load, 

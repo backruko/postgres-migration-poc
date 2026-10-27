@@ -10,7 +10,7 @@ from typing import Any, Iterable, Sequence
 
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from src.core.error_codes import ErrorCode
 from src.domain_biz.models import BizMaster
@@ -142,6 +142,16 @@ class PlanTemplateRepository(SoftCRUDBase[PlanTemplate, BaseModel, PlanTemplateU
         )
         return list(db.scalars(stmt).all())
 
+    def get_by_client_with_biz(self, db: Session, *, client_code: str) -> list[tuple[PlanTemplate, str, str]]:
+        """顧客に属する全業務の有効なテンプレート（業務コード・業務名付き）"""
+        stmt = (
+            select(self.model, BizMaster.business_code, BizMaster.name)
+            .join(BizMaster, BizMaster.id == self.model.biz_master_id)
+            .where(BizMaster.client_code == client_code)
+            .order_by(BizMaster.business_code, self.model.id)
+        )
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
     def get_by_sheet_marker(self, db: Session, *, sheet_id: int, marker: str | None = None) -> list[PlanTemplate]:
         """シート（とマーカー）を参照している有効なテンプレートを行ロック付きで取得します"""
         stmt = select(self.model).where(self.model.reference_sheet_id == sheet_id)
@@ -223,6 +233,32 @@ class PlanInstanceRepository(CRUDBase[PlanInstance, BaseModel, BaseModel]):
             )
         )
         return [(row[0], row[1]) for row in db.execute(stmt)]
+
+    def get_cancelled_for_client(
+        self, db: Session, *, client_code: str, start: datetime, end: datetime
+    ) -> list[tuple[PlanInstance, PlanInstanceVoid, PlanTemplate, str, str]]:
+        """
+        顧客の「取り消された予定」（MANUAL で無効化され、置き換えのオーバーライドが無いもの）を開始時刻順に返します。
+        置き換えがあるもの（=日時を変更した元の予定）は取消ではないため含めません。
+        論理削除された業務・テンプレートの予定は全局scopeで除外されます。
+        """
+        child = aliased(PlanInstance)
+        stmt = (
+            select(PlanInstance, PlanInstanceVoid, PlanTemplate, BizMaster.business_code, BizMaster.name)
+            .join(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .join(PlanTemplate, PlanTemplate.id == PlanInstance.template_id)
+            .join(BizMaster, BizMaster.id == PlanTemplate.biz_master_id)
+            .outerjoin(child, child.overrides_instance_id == PlanInstance.id)
+            .where(
+                BizMaster.client_code == client_code,
+                PlanInstanceVoid.reason == VoidReason.MANUAL,
+                child.id.is_(None),
+                PlanInstance.scheduled_start >= start,
+                PlanInstance.scheduled_start < end,
+            )
+            .order_by(PlanInstance.scheduled_start, PlanInstance.id)
+        )
+        return [(row[0], row[1], row[2], row[3], row[4]) for row in db.execute(stmt)]
 
     def get_override_child(self, db: Session, *, instance_id: int) -> PlanInstance | None:
         """このインスタンスを置き換えたオーバーライド（あれば）"""

@@ -701,7 +701,9 @@ def test_holiday_on_27th_rolls_generated_date_and_cascades_to_jobs(db, biz_id):
 def test_manual_edits_on_generated_dates_always_win(db, biz_id):
     calendar, sheet, marker = _trading_day_setup(db, biz_id)
     events = [e for e in active_events(db, sheet.id) if e.event_date > date.today()]
-    edited, cancelled = events[1], events[2]
+    # 編集対象は振替されていない日（振替済みだと「翌日へ変更」が元の日付と同じになり得るため）
+    edited = next(e for e in events[1:] if e.event_date == e.rule_date)
+    cancelled = next(e for e in events[1:] if e is not edited)
     assert edited.rule_date is not None and cancelled.rule_date is not None
     edited_to = edited.rule_date + timedelta(days=1)
 
@@ -798,6 +800,23 @@ def test_client_calendar_includes_all_businesses_of_the_client(db, biz_id):
             assert day.weekday == (1 if o.title == "Daily A" else 5)
         assert [o.starts_at for o in day.occurrences] == sorted(o.starts_at for o in day.occurrences)
 
+    # 凡例用のテンプレート一覧（他の顧客のものは含まない）
+    assert sorted(t.name for t in cal.templates) == ["Daily A", "Daily B"]
+    assert {t.biz_name for t in cal.templates} == {"test biz", "second biz"}
+    assert all(d.holiday_name is None and d.is_business_day is None for d in cal.days)
+
+    # 営業日カレンダーを指定すると休日名・営業日フラグが付く
+    holiday = next(d.date for d in cal.days if d.weekday == 3)
+    calendar = make_calendar(db, holidays=[holiday])
+    services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=holiday, name="臨時休業")]))
+    cal = services.get_client_calendar(db, code, month, "Asia/Tokyo", holiday_calendar=calendar.code)
+    by_date = {d.date: d for d in cal.days}
+    assert cal.holiday_calendar == calendar.code
+    assert by_date[holiday].holiday_name == "臨時休業" and by_date[holiday].is_business_day is False
+    assert all(d.is_business_day is (d.weekday < 6) for d in cal.days if d.date != holiday)
+    with pytest.raises(NotFoundError):
+        services.get_client_calendar(db, code, month, "Asia/Tokyo", holiday_calendar="NO_SUCH_CAL")
+
     # 論理削除した業務の予定は表示されない
     biz_master_repo.remove(db, id=other_biz.id)
     cal = services.get_client_calendar(db, code, month, "Asia/Tokyo")
@@ -813,3 +832,126 @@ def test_client_calendar_validation(db, biz_id):
         services.get_client_occurrences(
             db, client_code_of(db, biz_id), datetime(2026, 11, 1), datetime(2026, 12, 1)  # タイムゾーン無し
         )
+
+
+# ==========================================
+# 過去への予定変更・臨時追加の禁止 / 元に戻せるかの判定
+# ==========================================
+def test_cannot_schedule_into_the_past(db, biz_id):
+    t = daily_template(db, biz_id)
+    target = live(db, t.id)[2]
+    past = datetime.now(UTC) - timedelta(hours=1)
+
+    with pytest.raises(BadRequestError, match="past"):
+        services.override_instance(db, target.id, PlanInstanceOverride(scheduled_start=past))
+    db.rollback()
+    with pytest.raises(BadRequestError, match="past"):
+        services.add_one_off_instance(db, t.id, PlanOneOffCreate(scheduled_start=past))
+    db.rollback()
+    # 拒否された操作では何も変わっていない
+    assert not by_id(db, t.id, target.id).voided
+
+    # 未来への変更は従来どおり可能
+    ov = services.override_instance(db, target.id, PlanInstanceOverride(scheduled_start=target.scheduled_start + timedelta(hours=1)))
+    assert ov.origin == InstanceOrigin.OVERRIDE
+
+
+def test_revertable_flag_matches_what_revert_accepts(db, biz_id, monkeypatch):
+    t = daily_template(db, biz_id)
+    generated = live(db, t.id)[3]
+    start = generated.scheduled_start
+    one_off = services.add_one_off_instance(db, t.id, PlanOneOffCreate(scheduled_start=start + timedelta(hours=5)))
+
+    moved_rule = services.override_instance(db, generated.id, PlanInstanceOverride(scheduled_start=start + timedelta(hours=1)))
+    moved_one_off = services.override_instance(db, one_off.id, PlanInstanceOverride(scheduled_start=start + timedelta(hours=6)))
+
+    def flags():
+        month_start = datetime.combine(start.astimezone(JST).date(), time(0), tzinfo=JST)
+        occs = services.get_client_occurrences(db, client_code_of(db, biz_id), month_start, month_start + timedelta(days=1))
+        return {o.instance_id: o.revertable for o in occs}
+
+    f = flags()
+    assert f[moved_rule.id] is True        # ルール生成の予定の手動変更 → 元に戻せる
+    assert f[moved_one_off.id] is False    # 臨時追加の予定の変更 → ルールが無いので戻せない
+    assert all(v is False for k, v in f.items() if k not in (moved_rule.id,))
+    with pytest.raises(BadRequestError, match="One-off"):
+        services.revert_instance(db, moved_one_off.id, PlanInstanceRevert())
+    db.rollback()
+
+    # 元の日時が過去になったら、元に戻せない
+    future_now = start + timedelta(minutes=30)
+    monkeypatch.setattr(services, "_now", lambda: future_now)
+    assert flags()[moved_rule.id] is False
+    with pytest.raises(BadRequestError, match="past"):
+        services.revert_instance(db, moved_rule.id, PlanInstanceRevert())
+
+
+# ==========================================
+# 取り消された予定の一覧と復元
+# ==========================================
+def test_cancelled_list_and_restore(db, biz_id, monkeypatch):
+    code = client_code_of(db, biz_id)
+    t = daily_template(db, biz_id, ui_metadata=UIMetadata(bg_color="#52aecd"))
+    gens = live(db, t.id)
+    direct, moved_then_cancelled, only_moved, reverted = gens[2], gens[4], gens[6], gens[8]
+
+    # 1. 生成された予定をそのまま取消
+    services.cancel_instance(db, direct.id, PlanInstanceCancel(note="顧客都合"))
+    # 2. 日時を変更してから取消（取消されたのは変更後の予定）
+    ov = services.override_instance(db, moved_then_cancelled.id, PlanInstanceOverride(
+        scheduled_start=moved_then_cancelled.scheduled_start + timedelta(hours=2), ui_metadata=UIMetadata(bg_color="#c8342a")))
+    services.cancel_instance(db, ov.id, PlanInstanceCancel())
+    # 3. 日時を変更しただけ（取消ではない）
+    services.override_instance(db, only_moved.id, PlanInstanceOverride(scheduled_start=only_moved.scheduled_start + timedelta(hours=1)))
+    # 4. 取消してから「元に戻す（ルールへ）」済み
+    services.cancel_instance(db, reverted.id, PlanInstanceCancel())
+    services.revert_instance(db, reverted.id, PlanInstanceRevert())
+    # 5. 臨時の予定を取消
+    one_off = services.add_one_off_instance(db, t.id, PlanOneOffCreate(scheduled_start=gens[10].scheduled_start + timedelta(hours=3)))
+    services.cancel_instance(db, one_off.id, PlanInstanceCancel())
+    # 別の顧客の取消は含まれない
+    foreign_code = "T" + uuid.uuid4().hex[:3].upper()
+    client_repo.create(db, obj_in=ClientCreate(code=foreign_code, name="other"))
+    foreign_biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=foreign_code, name="x", business_seq=1, manager_email=None, description=None))
+    ft = daily_template(db, foreign_biz.id)
+    services.cancel_instance(db, live(db, ft.id)[2].id, PlanInstanceCancel())
+
+    now = datetime.now(UTC)
+    listing = services.get_cancelled_instances(db, code, now, now + timedelta(days=60))
+    by_id_ = {c.instance_id: c for c in listing}
+    assert set(by_id_) == {direct.id, ov.id, one_off.id}
+    assert by_id_[direct.id].note == "顧客都合" and by_id_[direct.id].ui_metadata == {"bg_color": "#52aecd"}
+    assert by_id_[ov.id].origin == InstanceOrigin.OVERRIDE and by_id_[ov.id].ui_metadata == {"bg_color": "#c8342a"}
+    assert by_id_[one_off.id].origin == InstanceOrigin.ONE_OFF
+    assert all(c.restorable and c.not_restorable_reason is None for c in listing)
+    assert [c.scheduled_start for c in listing] == sorted(c.scheduled_start for c in listing)
+
+    # 復元: 取消直前と同じ日時・表示で戻り、カレンダーに表示され、一覧から消える
+    for cancelled in (direct, ov, one_off):
+        restored = services.restore_cancelled_instance(db, cancelled.id)
+        assert restored.origin == InstanceOrigin.OVERRIDE and restored.overrides_instance_id == cancelled.id
+        assert (restored.scheduled_start, restored.scheduled_end) == (cancelled.scheduled_start, cancelled.scheduled_end)
+    assert services.get_cancelled_instances(db, code, now, now + timedelta(days=60)) == []
+    live_ids = {i.id for i in live(db, t.id)}
+    restored_cache = [c for c in cache_rows(db, biz_id, days=60) if c.instance_id in live_ids and c.origin == InstanceOrigin.OVERRIDE]
+    assert {c.starts_at for c in restored_cache} >= {direct.scheduled_start, ov.scheduled_start, one_off.scheduled_start}
+    # 復元した予定（ルール生成の枠）は、さらに「ルールどおりに戻す」こともできる
+    restored_direct = next(i for i in live(db, t.id) if i.overrides_instance_id == direct.id)
+    assert services.revert_instance(db, restored_direct.id, PlanInstanceRevert()).restored_instance is not None
+
+    # 二重の復元・取消されていない予定の復元は拒否
+    with pytest.raises(DuplicatedRecordError):
+        services.restore_cancelled_instance(db, direct.id)
+    db.rollback()
+    with pytest.raises(BadRequestError):
+        services.restore_cancelled_instance(db, gens[12].id)
+    db.rollback()
+
+    # 時刻が過ぎた取消は、一覧には出るが元に戻せない
+    target = gens[14]
+    services.cancel_instance(db, target.id, PlanInstanceCancel())
+    monkeypatch.setattr(services, "_now", lambda: target.scheduled_start + timedelta(minutes=1))
+    [entry] = [c for c in services.get_cancelled_instances(db, code, now, now + timedelta(days=60)) if c.instance_id == target.id]
+    assert not entry.restorable and entry.not_restorable_reason == "past"
+    with pytest.raises(BadRequestError, match="passed"):
+        services.restore_cancelled_instance(db, target.id)

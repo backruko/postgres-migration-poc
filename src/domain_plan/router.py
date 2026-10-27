@@ -11,6 +11,7 @@ from src.domain_plan.schemas import (
     BusinessCalendarResponse,
     BusinessCalendarUpdate,
     CacheRebuildResponse,
+    CancelledInstanceResponse,
     ClientCalendarResponse,
     ClientOccurrenceResponse,
     PLAN_TEMPLATE_CREATE_EXAMPLES,
@@ -42,7 +43,7 @@ from src.domain_plan.schemas import (
 from src.domain_plan.services import (
     add_holidays, create_calendar, delete_holiday, get_calendar, get_calendars, get_holidays, update_calendar,
     add_explicit_dates, add_marker, add_one_off_instance, add_sheet_events, cancel_instance, create_sheet, create_template, delete_sheet_event,
-    delete_template, get_client_calendar, get_client_occurrences, get_instances, get_occurrences, get_sheet, get_sheets, get_template, get_templates,
+    delete_template, get_cancelled_instances, get_client_calendar, restore_cancelled_instance, get_client_occurrences, get_instances, get_occurrences, get_sheet, get_sheets, get_template, get_templates,
     import_sheet, override_instance, revert_sheet_event, update_marker, rebuild_cache, remove_explicit_date, restore_template, revert_instance, update_sheet_event,
     update_template,
 )
@@ -238,6 +239,14 @@ def cancel_instance_endpoint(instance_id: int, cancel_in: PlanInstanceCancel | N
     """特定の1件だけ取り消します。以後の再生成でも復活しません。"""
     return cancel_instance(db=db, instance_id=instance_id, cancel_in=cancel_in or PlanInstanceCancel())
 
+@router.post("/instances/{instance_id}/restore", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+def restore_cancelled_instance_endpoint(instance_id: int, db: Session = Depends(get_db)):
+    """
+    取り消した予定を、取消の直前と同じ日時で元に戻します（臨時の予定・日時を変更した予定も可）。
+    時刻が過ぎた予定は戻せません。取消の記録は履歴として残ります。
+    """
+    return restore_cancelled_instance(db=db, instance_id=instance_id)
+
 @router.post("/instances/{instance_id}/revert", response_model=PlanRevertResponse, responses={**COMMON_ERRORS})
 def revert_instance_endpoint(instance_id: int, revert_in: PlanInstanceRevert | None = None, db: Session = Depends(get_db)):
     """
@@ -274,10 +283,24 @@ def get_client_calendar_endpoint(
     client_code: str,
     month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="表示する月 (例: 2026-11)"),
     timezone: str = Query("Asia/Tokyo", description="日付の振り分けに使うタイムゾーン"),
+    holiday_calendar: str | None = Query(None, description="休日名を付ける営業日カレンダーのコード (例: JP_BANK)"),
     db: Session = Depends(get_db),
 ):
     """
     顧客に属する全業務の予定を、月カレンダーの形で返します。
-    その月の全日（予定の無い日も含む）と、日ごとの予定（開始時刻順）を返すため、そのままカレンダーに描画できます。
+    その月の全日（予定の無い日も含む）と、日ごとの予定（開始時刻順）、凡例用のテンプレート一覧を返すため、
+    そのままカレンダーに描画できます。
     """
-    return get_client_calendar(db=db, client_code=client_code, month=month, tz_name=timezone)
+    return get_client_calendar(
+        db=db, client_code=client_code, month=month, tz_name=timezone, holiday_calendar=holiday_calendar
+    )
+
+@router.get("/clients/{client_code}/cancelled", response_model=list[CancelledInstanceResponse], responses={**COMMON_ERRORS})
+def get_cancelled_instances_endpoint(
+    client_code: str,
+    start: datetime = Query(..., description="タイムゾーン付き (例: 2026-11-01T00:00:00+09:00)"),
+    end: datetime = Query(..., description="タイムゾーン付き、start から最大366日"),
+    db: Session = Depends(get_db),
+):
+    """顧客に属する全業務の、取り消された予定の一覧（元に戻せるかどうか付き）。カレンダーには表示されない予定です。"""
+    return get_cancelled_instances(db=db, client_code=client_code, start=start, end=end)

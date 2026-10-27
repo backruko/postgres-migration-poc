@@ -20,6 +20,7 @@ from src.domain_biz.models import BizMaster
 from src.domain_plan import engine
 from src.domain_plan.engine import DayUnit, HolidayPolicy
 from src.domain_plan.models import (
+    merge_ui_metadata,
     validate_timezone_name,
     BusinessCalendar,
     BusinessCalendarHoliday,
@@ -46,9 +47,11 @@ from src.domain_plan.schemas import (
     PlanInstanceOverride,
     PlanInstanceResponse,
     PlanInstanceRevert,
+    CancelledInstanceResponse,
     PlanOccurrenceResponse,
     PlanOneOffCreate,
     CalendarDay,
+    CalendarTemplateInfo,
     ClientCalendarResponse,
     ClientOccurrenceResponse,
     PlanRevertResponse,
@@ -997,6 +1000,32 @@ def _get_live_instance_for_manual_change(db: Session, instance_id: int) -> tuple
     return instance, template
 
 
+def _reject_past_start(start: datetime) -> None:
+    """予定は未来に向けて立てるもののため、変更後・追加する予定の開始が過去の場合は受け付けない"""
+    if start < _now():
+        raise BadRequestError(
+            f"Cannot schedule in the past ({start.isoformat()}). Choose a start time later than now."
+        )
+
+
+def _chain_root(db: Session, instance: PlanInstance) -> PlanInstance:
+    """オーバーライドの連鎖を遡り、起点（ルール生成または臨時追加）のインスタンスを返します"""
+    root = instance
+    while root.overrides_instance_id is not None:
+        parent = plan_instance_repo.get(db, id=root.overrides_instance_id)
+        assert parent is not None
+        root = parent
+    return root
+
+
+def _is_revertable(db: Session, instance: PlanInstance, now: datetime) -> bool:
+    """revert_instance が受け付ける条件（ルール生成の予定の手動変更で、元の日時がまだ未来）"""
+    if instance.origin != InstanceOrigin.OVERRIDE:
+        return False
+    root = _chain_root(db, instance)
+    return root.origin == InstanceOrigin.GENERATED and root.scheduled_start >= now
+
+
 def override_instance(db: Session, instance_id: int, override_in: PlanInstanceOverride) -> PlanInstanceResponse:
     """
     特定のインスタンスだけ時刻を変更します（テンプレートのルールは変えません）。
@@ -1008,6 +1037,7 @@ def override_instance(db: Session, instance_id: int, override_in: PlanInstanceOv
     end = override_in.scheduled_end or start + (original.scheduled_end - original.scheduled_start)
     if start == original.scheduled_start and end == original.scheduled_end:
         raise BadRequestError("The new time is the same as the current one.")
+    _reject_past_start(start)
 
     # ui_metadata: 省略時は元インスタンスの値を引き継ぐ / null ならクリア
     ui_metadata = (
@@ -1055,11 +1085,7 @@ def revert_instance(db: Session, instance_id: int, revert_in: PlanInstanceRevert
         raise BadRequestError(f"PlanTemplate(id={found[0].template_id}) of this instance has been deleted.")
 
     # 連鎖を遡って起点（ルールから生成されたインスタンス）を探す
-    root = found[0]
-    while root.overrides_instance_id is not None:
-        parent = plan_instance_repo.get(db, id=root.overrides_instance_id)
-        assert parent is not None
-        root = parent
+    root = _chain_root(db, found[0])
     if root.origin == InstanceOrigin.ONE_OFF:
         raise BadRequestError("One-off instances are not tied to the rule, so they cannot be reverted. Cancel it instead.")
 
@@ -1127,6 +1153,7 @@ def add_one_off_instance(db: Session, template_id: int, one_off_in: PlanOneOffCr
 
     start = one_off_in.scheduled_start
     end = one_off_in.scheduled_end or start + timedelta(minutes=template.duration_minutes)
+    _reject_past_start(start)
     instance = plan_instance_repo.add_one_off(
         db,
         template=template,
@@ -1140,6 +1167,94 @@ def add_one_off_instance(db: Session, template_id: int, one_off_in: PlanOneOffCr
     _commit(db, "One-off instance could not be created due to a conflicting record.")
     db.refresh(instance)
     return _to_instance_response(instance, None)
+
+
+def _cancelled_restore_block(db: Session, instance: PlanInstance, now: datetime) -> str | None:
+    """取り消された予定を元に戻せない理由（戻せるなら None）"""
+    if instance.scheduled_start < now:
+        return "past"
+    root = _chain_root(db, instance)
+    if root.origin == InstanceOrigin.GENERATED and plan_slot_release_repo.exists(db, root_instance_id=root.id):
+        return "reverted"  # ルールの管理下に戻され、ルールの予定が既にある
+    return None
+
+
+def get_cancelled_instances(
+    db: Session, client_code: str, start: datetime, end: datetime
+) -> list[CancelledInstanceResponse]:
+    """顧客に属する全業務の、取り消された予定（範囲内、開始時刻順）。元に戻せるかどうかも返します。"""
+    _validate_range(start, end)
+    code = _get_client_code(db, client_code)
+    now = _now()
+
+    results = []
+    for instance, void, template, biz_code, biz_name in plan_instance_repo.get_cancelled_for_client(
+        db, client_code=code, start=start, end=end
+    ):
+        block = _cancelled_restore_block(db, instance, now)
+        if block == "reverted":
+            continue  # 取消はすでに取り消されている（ルールの予定として復活済み）
+        results.append(CancelledInstanceResponse(
+            instance_id=instance.id,
+            template_id=template.id,
+            title=template.name,
+            biz_master_id=template.biz_master_id,
+            biz_code=biz_code,
+            biz_name=biz_name,
+            origin=instance.origin,
+            scheduled_start=instance.scheduled_start,
+            scheduled_end=instance.scheduled_end,
+            ui_metadata=merge_ui_metadata(template.ui_metadata, instance.ui_metadata),
+            note=void.note,
+            cancelled_at=void.voided_at,
+            restorable=block is None,
+            not_restorable_reason=block,
+        ))
+    return results
+
+
+def restore_cancelled_instance(db: Session, instance_id: int) -> PlanInstanceResponse:
+    """
+    取り消した予定を元に戻します（取消の直前と同じ日時・表示で復元）。
+    インスタンスは不変のため、取り消された予定を置き換える新しいインスタンスを追記して復元します
+    （取消の記録は履歴として残り、復元した予定は「手動変更」として扱われます）。
+    """
+    found = plan_instance_repo.get_with_void(db, id=instance_id)
+    if not found:
+        raise NotFoundError(f"PlanInstance(id={instance_id}) not found.")
+    instance = found[0]
+    template = plan_template_repo.get_locked(db, id=instance.template_id)
+    if not template:
+        raise BadRequestError(f"PlanTemplate(id={instance.template_id}) of this instance has been deleted.")
+
+    # ロック取得後に状態を確認する（ロック待ちの間に復元・変更されている可能性があるため）
+    found = plan_instance_repo.get_with_void(db, id=instance_id)
+    assert found is not None
+    void = found[1]
+    if void is None or void.reason != VoidReason.MANUAL:
+        raise BadRequestError(f"PlanInstance(id={instance_id}) has not been cancelled.")
+    if plan_instance_repo.get_override_child(db, instance_id=instance.id) is not None:
+        raise DuplicatedRecordError(
+            f"PlanInstance(id={instance_id}) has already been rescheduled or restored.",
+            error_code=ErrorCode.INSTANCE_ALREADY_VOIDED,
+        )
+    block = _cancelled_restore_block(db, instance, _now())
+    if block == "past":
+        raise BadRequestError("Cannot restore a cancelled schedule whose time has already passed.")
+    if block == "reverted":
+        raise DuplicatedRecordError(
+            "This cancellation has already been undone (the slot is back under the rule).",
+            error_code=ErrorCode.INSTANCE_ALREADY_VOIDED,
+        )
+
+    restored = plan_instance_repo.add_override(
+        db, template=template, original=instance, start=instance.scheduled_start, end=instance.scheduled_end,
+        ui_metadata=instance.ui_metadata,
+    )
+    plan_cache_repo.add_for_instances(db, template=template, instances=[restored])
+    _commit(db, f"PlanInstance(id={instance_id}) was changed concurrently. Please retry.")
+    db.refresh(restored)
+    return _to_instance_response(restored, None)
 
 
 def get_occurrences(db: Session, biz_id: int, start: datetime, end: datetime) -> list[PlanOccurrenceCache]:
@@ -1189,19 +1304,33 @@ def get_client_occurrences(db: Session, client_code: str, start: datetime, end: 
     code = _get_client_code(db, client_code)
     _materialize_templates(db, plan_template_repo.get_by_client(db, client_code=code), end)
 
-    return [
-        ClientOccurrenceResponse(
-            **PlanOccurrenceResponse.model_validate(cache).model_dump(), biz_code=biz_code, biz_name=biz_name
-        )
-        for cache, biz_code, biz_name in plan_cache_repo.query_range_for_client(db, client_code=code, start=start, end=end)
-    ]
+    now = _now()
+    results = []
+    for cache, biz_code, biz_name in plan_cache_repo.query_range_for_client(db, client_code=code, start=start, end=end):
+        revertable = False
+        if cache.origin == InstanceOrigin.OVERRIDE:
+            instance = plan_instance_repo.get(db, id=cache.instance_id)
+            revertable = instance is not None and _is_revertable(db, instance, now)
+        results.append(ClientOccurrenceResponse(
+            **PlanOccurrenceResponse.model_validate(cache).model_dump(),
+            biz_code=biz_code, biz_name=biz_name, revertable=revertable,
+        ))
+    return results
 
 
-def get_client_calendar(db: Session, client_code: str, month: str, tz_name: str) -> ClientCalendarResponse:
+def get_client_calendar(
+    db: Session, client_code: str, month: str, tz_name: str, holiday_calendar: str | None = None
+) -> ClientCalendarResponse:
     """
     顧客に属する全業務の予定を、月カレンダーの形（その月の全日 + 日ごとの予定）で返します。
     日付は指定タイムゾーンでの開始日で振り分けます（前月から続く予定は月初の日に表示）。
+    holiday_calendar（営業日カレンダーのコード）を指定すると、各日に休日名と営業日かどうかを付けます。
     """
+    calendar = None
+    if holiday_calendar:
+        calendar = business_calendar_repo.get_by_code(db, code=holiday_calendar)
+        if not calendar:
+            raise NotFoundError(f"BusinessCalendar with code '{holiday_calendar}' not found.")
     try:
         tz = ZoneInfo(validate_timezone_name(tz_name))
         year, mon = (int(x) for x in month.split("-"))
@@ -1218,15 +1347,46 @@ def get_client_calendar(db: Session, client_code: str, month: str, tz_name: str)
     for occ in occurrences:
         by_day[max(occ.starts_at.astimezone(tz).date(), first_day)].append(occ)
 
+    holidays: dict[date, str | None] = {}
+    if calendar is not None:
+        holidays = {
+            h.holiday_date: h.name
+            for h in business_calendar_repo.get_holidays(
+                db, calendar_id=calendar.id, start=first_day, end=next_first - timedelta(days=1)
+            )
+        }
+
     days = []
     d = first_day
     while d < next_first:
-        days.append(CalendarDay(date=d, weekday=d.isoweekday(), occurrences=by_day.get(d, [])))
+        days.append(CalendarDay(
+            date=d,
+            weekday=d.isoweekday(),
+            holiday_name=(holidays.get(d) or "休日") if d in holidays else None,
+            is_business_day=(
+                None if calendar is None
+                else d.isoweekday() not in calendar.weekend_days and d not in holidays
+            ),
+            occurrences=by_day.get(d, []),
+        ))
         d += timedelta(days=1)
 
+    code = client_code.strip().upper()
+    templates = [
+        CalendarTemplateInfo(
+            template_id=t.id, name=t.name, biz_master_id=t.biz_master_id, biz_code=biz_code, biz_name=biz_name,
+            template_type=t.template_type, timezone=t.timezone, start_time=t.start_time,
+            duration_minutes=t.duration_minutes, rrule=t.rrule, reference_event_marker=t.reference_event_marker,
+            offset_days=t.offset_days, offset_day_unit=t.offset_day_unit, holiday_policy=t.holiday_policy,
+            ui_metadata=t.ui_metadata,
+        )
+        for t, biz_code, biz_name in plan_template_repo.get_by_client_with_biz(db, client_code=code)
+    ]
+
     return ClientCalendarResponse(
-        client_code=client_code.strip().upper(), month=f"{year:04d}-{mon:02d}", timezone=tz_name,
-        start=start, end=end, total=len(occurrences), days=days,
+        client_code=code, month=f"{year:04d}-{mon:02d}", timezone=tz_name,
+        holiday_calendar=calendar.code if calendar is not None else None,
+        start=start, end=end, total=len(occurrences), templates=templates, days=days,
     )
 
 
