@@ -21,6 +21,9 @@ export type BusinessCalendar = Schemas["BusinessCalendarResponse"];
 export type UIMetadataInput = Schemas["UIMetadata"];
 export type UIMetadataValue = ClientOccurrence["ui_metadata"];
 
+// ---- テンプレート（事前設定） ----
+export type PlanTemplate = Schemas["PlanTemplateResponse"];
+
 // ---- インスタンスの手動操作 ----
 export type PlanInstance = Schemas["PlanInstanceResponse"];
 export type OverrideInstanceInput = Schemas["PlanInstanceOverride"];

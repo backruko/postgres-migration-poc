@@ -50,6 +50,21 @@ button, input, select { font: inherit; color: inherit; }
   gap: 18px;
 }
 
+/* ---------------- 画面の切り替え（上部ナビ） ---------------- */
+.app-nav { background: var(--sheet); border-bottom: 1px solid var(--rule); padding-top: env(safe-area-inset-top, 0px); }
+.app-nav-inner {
+  max-width: 1280px; margin: 0 auto; display: flex; gap: 4px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.nav-link { padding: 10px 12px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; font-size: 13px; }
+.nav-link:hover { color: var(--ink); }
+.nav-link.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+.nav-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---------------- 予定テンプレート設定 ---------------- */
+.template-name { display: inline-flex; align-items: center; gap: 8px; }
+.template-name .swatch { width: 12px; height: 12px; }
+
 /* ---------------- header ---------------- */
 .page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
 .eyebrow { font-size: 12px; letter-spacing: .12em; color: var(--muted); }
