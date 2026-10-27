@@ -23,6 +23,14 @@ export type UIMetadataValue = ClientOccurrence["ui_metadata"];
 
 // ---- テンプレート（事前設定） ----
 export type PlanTemplate = Schemas["PlanTemplateResponse"];
+/** テンプレート作成の入力（template_type で形が変わる判別共用体） */
+export type CreatePlanTemplateInput =
+  | Schemas["RRuleTemplateCreate"]
+  | Schemas["ExplicitDatesTemplateCreate"]
+  | Schemas["ReferenceSheetTemplateCreate"];
+
+// ---- 年間計画シート ----
+export type ReferenceSheet = Schemas["ReferenceSheetResponse"];
 
 // ---- インスタンスの手動操作 ----
 export type PlanInstance = Schemas["PlanInstanceResponse"];

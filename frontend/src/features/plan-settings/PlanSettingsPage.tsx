@@ -1,6 +1,7 @@
+import { PlusOutlined } from "@ant-design/icons";
 import { Alert, Button, Empty, Select, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import type { BizMaster } from "../../domain/biz/types";
@@ -8,6 +9,7 @@ import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
 import { describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
 import type { PlanTemplate } from "../../domain/plan/types";
 import { chipStyle } from "../calendar/lib/chipStyle";
+import { CreateTemplateModal } from "./CreateTemplateModal";
 
 const columns: ColumnsType<PlanTemplate> = [
   { title: "ID", dataIndex: "id", width: 72, className: "mono" },
@@ -68,6 +70,7 @@ export function PlanSettingsPage() {
   const unknownOption = bizId !== null && bizes.data && !selectedBiz ? [{ value: bizId, label: `業務ID ${bizId}` }] : [];
 
   const { data, loading, error, reload } = usePlanTemplates(bizId);
+  const [creating, setCreating] = useState(false);
 
   const selectBiz = (id?: number) => setParams(id ? { biz: String(id) } : {});
 
@@ -119,10 +122,16 @@ export function PlanSettingsPage() {
         <Empty description="業務を選択してください" />
       ) : (
         <>
-          <Typography.Text type="secondary">
-            {selectedBiz ? `${selectedBiz.business_code} ${selectedBiz.name}` : `業務ID ${bizId}`} のテンプレート
-            {data ? ` ${data.length} 件` : ""}
-          </Typography.Text>
+          <div className="table-head">
+            <Typography.Text type="secondary">
+              {selectedBiz ? `${selectedBiz.business_code} ${selectedBiz.name}` : `業務ID ${bizId}`} のテンプレート
+              {data ? ` ${data.length} 件` : ""}
+            </Typography.Text>
+            {/* 作成先は選択中の業務（一覧に無い業務IDの場合は作成できない） */}
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)} disabled={!selectedBiz}>
+              新規作成
+            </Button>
+          </div>
           <Table<PlanTemplate>
             rowKey="id"
             columns={columns}
@@ -134,6 +143,9 @@ export function PlanSettingsPage() {
             locale={{ emptyText: <Empty description="この業務にはテンプレートがありません" /> }}
           />
         </>
+      )}
+      {selectedBiz && (
+        <CreateTemplateModal open={creating} biz={selectedBiz} onClose={() => setCreating(false)} onCreated={reload} />
       )}
     </div>
   );

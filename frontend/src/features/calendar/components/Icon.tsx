@@ -8,6 +8,9 @@ const PATHS: Record<string, string> = {
   report: "M6 2h9l5 5v15H6zM14 3.5V8h4.5zM9 12h8v1.6H9zm0 3.5h8v1.6H9zm0 3.5h5v1.6H9z",
 };
 
+/** ui_metadata.icon に指定できるアイコン名 */
+export const ICON_NAMES = Object.keys(PATHS);
+
 export function Icon({ name, size = 10 }: { name: string; size?: number }) {
   const d = PATHS[name];
   return (
