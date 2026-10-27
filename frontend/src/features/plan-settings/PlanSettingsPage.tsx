@@ -1,15 +1,20 @@
-import { EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, Select, Table, Tag, Typography } from "antd";
+import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Empty, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import type { BizMaster } from "../../domain/biz/types";
+import { templateApi } from "../../domain/plan/api";
 import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
+import { CATEGORY_LABEL, categoryOf, type TemplateCategory } from "../../domain/plan/lib/category";
 import { describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
 import type { PlanTemplate } from "../../domain/plan/types";
+import { ApiError } from "../../shared/api/http";
 import { chipStyle } from "../calendar/lib/chipStyle";
 import { TemplateFormModal } from "./TemplateFormModal";
+
+const CATEGORY_COLOR: Record<TemplateCategory, string | undefined> = { regular: undefined, adhoc: "gold", special: "red" };
 
 const columns: ColumnsType<PlanTemplate> = [
   { title: "ID", dataIndex: "id", width: 72, className: "mono" },
@@ -24,6 +29,15 @@ const columns: ColumnsType<PlanTemplate> = [
           {name}
         </span>
       );
+    },
+  },
+  {
+    title: "分類",
+    key: "category",
+    width: 104,
+    render: (_, t) => {
+      const c = categoryOf(t.ui_metadata);
+      return <Tag color={CATEGORY_COLOR[c]}>{CATEGORY_LABEL[c]}</Tag>;
     },
   },
   { title: "種類", dataIndex: "template_type", render: (type: PlanTemplate["template_type"]) => <Tag>{TEMPLATE_TYPE_LABEL[type]}</Tag> },
@@ -55,10 +69,11 @@ function bizOptions(bizes: BizMaster[]) {
 
 /**
  * 予定テンプレートの設定（事前設定）画面。
- * 業務を選択して、その業務のテンプレートを一覧・作成・編集する（削除は未対応）。
+ * 業務を選択して、その業務のテンプレートを一覧・作成・編集・削除する。
  * 選択した業務は URL の ?biz= に保持する（再読み込み・共有しても同じ業務を表示）。
  */
 export function PlanSettingsPage() {
+  const { message, modal } = App.useApp();
   const [params, setParams] = useSearchParams();
   const parsed = Number(params.get("biz"));
   const bizId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
@@ -74,15 +89,35 @@ export function PlanSettingsPage() {
   const [editor, setEditor] = useState<{ open: boolean; template: PlanTemplate | null }>({ open: false, template: null });
   const openEditor = (template: PlanTemplate | null) => setEditor({ open: true, template });
 
-  const tableColumns = useMemo<ColumnsType<PlanTemplate>>(
-    () => [
-      ...columns,
-      {
-        title: "操作",
-        key: "actions",
-        width: 88,
-        fixed: "right",
-        render: (_, t) => (
+  // 削除は確認してから。削除中は確認ダイアログの OK ボタンが読み込み中になり、終わると閉じる
+  const confirmDelete = (t: PlanTemplate) =>
+    modal.confirm({
+      title: `「${t.name}」を削除しますか？`,
+      content: "本当にこのテンプレートを削除しますか？この操作により、未来の予定もすべて削除されます。",
+      okText: "削除する",
+      okButtonProps: { danger: true },
+      cancelText: "キャンセル",
+      onOk: async () => {
+        try {
+          await templateApi.delete(t.id);
+          message.success("テンプレートを削除しました");
+        } catch (e) {
+          message.error(`削除できませんでした: ${e instanceof ApiError ? e.message : "通信に失敗しました。"}`);
+        }
+        // 失敗した場合も一覧を読み直す（別の画面で削除済みなど、一覧が古い可能性がある）
+        reload();
+      },
+    });
+
+  const tableColumns: ColumnsType<PlanTemplate> = [
+    ...columns,
+    {
+      title: "操作",
+      key: "actions",
+      width: 160,
+      fixed: "right",
+      render: (_, t) => (
+        <Space size={0}>
           <Button
             type="link"
             size="small"
@@ -93,11 +128,20 @@ export function PlanSettingsPage() {
           >
             編集
           </Button>
-        ),
-      },
-    ],
-    [selectedBiz],
-  );
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => confirmDelete(t)}
+            aria-label={`「${t.name}」を削除`}
+          >
+            削除
+          </Button>
+        </Space>
+      ),
+    },
+  ];
 
   const selectBiz = (id?: number) => setParams(id ? { biz: String(id) } : {});
 
@@ -166,7 +210,7 @@ export function PlanSettingsPage() {
             loading={loading}
             pagination={false}
             size="middle"
-            scroll={{ x: 848 }}
+            scroll={{ x: 1024 }}
             locale={{ emptyText: <Empty description="この業務にはテンプレートがありません" /> }}
           />
         </>

@@ -84,6 +84,7 @@ h1 .client { color: var(--accent); }
 .main.is-loading { opacity: .6; transition: opacity .15s; }
 
 /* ---------------- legend ---------------- */
+.legend-groups { display: grid; gap: 8px; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .legend-label { font-size: 12px; color: var(--muted); letter-spacing: .08em; margin-right: 4px; }
 .legend-item {

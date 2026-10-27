@@ -21,6 +21,7 @@ import type { BizMaster } from "../../domain/biz/types";
 import { templateApi } from "../../domain/plan/api";
 import { useBusinessCalendars } from "../../domain/plan/hooks/useClientCalendar";
 import { useReferenceSheets } from "../../domain/plan/hooks/useReferenceSheets";
+import { CATEGORY_LABEL, TEMPLATE_CATEGORIES } from "../../domain/plan/lib/category";
 import { describeRrule, describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
 import type { HolidayPolicy, PlanTemplate, TemplateType } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
@@ -179,6 +180,10 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
           ]}
         >
           <Input placeholder="例: 月次締め準備" maxLength={100} showCount />
+        </Form.Item>
+
+        <Form.Item name="category" label="分類" extra="カレンダーでは、定例は最初は非表示です（凡例の「分類」で表示できます）。">
+          <Radio.Group options={TEMPLATE_CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABEL[c] }))} />
         </Form.Item>
 
         <Space wrap align="start" size="large">

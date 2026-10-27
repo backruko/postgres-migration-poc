@@ -1,7 +1,7 @@
 import { http, unwrap } from "../../../shared/api/http";
 import type { CreatePlanTemplateInput, PlanTemplate, UpdatePlanTemplateInput } from "../types";
 
-/** 予定テンプレート（事前設定）。現時点では参照・作成・編集のみ */
+/** 予定テンプレート（事前設定）。参照・作成・編集・削除 */
 export const templateApi = {
   /** 業務に属する有効なテンプレートの一覧（GET /plans/templates?biz_id=） */
   list(bizId: number, signal?: AbortSignal): Promise<PlanTemplate[]> {
@@ -24,6 +24,14 @@ export const templateApi = {
     return unwrap(
       http.PATCH("/plans/templates/{template_id}", { params: { path: { template_id: templateId } }, body: input }),
     );
+  },
+
+  /**
+   * テンプレートを削除する（DELETE /plans/templates/{id}）。
+   * 論理削除: 未来の予定は無効化され、過去の予定は履歴として残る（POST /plans/templates/{id}/restore で復元できる）。
+   */
+  delete(templateId: number): Promise<PlanTemplate> {
+    return unwrap(http.DELETE("/plans/templates/{template_id}", { params: { path: { template_id: templateId } } }));
   },
 
   /** 指定日テンプレートに日付を追加する（POST /plans/templates/{id}/dates） */

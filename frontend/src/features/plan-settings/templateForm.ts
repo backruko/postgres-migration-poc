@@ -1,4 +1,5 @@
 // 予定テンプレートの作成・編集フォームの値と、API の入力（OpenAPI の型）との変換。UI から独立した純粋な処理。
+import { categoryOf, DEFAULT_CATEGORY, type TemplateCategory } from "../../domain/plan/lib/category";
 import type {
   CreatePlanTemplateInput,
   DayUnit,
@@ -16,6 +17,7 @@ import { dayjs, todayIn, type Dayjs } from "../../shared/lib/datetime";
 export interface FormValues {
   template_type: TemplateType;
   name: string;
+  category: TemplateCategory;
   start_time: Dayjs;
   duration_minutes: number;
   timezone: string;
@@ -50,6 +52,7 @@ export const RRULE_PRESETS = [
 export function initialValues(): Partial<FormValues> {
   return {
     template_type: "rrule",
+    category: DEFAULT_CATEGORY,
     start_time: dayjs("09:00", "HH:mm"),
     duration_minutes: 60,
     timezone: TIMEZONE,
@@ -70,6 +73,7 @@ export function fromTemplate(t: PlanTemplate): FormValues {
   return {
     template_type: t.template_type,
     name: t.name,
+    category: categoryOf(t.ui_metadata),
     start_time: dayjs(t.start_time.slice(0, 5), "HH:mm"),
     duration_minutes: t.duration_minutes,
     timezone: t.timezone,
@@ -90,18 +94,18 @@ export function fromTemplate(t: PlanTemplate): FormValues {
 }
 
 /**
- * フォームの表示設定を ui_metadata に。
+ * フォームの分類・表示設定を ui_metadata に（分類は常に保存する）。
  * ui_metadata は更新時に丸ごと置き換わるため、フォームで扱わないキー（text_color など）は元の値から引き継ぐ。
  */
-function toUiMetadata(v: FormValues, current: UIMetadataValue | undefined): UIMetadataInput | null {
-  const { bg_color: _bg, icon: _icon, is_bold: _bold, ...rest } = current ?? {};
-  const ui: UIMetadataInput = {
+function toUiMetadata(v: FormValues, current: UIMetadataValue | undefined): UIMetadataInput {
+  const { category: _category, bg_color: _bg, icon: _icon, is_bold: _bold, ...rest } = current ?? {};
+  return {
     ...rest,
+    category: v.category,
     ...(v.bg_color ? { bg_color: v.bg_color } : {}),
     ...(v.icon ? { icon: v.icon } : {}),
     ...(v.is_bold ? { is_bold: true } : {}),
   };
-  return Object.keys(ui).length ? ui : null;
 }
 
 /** 種類に関係なく共通の項目 */
