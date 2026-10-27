@@ -150,3 +150,8 @@ react-router-dom 6.28. Exact-pinned versions.
   Template names vs business names look shifted by one (user's test data).
 - Calendar `JP_BANK` (holidays 2026-11-03, 2026-11-23 …).
 - Instance 910 (10/20) was moved into the past and cancelled; it shows in the cancelled list as not restorable.
+
+
+## [Future Enhancements]
+> * Task Categorization: Need to differentiate between Routine (定例), Ad-hoc (不定期), and High-Attention (スペシャル) tasks.
+> * Action: Requires backend schema update (e.g., add task_type or boolean flags). Frontend will then use this to hide routine tasks by default in the calendar and highlight high-attention tasks.

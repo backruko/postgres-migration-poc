@@ -1,4 +1,4 @@
-import { PlusOutlined } from "@ant-design/icons";
+import { EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, Button, Empty, Select, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
@@ -9,7 +9,7 @@ import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
 import { describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
 import type { PlanTemplate } from "../../domain/plan/types";
 import { chipStyle } from "../calendar/lib/chipStyle";
-import { CreateTemplateModal } from "./CreateTemplateModal";
+import { TemplateFormModal } from "./TemplateFormModal";
 
 const columns: ColumnsType<PlanTemplate> = [
   { title: "ID", dataIndex: "id", width: 72, className: "mono" },
@@ -55,7 +55,7 @@ function bizOptions(bizes: BizMaster[]) {
 
 /**
  * 予定テンプレートの設定（事前設定）画面。
- * 現段階では参照のみ: 業務を選択して、その業務のテンプレート一覧を表示する。
+ * 業務を選択して、その業務のテンプレートを一覧・作成・編集する（削除は未対応）。
  * 選択した業務は URL の ?biz= に保持する（再読み込み・共有しても同じ業務を表示）。
  */
 export function PlanSettingsPage() {
@@ -70,7 +70,34 @@ export function PlanSettingsPage() {
   const unknownOption = bizId !== null && bizes.data && !selectedBiz ? [{ value: bizId, label: `業務ID ${bizId}` }] : [];
 
   const { data, loading, error, reload } = usePlanTemplates(bizId);
-  const [creating, setCreating] = useState(false);
+  // 作成・編集モーダル（template が null なら新規作成）。閉じる間の表示が切り替わらないよう、閉じても template は残す
+  const [editor, setEditor] = useState<{ open: boolean; template: PlanTemplate | null }>({ open: false, template: null });
+  const openEditor = (template: PlanTemplate | null) => setEditor({ open: true, template });
+
+  const tableColumns = useMemo<ColumnsType<PlanTemplate>>(
+    () => [
+      ...columns,
+      {
+        title: "操作",
+        key: "actions",
+        width: 88,
+        fixed: "right",
+        render: (_, t) => (
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => openEditor(t)}
+            disabled={!selectedBiz}
+            aria-label={`「${t.name}」を編集`}
+          >
+            編集
+          </Button>
+        ),
+      },
+    ],
+    [selectedBiz],
+  );
 
   const selectBiz = (id?: number) => setParams(id ? { biz: String(id) } : {});
 
@@ -127,25 +154,31 @@ export function PlanSettingsPage() {
               {selectedBiz ? `${selectedBiz.business_code} ${selectedBiz.name}` : `業務ID ${bizId}`} のテンプレート
               {data ? ` ${data.length} 件` : ""}
             </Typography.Text>
-            {/* 作成先は選択中の業務（一覧に無い業務IDの場合は作成できない） */}
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)} disabled={!selectedBiz}>
+            {/* 作成先は選択中の業務（一覧に無い業務IDの場合は作成・編集できない） */}
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(null)} disabled={!selectedBiz}>
               新規作成
             </Button>
           </div>
           <Table<PlanTemplate>
             rowKey="id"
-            columns={columns}
+            columns={tableColumns}
             dataSource={data ?? []}
             loading={loading}
             pagination={false}
             size="middle"
-            scroll={{ x: 760 }}
+            scroll={{ x: 848 }}
             locale={{ emptyText: <Empty description="この業務にはテンプレートがありません" /> }}
           />
         </>
       )}
       {selectedBiz && (
-        <CreateTemplateModal open={creating} biz={selectedBiz} onClose={() => setCreating(false)} onCreated={reload} />
+        <TemplateFormModal
+          open={editor.open}
+          biz={selectedBiz}
+          template={editor.template}
+          onClose={() => setEditor((s) => ({ ...s, open: false }))}
+          onSaved={reload}
+        />
       )}
     </div>
   );

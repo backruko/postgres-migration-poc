@@ -28,6 +28,8 @@ export type CreatePlanTemplateInput =
   | Schemas["RRuleTemplateCreate"]
   | Schemas["ExplicitDatesTemplateCreate"]
   | Schemas["ReferenceSheetTemplateCreate"];
+/** テンプレート更新の入力（部分更新。種類と業務は変更不可、種類に合わない項目は送れない） */
+export type UpdatePlanTemplateInput = Schemas["PlanTemplateUpdate"];
 
 // ---- 年間計画シート ----
 export type ReferenceSheet = Schemas["ReferenceSheetResponse"];

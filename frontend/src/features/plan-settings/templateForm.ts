@@ -1,5 +1,14 @@
-// 予定テンプレート作成フォームの値と、API の入力（OpenAPI の判別共用体）への変換。UI から独立した純粋な処理。
-import type { CreatePlanTemplateInput, DayUnit, HolidayPolicy, TemplateType } from "../../domain/plan/types";
+// 予定テンプレートの作成・編集フォームの値と、API の入力（OpenAPI の型）との変換。UI から独立した純粋な処理。
+import type {
+  CreatePlanTemplateInput,
+  DayUnit,
+  HolidayPolicy,
+  PlanTemplate,
+  TemplateType,
+  UIMetadataInput,
+  UIMetadataValue,
+  UpdatePlanTemplateInput,
+} from "../../domain/plan/types";
 import { TIMEZONE } from "../../shared/config";
 import { dayjs, todayIn, type Dayjs } from "../../shared/lib/datetime";
 
@@ -37,6 +46,7 @@ export const RRULE_PRESETS = [
   "FREQ=MONTHLY;BYMONTHDAY=-1",
 ];
 
+/** 新規作成の初期値 */
 export function initialValues(): Partial<FormValues> {
   return {
     template_type: "rrule",
@@ -54,37 +64,106 @@ export function initialValues(): Partial<FormValues> {
   };
 }
 
-/** フォームの値を、OpenAPI の判別共用体（RRuleTemplateCreate など）の形に変換する */
-export function toCreateInput(v: FormValues, bizId: number): CreatePlanTemplateInput {
-  const ui = {
+/** 既存テンプレートをフォームの値に（編集の初期値）。種類に関係しない項目は null のため undefined にする */
+export function fromTemplate(t: PlanTemplate): FormValues {
+  const ui = t.ui_metadata ?? {};
+  return {
+    template_type: t.template_type,
+    name: t.name,
+    start_time: dayjs(t.start_time.slice(0, 5), "HH:mm"),
+    duration_minutes: t.duration_minutes,
+    timezone: t.timezone,
+    holiday_policy: t.holiday_policy,
+    business_calendar_id: t.business_calendar_id ?? undefined,
+    anchor_date: t.anchor_date ? dayjs(t.anchor_date, "YYYY-MM-DD") : undefined,
+    rrule: t.rrule ?? undefined,
+    dates: t.explicit_dates.map((d) => dayjs(d.local_date, "YYYY-MM-DD")),
+    reference_sheet_id: t.reference_sheet_id ?? undefined,
+    reference_event_marker: t.reference_event_marker ?? undefined,
+    offset_days: t.offset_days ?? 0,
+    offset_day_unit: t.offset_day_unit ?? "calendar",
+    offset_minutes: t.offset_minutes ?? 0,
+    bg_color: typeof ui.bg_color === "string" ? ui.bg_color : undefined,
+    icon: typeof ui.icon === "string" ? ui.icon : undefined,
+    is_bold: ui.is_bold === true,
+  };
+}
+
+/**
+ * フォームの表示設定を ui_metadata に。
+ * ui_metadata は更新時に丸ごと置き換わるため、フォームで扱わないキー（text_color など）は元の値から引き継ぐ。
+ */
+function toUiMetadata(v: FormValues, current: UIMetadataValue | undefined): UIMetadataInput | null {
+  const { bg_color: _bg, icon: _icon, is_bold: _bold, ...rest } = current ?? {};
+  const ui: UIMetadataInput = {
+    ...rest,
     ...(v.bg_color ? { bg_color: v.bg_color } : {}),
     ...(v.icon ? { icon: v.icon } : {}),
     ...(v.is_bold ? { is_bold: true } : {}),
   };
-  const base = {
-    biz_master_id: bizId,
+  return Object.keys(ui).length ? ui : null;
+}
+
+/** 種類に関係なく共通の項目 */
+function commonFields(v: FormValues) {
+  return {
     name: v.name.trim(),
     timezone: v.timezone.trim(),
     start_time: v.start_time.format("HH:mm:00"),
     duration_minutes: v.duration_minutes,
     business_calendar_id: v.business_calendar_id ?? null,
     holiday_policy: v.holiday_policy,
-    ui_metadata: Object.keys(ui).length ? ui : null,
   };
+}
+
+const rruleFields = (v: FormValues) => ({ anchor_date: v.anchor_date!.format("YYYY-MM-DD"), rrule: v.rrule!.trim() });
+
+const sheetFields = (v: FormValues) => ({
+  reference_sheet_id: v.reference_sheet_id!,
+  reference_event_marker: v.reference_event_marker!,
+  offset_days: v.offset_days ?? 0,
+  offset_day_unit: v.offset_day_unit ?? "calendar",
+  offset_minutes: v.offset_minutes ?? 0,
+});
+
+const formatDates = (dates: Dayjs[] | undefined) => (dates ?? []).map((d) => d.format("YYYY-MM-DD"));
+
+/** フォームの値を、OpenAPI の判別共用体（RRuleTemplateCreate など）の形に変換する */
+export function toCreateInput(v: FormValues, bizId: number): CreatePlanTemplateInput {
+  const base = { biz_master_id: bizId, ...commonFields(v), ui_metadata: toUiMetadata(v, null) };
   switch (v.template_type) {
     case "rrule":
-      return { ...base, template_type: "rrule", anchor_date: v.anchor_date!.format("YYYY-MM-DD"), rrule: v.rrule!.trim() };
+      return { ...base, template_type: "rrule", ...rruleFields(v) };
     case "explicit_dates":
-      return { ...base, template_type: "explicit_dates", dates: (v.dates ?? []).map((d) => d.format("YYYY-MM-DD")) };
+      return { ...base, template_type: "explicit_dates", dates: formatDates(v.dates) };
     case "reference_sheet_based":
-      return {
-        ...base,
-        template_type: "reference_sheet_based",
-        reference_sheet_id: v.reference_sheet_id!,
-        reference_event_marker: v.reference_event_marker!,
-        offset_days: v.offset_days ?? 0,
-        offset_day_unit: v.offset_day_unit ?? "calendar",
-        offset_minutes: v.offset_minutes ?? 0,
-      };
+      return { ...base, template_type: "reference_sheet_based", ...sheetFields(v) };
   }
+}
+
+/**
+ * フォームの値を更新の入力（PATCH）に変換する。フォーム全体を送るが、種類に合わない項目は含めない（含めると 400）。
+ * 値が変わっていない項目はバックエンドで無視されるため、改訂番号は実際に生成条件が変わったときだけ上がる。
+ * 指定日は PATCH では変更できないため、diffDates で差分を取り、別の API で追加・削除する。
+ */
+export function toUpdateInput(v: FormValues, current: PlanTemplate): UpdatePlanTemplateInput {
+  const base = { ...commonFields(v), ui_metadata: toUiMetadata(v, current.ui_metadata) };
+  switch (current.template_type) {
+    case "rrule":
+      return { ...base, ...rruleFields(v) };
+    case "explicit_dates":
+      return base;
+    case "reference_sheet_based":
+      return { ...base, ...sheetFields(v) };
+  }
+}
+
+/** 指定日の差分（YYYY-MM-DD、昇順） */
+export function diffDates(v: FormValues, current: PlanTemplate): { added: string[]; removed: string[] } {
+  const before = new Set(current.explicit_dates.map((d) => d.local_date));
+  const after = new Set(formatDates(v.dates));
+  return {
+    added: [...after].filter((d) => !before.has(d)).sort(),
+    removed: [...before].filter((d) => !after.has(d)).sort(),
+  };
 }
