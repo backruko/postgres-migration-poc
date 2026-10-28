@@ -10,16 +10,19 @@ Handoff for the next working session. Read this first, then `frontend/README.md`
   `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04`.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py` → 45 passed (runs against `test_db` via `tests/conftest.py`, `create_all`, no migrations).
+- **Tests:** `pytest tests/test_plan.py` → 46 passed (runs against `test_db` via `tests/conftest.py`, `create_all`, no migrations).
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
   Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `alembic check` → no drift.
   Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes.
-- **Not verified yet:** in-browser click-through of the 年間計画シート screen (rule markers, per-date editing). The user
-  is about to test it.
+- **Not verified yet:** in-browser click-through of the 年間計画シート screen (rule markers, per-date editing, the
+  生成をやめる choice) and of the 休日カレンダー screen. The user is testing them.
 
 ### Recent commits (newest first)
 | Commit | Content |
 |---|---|
+| `10d7ec0` | 休日カレンダー screen (`/settings/holidays`): list / add (rows or pasted lines) / rename / delete, past read-only in UI |
+| `354f613` | 生成をやめる: choose 「日付を残す」 or 「今日以降の日付も取り消す」 (`cancel_future_dates`) |
+| `6920a49` | MEMORY.md update (user) |
 | `833190e` | Per-date editing UI on 年間計画シート (move / delete / revert / add, past read-only) |
 | `42746b3` | Backend: audit trail of sheet dates, past read-only, `revertable` flag, migration `5c1f7d2a9e04` |
 | `ad1dd99` | 年間計画シート screen + rule-generated markers (create / edit / stop generating) + duplicate warning |
@@ -93,6 +96,9 @@ cascades to all templates referencing the marker (`_propagate_sheet_change`).
 - **Markers:** imported (`POST /plans/sheets/import`, JSON format of `mock_data/desensitized_mock_data.json`; import cannot
   create rule markers) or **rule-generated** (`POST /plans/sheets/{id}/markers` with `rule`; `PATCH …/markers/{marker}`
   changes the rule, `rule: null` stops generating).
+- **Stopping a rule** = freeze by default: dates and dependent jobs stay, but holidays no longer move them. With
+  `cancel_future_dates: true` (only allowed with `rule: null`; the routine has ended) every date from today on is
+  cancelled in one transaction, by the same rules as a single delete (`_cancel_sheet_event`); past dates untouched.
 - **Event provenance** (never erased, including after stopping a rule): `rule_date` (rule slot), `original_date`
   (imported/rule date before a person moved or cancelled it), `is_manual` (a person changed it), `is_cancelled`
   (取消 record). UI labels: ルール / 人が変更 (元: original) / 人が追加 / 取消 / 取り込み.
@@ -118,6 +124,7 @@ cascades to all templates referencing the marker (`_propagate_sheet_change`).
 | Templates | `GET /plans/templates?biz_id=`, `POST /plans/templates`, `PATCH` / `DELETE /plans/templates/{id}`, `POST` / `DELETE …/dates` |
 | Sheets / markers | `GET /plans/sheets?client_code=`, `POST /plans/sheets/{id}/markers`, `PATCH /plans/sheets/{id}/markers/{marker}` |
 | Sheet dates | `POST …/markers/{marker}/events`, `PATCH` / `DELETE /plans/sheets/events/{id}`, `POST …/events/{id}/revert` |
+| Holidays | `GET /plans/calendars/{id}/holidays` (all years; the page filters by year), `POST …/holidays` (re-posting a date only renames it, no regeneration), `DELETE …/holidays/{date}` |
 | Lookups | `GET /clients/`, `GET /biz/` (limit 1000 requested), `GET /plans/calendars` |
 
 Optional CORS via `CORS_ORIGINS` in `.env` (dev uses the Vite proxy instead).
@@ -135,8 +142,9 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
     `domain/plan/lib/category.ts`: template category stored in `ui_metadata.category` (missing → 定例).
   - `shared/` — http client, `useApiQuery`, `datetime.ts`, `useNow`, `ui/color.ts`, `config.ts` (`TIMEZONE`).
   - `features/calendar`, `features/schedule-actions`, `features/plan-settings`.
-    Pure form logic lives in `templateForm.ts` / `markerForm.ts` (testable in node); modals are UI only.
-- **Routes / nav:** `/` calendar (`?client=&month=&holidays=`) · `/settings/templates?biz=` · `/settings/sheets?client=`.
+    Pure form logic lives in `templateForm.ts` / `markerForm.ts` / `holidayForm.ts` (testable in node); modals are UI only.
+- **Routes / nav:** `/` calendar (`?client=&month=&holidays=`) · `/settings/templates?biz=` · `/settings/sheets?client=` ·
+  `/settings/holidays?calendar=<id>&year=`.
   The layout remembers each page's last query string, so switching pages keeps selections. The calendar's
   `useUrlState` goes through react-router (`useSearchParams`), not `history.replaceState`.
 - **Calendar:** category chips (定例 hidden by default, stored in localStorage) + per-template legend toggles; sticky nav
@@ -145,14 +153,18 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
 - Gotchas already fixed — don't regress: ColorPicker `onChange` 2nd arg is `rgb(...)`, use `hexFromColorPicker`;
   dayjs custom formats need `customParseFormat`; antd Modal + `forceRender` without `destroyOnClose` → reset the form in
   a `useEffect` on `open` and keep the target in state while closing; `ui_metadata` PATCH replaces the whole object, so
-  forms carry over unknown keys (`text_color` …).
+  forms carry over unknown keys (`text_color` …). openapi-typescript marks every field with a default as required, so
+  request bodies send those fields explicitly (e.g. `cancel_future_dates: false`, `offset_days`).
 
 ## 5. Plan endpoint audit (2026-10-28) — what is still unused, and the agreed MVP
-Done since the audit: rule-marker create/edit, per-date editing. Remaining MVP candidates (recommended, not started):
-1. **Holiday maintenance screen:** `GET` / `POST /plans/calendars/{id}/holidays`, `DELETE …/holidays/{date}`.
-2. **Sheet import UI** (`POST /plans/sheets/import`) + read-only sheet view. Open question for the user: clients may send
+Done since the audit: rule-marker create/edit, per-date editing, stop-rule choice, holiday maintenance screen.
+Remaining MVP candidates (recommended, not started):
+1. **Sheet import UI** (`POST /plans/sheets/import`) + read-only sheet view. Open question for the user: clients may send
    Excel, not this JSON format.
-3. A way to create a sheet for a client with none (`POST /plans/sheets`) — without it, rule markers have no sheet.
+2. A way to create a sheet for a client with none (`POST /plans/sheets`) — without it, rule markers have no sheet.
+
+Open decision offered to the user: enforce "past holidays are read-only" in the backend too (today UI-only; harmless
+for history because past occurrences and past sheet dates no longer change, only past calendar labels would).
 
 Later / not planned: template audit history (`GET /plans/templates/{id}/instances`, the only way to see a deleted
 template's voided occurrences), calendar create / weekend change, flat occurrence lists, cache rebuild (backend-only),
