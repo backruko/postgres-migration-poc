@@ -1,24 +1,26 @@
 # MEMORY.md — Session handoff
 
 Handoff for the next working session. Read this first, then the design doc (§2), `frontend/README.md` (frontend
-details), `src/domain_plan/` and `src/coordination/` (backend). Last updated: 2026-10-28.
+details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backend). Last updated: 2026-10-28 (evening).
 
 ## 1. Current status
 
-- **Branch:** `feature/plan-holiday-calendar` (not merged to `main`). **Pushed to `origin`** (the user pushes; I never do).
+- **Branches:** `main` = Plan MVP + Phases 1–3 (merged 2026-10-28, merge `23767b8`, pushed by the user).
+  **Current work: `feature/ope-orders`** (from `main`), Phase 4. The user pushes; I never do.
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
-  next-occurrence guarantee) and 3 (staff: backend + screen) are done.** **Next step: Phase 4, ope orders** — big; it
-  has open questions in the doc (which roles release / pin / force-start / resolve, release lead time …). Re-read the
-  doc and present options before building.
-- **DB:** latest Alembic head is `568c3287c359` (staff users and roles; the user upgraded their dev DB 2026-10-28 and
-  registered staff id 1, login `system`, system_admin). Migrations: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
-  `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`.
-  `plan_check` is migrated too and has staff 1 `check-admin` (system_admin), 2 `check-op` (suspended) + harness users.
+  next-occurrence guarantee) and 3 (staff: backend + screen) are done. Phase 4 (ope orders): step 4.1 (release
+  settings on businesses) done and committed. Next step: 4.2, the ope tables** (plan in §2 "Phase 4 step plan"). All
+  Phase 4 design decisions are made (§2); no open question blocks 4.2.
+- **DB:** latest Alembic head is `f9bbe9648f15` (biz release settings). Migrations: `ceee1634d6a7` (squashed init) →
+  `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) →
+  `f9bbe9648f15` (biz release settings). The user's dev DB had `568c3287c359` + staff id 1 (login `system`,
+  system_admin); `f9bbe9648f15` was handed over for them to apply.
+  `plan_check` is at `f9bbe9648f15` and has staff 1 `check-admin` (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py` → 61 passed (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py` → 64 passed (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
-  then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"` to stay out of that space.
+  then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
   Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `alembic check` → no drift.
@@ -33,6 +35,11 @@ details), `src/domain_plan/` and `src/coordination/` (backend). Last updated: 20
 ### Recent commits (newest first)
 | Commit | Content |
 |---|---|
+| `91cde48` | `.gitignore`: `frontend/.vite/` (Vite dep cache; two committed cache files untracked) |
+| `d65af44` | Phase 4.1: biz release settings, migration `f9bbe9648f15`, `tests/test_biz.py` |
+| `0d4ff4c` | MEMORY.md: Phase 4 decisions (first commit on `feature/ope-orders`) |
+| `23767b8` | `main`: merge of `feature/plan-holiday-calendar` (Phases 1–3) |
+| `b13fe73` / `7d01bff` / `8ec4b8d` | MEMORY.md: release 03:00, client-limited role, roles decisions, Phase 3 done |
 | `702ebbb` | Phase 3 frontend: 職員 screen `/settings/staff`, nav picker 「操作する職員」 (X-Staff-Id middleware) |
 | `bfe3deb` | Phase 3 backend: staff domain, migration `568c3287c359`, `require_roles`, `/staff` API, `scripts/create_staff.py` |
 | `fcff659` | Phase 2: `extend_all_templates` + `scripts/extend_plans.py`, next-occurrence guarantee, `next_occurrence_at`, 「次の予定」 column |
@@ -166,6 +173,28 @@ Plan never imports ope.
    go-live on (no past backfill); interim finish = operator marks in_progress → finished (Phase 5 replaces it for
    orders with steps); release config on biz_master = `release_mode`, `release_time` (default 03:00 JST),
    `release_days_before` (default 0).
+
+#### Phase 4 step plan (approved by the user 2026-10-28; one step at a time, each reviewed + committed)
+| # | Step | Migration | Status |
+|---|---|---|---|
+| 4.1 | Release settings on `biz_master` + biz API | `f9bbe9648f15` | **done** (`d65af44`) |
+| 4.2 | ope tables: `ope_order`, append-only `ope_order_event` (immutability trigger like plan's `plan_reject_mutation`). Models + migration + tests, **no behavior** | yes | **next** |
+| 4.3 | Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
+| 4.4 | Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
+| 4.5 | Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry | — | |
+| 4.6 | SOP version resolution, pin / unpin (releaser/admin), freeze at release | maybe | |
+| 4.7 | Frontend: order status on the dashboard + actions | — | |
+
+**4.2 detail to get right — order slot identity must equal plan's slot identity** (`_slot()` in
+`domain_plan/services.py`): sheet-based instances use `("sheet_event", source_sheet_event_id)` (the slot survives a
+sheet date move), all others `("date", occurrence_date)`. So `ope_order` needs a unique key that follows that rule
+(e.g. `template_id` + nullable `source_sheet_event_id` + `occurrence_date` with two partial unique indexes), not just
+`(template_id, occurrence_date)` as the doc's sketch says — update the doc's data model row too. Also store for each
+order: current plan instance id, biz_master_id, client_code (needed later for the client-limited role), scheduled
+start/end (copy of the current instance), status (cache of the latest event), pinned / frozen SOP version ids,
+released_at, conflict flag + reason. Events: order_id, from, to, actor_staff_id (null = system), source human|system,
+reason, at. Statuses: pending, ready, in_progress, on_hold, finished, canceled (on_hold resume returns to the
+previous status → store it).
 5. Steps: conditions, maker-checker, `is_blocking`.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
@@ -181,6 +210,22 @@ release / pin / force-start / resolve conflicts; automatic release default 03:00
 A future role that sees only its own client code(s). Needs a per-user client scope (e.g. `staff_client(staff_user_id,
 client_code)`) and every read model / API (calendar, dashboard, orders …) filtering by it — so new endpoints should
 take the acting staff into account and keep client filtering in one place. Details are an open question in the doc.
+
+## 2b. Working from a cloud (web) session
+
+The user sometimes continues in a Claude Code web session (cloud sandbox, Linux) instead of their Windows machine.
+- It clones from GitHub: only **pushed** commits exist there. Push nothing yourself; when done, commit on the branch
+  and tell the user to push / pull.
+- Not available there: the user's dev DB, their uvicorn on 8000, `plan_check`, Task Scheduler, the Windows paths and
+  PowerShell. `.env` / `.env.test` are git-ignored and absent.
+- Tests need PostgreSQL: if the sandbox allows it, install and start a local PostgreSQL, create `test_db` and a
+  throwaway DB (e.g. `plan_check`), and write `.env.test` (`ENVIRONMENT=test`,
+  `DATABASE_URL=postgresql://postgres:<pw>@localhost:5432/test_db`) and `.env` (`DATABASE_URL=…/plan_check`).
+  Never commit them. If PostgreSQL can't be run, say so plainly and list what was not verified.
+- Python: create a venv and `pip install -r requirements.txt` — commands are `.venv/bin/python` there
+  instead of `.venv/Scripts/python.exe` (pyright: `--pythonpath .venv/bin/python`). Frontend: `cd frontend && npm ci`.
+- Line endings: the repository stores LF; the Linux checkout is LF everywhere — keep LF (Windows converts on checkout).
+- Migrations for the user's dev DB: still only hand them over; the user runs `alembic upgrade head` at home/office.
 
 ## 3. Working agreement with the user
 
@@ -315,6 +360,13 @@ failure). `PlanTemplateResponse.next_occurrence_at` (computed per response by `_
 `biz_master` (client_code, business_seq → business_code, name, …) → `sop_version` (version_number, version_tag,
 status, `effective_at`, `expired_at`; clone / approve / cancel endpoints) → `sop_step_template` (step_num, title,
 content). Definitions only — no execution, no conditions, no `is_blocking` yet (§2 adds them).
+**Release settings (4.1):** `release_mode` (`ReleaseMode`: MANUAL_APPROVAL default | AUTOMATIC; stored as member
+names), `release_time` (Time, default 03:00 JST), `release_days_before` (0–30, default 0, CHECK
+`chk_biz_release_days_before`). New businesses get the defaults (the shared `CRUDBase.create` runs
+`jsonable_encoder`, which turns enums into value strings the Enum column rejects — so create doesn't take them);
+change them with `PATCH /biz/{id}` (`model_dump`, explicit nulls refused for these three only).
+Migration gotchas seen: `op.add_column` with an Enum does not create the PG type (create it first, drop it on
+downgrade); autogenerate never emits CHECK constraints.
 
 ### Key endpoints used by the frontend
 | Purpose | Endpoint |
