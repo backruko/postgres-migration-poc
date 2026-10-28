@@ -122,7 +122,7 @@ export function MarkerFormModal({ open, sheet, marker, onClose, onSaved }: Props
           showIcon
           className="modal-alert"
           message="人が編集した未来の日付は、ルールを変えても残ります"
-          description={`${keptLabel}。新しいルールの日付と同じ時期に重なると、このマーカーを参照するジョブが二重に作られることがあります。保存後に一覧で確認し、不要な日付は取り除いてください（過去の日付は実績として残ります）。`}
+          description={`${keptLabel}。新しいルールの日付と同じ時期に重なると、このマーカーを参照するジョブが二重に作られることがあります。保存後に一覧の行を開いて確認し、不要な日付は削除してください（過去の日付は実績として残ります）。`}
         />
       )}
 

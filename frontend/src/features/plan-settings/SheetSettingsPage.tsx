@@ -12,6 +12,7 @@ import type { ReferenceSheet, ReferenceSheetMarker } from "../../domain/plan/typ
 import { ApiError } from "../../shared/api/http";
 import { TIMEZONE } from "../../shared/config";
 import { dayjs, todayIn } from "../../shared/lib/datetime";
+import { MarkerDates } from "./MarkerDates";
 import { MarkerFormModal } from "./MarkerFormModal";
 import { activeDates, futureManualDates, manualCounts, upcomingDates } from "./markerForm";
 
@@ -19,8 +20,9 @@ const shortDate = (d: string) => dayjs(d, "YYYY-MM-DD").format("M/D(dd)");
 
 /**
  * 年間計画シートの設定（事前設定）画面。
- * 顧客を選択して、その顧客のシートとマーカー（基準日）を一覧する。ルールで日付を作るマーカー（例: 振込日 = 毎月27日）を追加・編集できる。
- * シートの取り込み・日付ごとの編集は未対応。選択した顧客は URL の ?client= に保持する。
+ * 顧客を選択して、その顧客のシートとマーカー（基準日）を一覧する。ルールで日付を作るマーカー（例: 振込日 = 毎月27日）を追加・編集でき、
+ * 行を開くと日付ごとに変更・削除・ルールに戻す・追加ができる（今日より前の日付は実績のため読み取り専用）。
+ * シートの取り込みは未対応。選択した顧客は URL の ?client= に保持する。
  */
 export function SheetSettingsPage() {
   const { message, modal } = App.useApp();
@@ -41,10 +43,14 @@ export function SheetSettingsPage() {
   });
   const openEditor = (sheet: ReferenceSheet, marker: ReferenceSheetMarker | null) => setEditor({ open: true, sheet, marker });
 
+  // 日付の一覧を開いているマーカー（マーカーの id はシートをまたいで一意）
+  const [expanded, setExpanded] = useState<number[]>([]);
+  const expand = (markerId: number) => setExpanded((ids) => (ids.includes(markerId) ? ids : [...ids, markerId]));
+
   const confirmStop = (sheet: ReferenceSheet, m: ReferenceSheetMarker) =>
     modal.confirm({
       title: `「${m.marker}」のルールでの生成をやめますか？`,
-      content: `今ある日付 ${activeDates(m).length} 件は通常の日付として残り、以後はルールで作られなくなります（予定は変わりません）。`,
+      content: `今ある日付 ${activeDates(m).length} 件はそのまま残り、以後はルールで作られなくなります（予定は変わりません）。日付の出どころ（ルール・人の変更・取消）の記録も残ります。`,
       okText: "生成をやめる",
       okButtonProps: { danger: true },
       cancelText: "キャンセル",
@@ -102,7 +108,15 @@ export function SheetSettingsPage() {
               {cancelled > 0 && `取消 ${cancelled}`}
             </span>
             {future.length > 0 && (
-              <Tag color="orange" title="ルールを変えても残る、人が編集した未来の日付">
+              <Tag
+                color="orange"
+                className="clickable-tag"
+                role="button"
+                tabIndex={0}
+                title="ルールを変えても残る、人が編集した未来の日付（クリックで日付の一覧を開く）"
+                onClick={() => expand(m.id)}
+                onKeyDown={(ev) => (ev.key === "Enter" || ev.key === " ") && (ev.preventDefault(), expand(m.id))}
+              >
                 今後: {future.map(shortDate).join("、")}
               </Tag>
             )}
@@ -198,6 +212,11 @@ export function SheetSettingsPage() {
               pagination={false}
               size="middle"
               scroll={{ x: 980 }}
+              expandable={{
+                expandedRowKeys: expanded,
+                onExpandedRowsChange: (keys) => setExpanded(keys as number[]),
+                expandedRowRender: (m) => <MarkerDates sheet={sheet} marker={m} today={today} onChanged={sheets.reload} />,
+              }}
             />
           </section>
         ))
