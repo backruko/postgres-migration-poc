@@ -5976,6 +5976,19 @@
             "type": "string",
             "title": "Business Code"
           },
+          "release_mode": {
+            "$ref": "#/components/schemas/ReleaseMode"
+          },
+          "release_time": {
+            "type": "string",
+            "format": "time",
+            "title": "Release Time",
+            "description": "automatic release time of day (JST)"
+          },
+          "release_days_before": {
+            "type": "integer",
+            "title": "Release Days Before"
+          },
           "is_deleted": {
             "type": "boolean",
             "title": "Is Deleted"
@@ -5998,6 +6011,9 @@
           "id",
           "business_seq",
           "business_code",
+          "release_mode",
+          "release_time",
+          "release_days_before",
           "is_deleted",
           "created_at",
           "updated_at"
@@ -6040,6 +6056,44 @@
               }
             ],
             "title": "Description"
+          },
+          "release_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReleaseMode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MANUAL_APPROVAL or AUTOMATIC"
+          },
+          "release_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Time",
+            "description": "automatic release time of day (JST)"
+          },
+          "release_days_before": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 30.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Days Before",
+            "description": "automatic release N days before the scheduled day"
           }
         },
         "type": "object",
@@ -8792,6 +8846,15 @@
           "reference_event_marker"
         ],
         "title": "ReferenceSheetTemplateCreate"
+      },
+      "ReleaseMode": {
+        "type": "string",
+        "enum": [
+          "manual_approval",
+          "automatic"
+        ],
+        "title": "ReleaseMode",
+        "description": "オーダーを pending から ready（実行可能）にする方法"
       },
       "RoleCode": {
         "type": "string",

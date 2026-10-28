@@ -998,6 +998,15 @@ export interface components {
             business_seq: number;
             /** Business Code */
             business_code: string;
+            release_mode: components["schemas"]["ReleaseMode"];
+            /**
+             * Release Time
+             * Format: time
+             * @description automatic release time of day (JST)
+             */
+            release_time: string;
+            /** Release Days Before */
+            release_days_before: number;
             /** Is Deleted */
             is_deleted: boolean;
             /**
@@ -1019,6 +1028,18 @@ export interface components {
             manager_email?: string | null;
             /** Description */
             description?: string | null;
+            /** @description MANUAL_APPROVAL or AUTOMATIC */
+            release_mode?: components["schemas"]["ReleaseMode"] | null;
+            /**
+             * Release Time
+             * @description automatic release time of day (JST)
+             */
+            release_time?: string | null;
+            /**
+             * Release Days Before
+             * @description automatic release N days before the scheduled day
+             */
+            release_days_before?: number | null;
         };
         /** BusinessCalendarCreate */
         BusinessCalendarCreate: {
@@ -2251,6 +2272,12 @@ export interface components {
              */
             offset_minutes: number;
         };
+        /**
+         * ReleaseMode
+         * @description オーダーを pending から ready（実行可能）にする方法
+         * @enum {string}
+         */
+        ReleaseMode: "manual_approval" | "automatic";
         /**
          * RoleCode
          * @description ロールのコード（role テーブルの code と同じ。権限の判定はこのコードで行う）
