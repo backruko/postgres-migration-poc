@@ -97,7 +97,8 @@ Dependency direction: ope → plan (reads slots), ope → biz (pins SOP version)
 - **Who may do what (decided 2026-10-28):** **releaser and admin** release, pin a version, force-start and resolve
   conflicts → `@require_roles(["releaser", "admin"])`.
 - **Release** (pending → ready), per business `release_mode`: `MANUAL_APPROVAL` (releaser or admin) or `AUTOMATIC`
-  (at `release_lead`, proposed default 00:00 JST on the scheduled day). Release freezes SOP version + steps.
+  (at `release_lead`; **default 03:00 JST on the scheduled day**, decided 2026-10-28: after the nightly batch
+  (夜間バッチ), which often runs until about 02:30). Release freezes SOP version + steps.
 - **Start** (ready → in_progress): operator, **on or after the scheduled day (JST) only** (decided 2026-10-28);
   earlier needs a **releaser's approval** (an order event). Hard dependencies must be met, or a releaser / admin
   force-starts with reason.
@@ -164,10 +165,16 @@ Mechanism: reconcile returns its change set per slot; the coordination layer app
 7. Client events with automatic completion (signals).
 
 ### Open questions (in the doc)
-Client event scope (per business or per client) · automatic release lead time · reset later steps on rejection
-(proposed no) · "latest before due" matching · cross-client dependencies (proposed no) · signal transport and matching
-key. Decided 2026-10-28 (ticked in the doc, rev 23): early start only with a releaser's approval; releaser + admin
-release / pin / force-start / resolve conflicts.
+Client event scope (per business or per client) · reset later steps on rejection (proposed no) · "latest before due"
+matching · cross-client dependencies (proposed no) · signal transport and matching key · client-limited role details
+(name, one or several client codes per user, read-only or also its own client events).
+Decided 2026-10-28 (ticked in the doc, rev 26): early start only with a releaser's approval; releaser + admin
+release / pin / force-start / resolve conflicts; automatic release default 03:00 JST on the scheduled day.
+
+### Planned: client-limited role (decided direction 2026-10-28, not built)
+A future role that sees only its own client code(s). Needs a per-user client scope (e.g. `staff_client(staff_user_id,
+client_code)`) and every read model / API (calendar, dashboard, orders …) filtering by it — so new endpoints should
+take the acting staff into account and keep client filtering in one place. Details are an open question in the doc.
 
 ## 3. Working agreement with the user
 
