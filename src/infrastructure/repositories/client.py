@@ -15,5 +15,11 @@ class CRUDClient(CRUDBase[ClientMaster, ClientCreate, ClientUpdate]):
         """
         return db.query(self.model).filter(self.model.code == code).first()
 
+    def get_by_codes(self, db: Session, *, codes: list[str]) -> list[ClientMaster]:
+        """
+        複数のclient_codeでクライアントをまとめて取得する
+        """
+        return db.query(self.model).filter(self.model.code.in_(codes)).all()
+
 # 4. 今作ったクラスをインスタンス化する（ これをRouterで使います）
 client_repo = CRUDClient(ClientMaster)

@@ -1403,6 +1403,11 @@ def _materialize_templates(db: Session, templates: list[PlanTemplate], end: date
         _commit(db, "Occurrences could not be generated due to a conflicting record.")
 
 
+def materialize_all_templates(db: Session, end: datetime) -> None:
+    """全顧客の有効なテンプレートについて、end までの未生成区間を生成します（日次ダッシュボードなど顧客横断の表示用）。"""
+    _materialize_templates(db, plan_template_repo.get_all(db), end)
+
+
 def _get_client_code(db: Session, client_code: str) -> str:
     code = client_code.strip().upper()
     if not client_repo.get_by_code(db, code=code):
