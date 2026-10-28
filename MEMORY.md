@@ -218,10 +218,14 @@ The user sometimes continues in a Claude Code web session (cloud sandbox, Linux)
   and tell the user to push / pull.
 - Not available there: the user's dev DB, their uvicorn on 8000, `plan_check`, Task Scheduler, the Windows paths and
   PowerShell. `.env` / `.env.test` are git-ignored and absent.
-- Tests need PostgreSQL: if the sandbox allows it, install and start a local PostgreSQL, create `test_db` and a
-  throwaway DB (e.g. `plan_check`), and write `.env.test` (`ENVIRONMENT=test`,
-  `DATABASE_URL=postgresql://postgres:<pw>@localhost:5432/test_db`) and `.env` (`DATABASE_URL=…/plan_check`).
-  Never commit them. If PostgreSQL can't be run, say so plainly and list what was not verified.
+- **PostgreSQL runs in Docker (the user's decision, 2026-10-28)** — away from the office (web session or home PC),
+  never a native install:
+  `docker run -d --name pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16`, then create `test_db` and a
+  throwaway DB `plan_check` (`docker exec pg createdb -U postgres test_db`, same for `plan_check`), and write
+  `.env.test` (`ENVIRONMENT=test`, `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_db`) and `.env`
+  (`DATABASE_URL=postgresql://postgres:postgres@localhost:5432/plan_check`), then `alembic upgrade head` on
+  `plan_check`. Never commit them. If Docker isn't available, say so before writing code and list what can't be
+  verified — don't silently switch to another way of running PostgreSQL.
 - Python: create a venv and `pip install -r requirements.txt` — commands are `.venv/bin/python` there
   instead of `.venv/Scripts/python.exe` (pyright: `--pythonpath .venv/bin/python`). Frontend: `cd frontend && npm ci`.
 - Line endings: the repository stores LF; the Linux checkout is LF everywhere — keep LF (Windows converts on checkout).
