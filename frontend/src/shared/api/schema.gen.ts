@@ -783,6 +783,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ops/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Daily Dashboard Endpoint
+         * @description 指定日に予定されている全顧客の予定を、顧客 → 業務の順にまとめて返します。
+         *     その日の年間計画シートの日付と、各営業日カレンダーでの休日かどうかも返します。
+         *     過去の日付では、無効化・取消された予定も理由付きで返します。
+         */
+        get: operations["get_daily_dashboard_endpoint_ops_daily_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -1192,6 +1214,216 @@ export interface components {
              * @description client name max to 100
              */
             name?: string | null;
+        };
+        /** DailyBusiness */
+        DailyBusiness: {
+            /** Biz Master Id */
+            biz_master_id: number;
+            /** Biz Code */
+            biz_code: string;
+            /** Biz Name */
+            biz_name: string;
+            /**
+             * Occurrences
+             * @description live occurrences starting this day, by start time
+             */
+            occurrences: components["schemas"]["DailyOccurrence"][];
+            /**
+             * Voided
+             * @description occurrences voided or cancelled for this day, with reasons
+             */
+            voided: components["schemas"]["DailyVoidedItem"][];
+        };
+        /**
+         * DailyCalendarStatus
+         * @description その日が各営業日カレンダーで営業日かどうか
+         */
+        DailyCalendarStatus: {
+            /** Calendar Id */
+            calendar_id: number;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Is Business Day */
+            is_business_day: boolean;
+            /**
+             * Holiday Name
+             * @description holiday name when the day is a holiday in this calendar
+             */
+            holiday_name?: string | null;
+        };
+        /** DailyClient */
+        DailyClient: {
+            /** Client Code */
+            client_code: string;
+            /** Client Name */
+            client_name: string;
+            /**
+             * Milestones
+             * @description sheet dates of this client on this day
+             */
+            milestones: components["schemas"]["DailyMilestone"][];
+            /**
+             * Businesses
+             * @description businesses with something on this day, by business code
+             */
+            businesses: components["schemas"]["DailyBusiness"][];
+        };
+        /** DailyDashboardResponse */
+        DailyDashboardResponse: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Timezone */
+            timezone: string;
+            /**
+             * Start
+             * Format: date-time
+             * @description start of the day in the given timezone
+             */
+            start: string;
+            /**
+             * End
+             * Format: date-time
+             * @description start of the next day in the given timezone
+             */
+            end: string;
+            /**
+             * Total
+             * @description number of live occurrences on this day across all clients
+             */
+            total: number;
+            /**
+             * Calendars
+             * @description every business calendar, with the day's holiday status
+             */
+            calendars: components["schemas"]["DailyCalendarStatus"][];
+            /**
+             * Clients
+             * @description clients with something on this day, by client code
+             */
+            clients: components["schemas"]["DailyClient"][];
+        };
+        /**
+         * DailyMilestone
+         * @description 年間計画シート上のその日の日付（振込日・本締 など）
+         */
+        DailyMilestone: {
+            /** Event Id */
+            event_id: number;
+            /** Sheet Id */
+            sheet_id: number;
+            /** Sheet Name */
+            sheet_name: string;
+            /** Marker */
+            marker: string;
+            /** Marker Description */
+            marker_description: string | null;
+            /**
+             * Is Generated
+             * @description the marker is rule-generated (otherwise imported)
+             */
+            is_generated: boolean;
+            /**
+             * Rule Date
+             * @description the rule date this date came from
+             */
+            rule_date?: string | null;
+            /**
+             * Original Date
+             * @description the imported / rule date before a person moved or cancelled it
+             */
+            original_date?: string | null;
+            /**
+             * Is Manual
+             * @description edited, added or cancelled by a person
+             */
+            is_manual: boolean;
+            /**
+             * Is Cancelled
+             * @description cancelled by a person (kept as a record)
+             */
+            is_cancelled: boolean;
+        };
+        /**
+         * DailyOccurrence
+         * @description その日に開始する有効な予定
+         */
+        DailyOccurrence: {
+            /** Instance Id */
+            instance_id: number;
+            /** Template Id */
+            template_id: number;
+            /** Title */
+            title: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /**
+             * Occurrence Date
+             * Format: date
+             * @description slot date by the rule (differs from the start date when a holiday moved it)
+             */
+            occurrence_date: string;
+            origin: components["schemas"]["InstanceOrigin"];
+            /** Is Override */
+            is_override: boolean;
+            /**
+             * Source Sheet Event Id
+             * @description sheet date this occurrence was computed from
+             */
+            source_sheet_event_id?: number | null;
+            /**
+             * Ui Metadata
+             * @description effective styling (template merged with instance)
+             */
+            ui_metadata: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * DailyVoidedItem
+         * @description その日に予定されていたが、無効化・取消された予定（理由付き）
+         */
+        DailyVoidedItem: {
+            /** Instance Id */
+            instance_id: number;
+            /** Template Id */
+            template_id: number;
+            /** Title */
+            title: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            origin: components["schemas"]["InstanceOrigin"];
+            void_reason: components["schemas"]["VoidReason"];
+            /**
+             * Void Note
+             * @description reason a person gave when changing / cancelling it
+             */
+            void_note?: string | null;
+            /**
+             * Voided At
+             * Format: date-time
+             */
+            voided_at: string;
         };
         /**
          * DayUnit
@@ -5582,6 +5814,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CancelledInstanceResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_daily_dashboard_endpoint_ops_daily_get: {
+        parameters: {
+            query?: {
+                /** @description 表示する日 (例: 2026-11-02)。省略時は timezone での今日 */
+                date?: string | null;
+                /** @description 日付の振り分けに使うタイムゾーン */
+                timezone?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DailyDashboardResponse"];
                 };
             };
             /** @description Bad Request(リクエスト不正) */

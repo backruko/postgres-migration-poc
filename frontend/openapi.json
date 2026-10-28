@@ -4773,6 +4773,111 @@
         }
       }
     },
+    "/ops/daily": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Get Daily Dashboard Endpoint",
+        "description": "指定日に予定されている全顧客の予定を、顧客 → 業務の順にまとめて返します。\nその日の年間計画シートの日付と、各営業日カレンダーでの休日かどうかも返します。\n過去の日付では、無効化・取消された予定も理由付きで返します。",
+        "operationId": "get_daily_dashboard_endpoint_ops_daily_get",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "表示する日 (例: 2026-11-02)。省略時は timezone での今日",
+              "title": "Date"
+            },
+            "description": "表示する日 (例: 2026-11-02)。省略時は timezone での今日"
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "日付の振り分けに使うタイムゾーン",
+              "default": "Asia/Tokyo",
+              "title": "Timezone"
+            },
+            "description": "日付の振り分けに使うタイムゾーン"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyDashboardResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Read Root",
@@ -5620,6 +5725,406 @@
         },
         "type": "object",
         "title": "ClientUpdate"
+      },
+      "DailyBusiness": {
+        "properties": {
+          "biz_master_id": {
+            "type": "integer",
+            "title": "Biz Master Id"
+          },
+          "biz_code": {
+            "type": "string",
+            "title": "Biz Code"
+          },
+          "biz_name": {
+            "type": "string",
+            "title": "Biz Name"
+          },
+          "occurrences": {
+            "items": {
+              "$ref": "#/components/schemas/DailyOccurrence"
+            },
+            "type": "array",
+            "title": "Occurrences",
+            "description": "live occurrences starting this day, by start time"
+          },
+          "voided": {
+            "items": {
+              "$ref": "#/components/schemas/DailyVoidedItem"
+            },
+            "type": "array",
+            "title": "Voided",
+            "description": "occurrences voided or cancelled for this day, with reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "biz_master_id",
+          "biz_code",
+          "biz_name",
+          "occurrences",
+          "voided"
+        ],
+        "title": "DailyBusiness"
+      },
+      "DailyCalendarStatus": {
+        "properties": {
+          "calendar_id": {
+            "type": "integer",
+            "title": "Calendar Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "is_business_day": {
+            "type": "boolean",
+            "title": "Is Business Day"
+          },
+          "holiday_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holiday Name",
+            "description": "holiday name when the day is a holiday in this calendar"
+          }
+        },
+        "type": "object",
+        "required": [
+          "calendar_id",
+          "code",
+          "name",
+          "is_business_day"
+        ],
+        "title": "DailyCalendarStatus",
+        "description": "その日が各営業日カレンダーで営業日かどうか"
+      },
+      "DailyClient": {
+        "properties": {
+          "client_code": {
+            "type": "string",
+            "title": "Client Code"
+          },
+          "client_name": {
+            "type": "string",
+            "title": "Client Name"
+          },
+          "milestones": {
+            "items": {
+              "$ref": "#/components/schemas/DailyMilestone"
+            },
+            "type": "array",
+            "title": "Milestones",
+            "description": "sheet dates of this client on this day"
+          },
+          "businesses": {
+            "items": {
+              "$ref": "#/components/schemas/DailyBusiness"
+            },
+            "type": "array",
+            "title": "Businesses",
+            "description": "businesses with something on this day, by business code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_code",
+          "client_name",
+          "milestones",
+          "businesses"
+        ],
+        "title": "DailyClient"
+      },
+      "DailyDashboardResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start",
+            "description": "start of the day in the given timezone"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End",
+            "description": "start of the next day in the given timezone"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "number of live occurrences on this day across all clients"
+          },
+          "calendars": {
+            "items": {
+              "$ref": "#/components/schemas/DailyCalendarStatus"
+            },
+            "type": "array",
+            "title": "Calendars",
+            "description": "every business calendar, with the day's holiday status"
+          },
+          "clients": {
+            "items": {
+              "$ref": "#/components/schemas/DailyClient"
+            },
+            "type": "array",
+            "title": "Clients",
+            "description": "clients with something on this day, by client code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "timezone",
+          "start",
+          "end",
+          "total",
+          "calendars",
+          "clients"
+        ],
+        "title": "DailyDashboardResponse"
+      },
+      "DailyMilestone": {
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id"
+          },
+          "sheet_id": {
+            "type": "integer",
+            "title": "Sheet Id"
+          },
+          "sheet_name": {
+            "type": "string",
+            "title": "Sheet Name"
+          },
+          "marker": {
+            "type": "string",
+            "title": "Marker"
+          },
+          "marker_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marker Description"
+          },
+          "is_generated": {
+            "type": "boolean",
+            "title": "Is Generated",
+            "description": "the marker is rule-generated (otherwise imported)"
+          },
+          "rule_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Date",
+            "description": "the rule date this date came from"
+          },
+          "original_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Date",
+            "description": "the imported / rule date before a person moved or cancelled it"
+          },
+          "is_manual": {
+            "type": "boolean",
+            "title": "Is Manual",
+            "description": "edited, added or cancelled by a person"
+          },
+          "is_cancelled": {
+            "type": "boolean",
+            "title": "Is Cancelled",
+            "description": "cancelled by a person (kept as a record)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "sheet_id",
+          "sheet_name",
+          "marker",
+          "marker_description",
+          "is_generated",
+          "is_manual",
+          "is_cancelled"
+        ],
+        "title": "DailyMilestone",
+        "description": "年間計画シート上のその日の日付（振込日・本締 など）"
+      },
+      "DailyOccurrence": {
+        "properties": {
+          "instance_id": {
+            "type": "integer",
+            "title": "Instance Id"
+          },
+          "template_id": {
+            "type": "integer",
+            "title": "Template Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "occurrence_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Occurrence Date",
+            "description": "slot date by the rule (differs from the start date when a holiday moved it)"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/InstanceOrigin"
+          },
+          "is_override": {
+            "type": "boolean",
+            "title": "Is Override"
+          },
+          "source_sheet_event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Sheet Event Id",
+            "description": "sheet date this occurrence was computed from"
+          },
+          "ui_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Metadata",
+            "description": "effective styling (template merged with instance)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instance_id",
+          "template_id",
+          "title",
+          "starts_at",
+          "ends_at",
+          "occurrence_date",
+          "origin",
+          "is_override",
+          "ui_metadata"
+        ],
+        "title": "DailyOccurrence",
+        "description": "その日に開始する有効な予定"
+      },
+      "DailyVoidedItem": {
+        "properties": {
+          "instance_id": {
+            "type": "integer",
+            "title": "Instance Id"
+          },
+          "template_id": {
+            "type": "integer",
+            "title": "Template Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/InstanceOrigin"
+          },
+          "void_reason": {
+            "$ref": "#/components/schemas/VoidReason"
+          },
+          "void_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Void Note",
+            "description": "reason a person gave when changing / cancelling it"
+          },
+          "voided_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Voided At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instance_id",
+          "template_id",
+          "title",
+          "starts_at",
+          "ends_at",
+          "origin",
+          "void_reason",
+          "voided_at"
+        ],
+        "title": "DailyVoidedItem",
+        "description": "その日に予定されていたが、無効化・取消された予定（理由付き）"
       },
       "DayUnit": {
         "type": "string",
