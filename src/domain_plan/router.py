@@ -80,11 +80,13 @@ def add_holidays_endpoint(calendar_id: int, holidays_in: HolidaysAdd, db: Sessio
     """
     休日を一括登録します（登録済みの日付は名前のみ更新）。
     このカレンダーを使う全テンプレートの未来の予定が、休日ポリシーに従って再計算されます。
+    今日より前（日本時間）の日付は追加も名前の変更もできません（400）。
     """
     return add_holidays(db=db, calendar_id=calendar_id, holidays_in=holidays_in)
 
 @router.delete("/calendars/{calendar_id}/holidays/{holiday_date}", response_model=CalendarChangeResult, responses={**COMMON_ERRORS})
 def delete_holiday_endpoint(calendar_id: int, holiday_date: date, db: Session = Depends(get_db)):
+    """休日を削除します（その日は営業日に戻ります）。今日より前（日本時間）の休日は削除できません（400）。"""
     return delete_holiday(db=db, calendar_id=calendar_id, holiday_date=holiday_date)
 
 # ==========================================

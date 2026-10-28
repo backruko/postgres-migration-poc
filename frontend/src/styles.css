@@ -81,6 +81,8 @@ button, input, select { font: inherit; color: inherit; }
 .year-label { min-width: 64px; text-align: center; }
 .holiday-row { display: flex; margin-bottom: 0; }
 .holiday-paste { margin-top: 16px; margin-bottom: 8px; }
+.jp-holiday-list { margin: 0; padding-left: 18px; columns: 2; column-gap: 24px; font-size: 13px; }
+@media (max-width: 560px) { .jp-holiday-list { columns: 1; } }
 .clickable-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* 今日より前の日付（実績・変更不可） */
 .is-past-row > td { color: var(--muted); background: var(--past-bg); }

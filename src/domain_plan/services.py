@@ -90,17 +90,20 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# 年間計画シートの日付は顧客の現地の日付。シートにタイムゾーンは無いため、日本の日付で「今日」を判定する
-SHEET_TIMEZONE = ZoneInfo("Asia/Tokyo")
+# シートの日付・休日は顧客の現地の日付。どちらにもタイムゾーンは無いため、日本の日付で「今日」を判定する
+LOCAL_TIMEZONE = ZoneInfo("Asia/Tokyo")
 
 
-def _sheet_today() -> date:
-    """シートの日付の「今日」。これより前の日付は実際に行った業務の記録（実績）として、人の操作でも再生成でも変えない"""
-    return _now().astimezone(SHEET_TIMEZONE).date()
+def _local_today() -> date:
+    """
+    シートの日付・休日の「今日」。これより前の日付は実際に行った業務の記録（実績）として、
+    人の操作でも再生成でも変えない（過去の休日を変えると、過去の月の表示が実際と食い違うため）
+    """
+    return _now().astimezone(LOCAL_TIMEZONE).date()
 
 
 def _check_not_past(dates: list[date], action: str) -> None:
-    today = _sheet_today()
+    today = _local_today()
     past = sorted(d for d in dates if d < today)
     if past:
         raise BadRequestError(
@@ -354,7 +357,11 @@ def get_holidays(db: Session, calendar_id: int, year: int | None = None) -> list
 
 
 def add_holidays(db: Session, calendar_id: int, holidays_in: HolidaysAdd) -> CalendarChangeResult:
-    """休日を一括登録します（登録済みの日付は名前のみ更新）。日付が増えた場合は使用中のテンプレートへ反映します。"""
+    """
+    休日を一括登録します（登録済みの日付は名前のみ更新）。日付が増えた場合は使用中のテンプレートへ反映します。
+    今日より前の日付は追加も名前の変更もできません（実績のため）。
+    """
+    _check_not_past([h.holiday_date for h in holidays_in.holidays], "add or rename holidays on")
     calendar = get_calendar(db, calendar_id)
     existing = {h.holiday_date: h for h in calendar.holidays}
 
@@ -376,7 +383,9 @@ def add_holidays(db: Session, calendar_id: int, holidays_in: HolidaysAdd) -> Cal
 
 
 def delete_holiday(db: Session, calendar_id: int, holiday_date: date) -> CalendarChangeResult:
+    """休日を削除します（その日は営業日に戻ります）。今日より前の休日は削除できません（実績のため）。"""
     calendar = get_calendar(db, calendar_id)
+    _check_not_past([holiday_date], "delete holidays on")
     target = next((h for h in calendar.holidays if h.holiday_date == holiday_date), None)
     if target is None:
         raise NotFoundError(f"Holiday {holiday_date} not found in BusinessCalendar(id={calendar_id}).")
@@ -476,7 +485,7 @@ def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
         raise BadRequestError(f"Marker '{marker.marker}': {e}")
 
     first_run = not marker.events
-    today = _sheet_today()
+    today = _local_today()
     by_rule_date = {e.rule_date: e for e in marker.events if e.rule_date is not None}
     human_dates = {e.event_date for e in marker.events if e.is_manual}
 
@@ -535,7 +544,7 @@ def _annotate_revertable(db: Session, marker: ReferenceSheetMarker) -> Reference
         }
     except engine.CalendarError:
         return marker
-    today = _sheet_today()
+    today = _local_today()
     for e in marker.events:
         if not e.is_manual or e.rule_date is None or e.event_date < today:
             continue
@@ -573,7 +582,7 @@ def update_marker(db: Session, sheet_id: int, marker: str, marker_in: ReferenceS
             _apply_marker_rule(db, marker_obj, None)
             if marker_in.cancel_future_dates:
                 # 業務が終わった場合: 今日以降の日付をすべて取り消す（過去は実績のため残す）。1トランザクションで反映する
-                today = _sheet_today()
+                today = _local_today()
                 for event in [e for e in marker_obj.events if e.event_date >= today and not e.is_cancelled]:
                     _cancel_sheet_event(db, marker_obj, event)
                     changed = True
@@ -839,7 +848,7 @@ def revert_sheet_event(db: Session, event_id: int) -> ReferenceSheetEvent:
     event.original_date = None
     db.flush()
     _generate_marker_events(db, marker_obj)
-    if event not in marker_obj.events or event.event_date < _sheet_today():
+    if event not in marker_obj.events or event.event_date < _local_today():
         # ルールがこの発生枠をもう作らない、またはその日に人が置いた日付があるため、戻すと日付が消えてしまう
         db.rollback()
         raise BadRequestError(

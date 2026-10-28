@@ -1,4 +1,4 @@
-import { DeleteOutlined, EditOutlined, LeftOutlined, PlusOutlined, RightOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, ImportOutlined, LeftOutlined, PlusOutlined, RightOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Select, Space, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
@@ -6,18 +6,20 @@ import { useSearchParams } from "react-router-dom";
 import { calendarApi } from "../../domain/plan/api";
 import { useBusinessCalendars } from "../../domain/plan/hooks/useClientCalendar";
 import { useHolidays } from "../../domain/plan/hooks/useHolidays";
+import { isSupportedJpHolidayYear, JP_HOLIDAY_YEARS } from "../../domain/plan/lib/jpHolidays";
 import type { Holiday } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
 import { TIMEZONE } from "../../shared/config";
 import { dayjs, todayIn } from "../../shared/lib/datetime";
 import { HolidayFormModal } from "./HolidayFormModal";
-import { describeChange, isEditableHoliday } from "./holidayForm";
+import { describeChange, isEditableHoliday, planJpHolidayImport, toHolidayInputs } from "./holidayForm";
 
 const fmt = (d: string) => dayjs(d, "YYYY-MM-DD").format("YYYY/M/D(dd)");
 
 /**
  * 休日カレンダー（営業日カレンダーの休日）の設定画面。
- * カレンダーと年を選んで休日を一覧し、追加・名前の変更・削除ができる。今日より前の休日は実績のため読み取り専用。
+ * カレンダーと年を選んで休日を一覧し、追加（日本の祝日の一括取り込みを含む）・名前の変更・削除ができる。
+ * 今日より前の休日は実績のため読み取り専用（バックエンドも拒否する）。
  * 休日を変えると、このカレンダーを使うテンプレートと生成マーカーの今日以降の日付が作り直される。
  * 選択は URL の ?calendar=<id>&year= に保持する。
  */
@@ -57,6 +59,49 @@ export function HolidaySettingsPage() {
         holidays.reload();
       },
     });
+
+  // 日本の祝日をその年の分まとめて取り込む（今日より前・登録済みの日付は取り込まない）
+  const confirmJpImport = () => {
+    const plan = planJpHolidayImport(year, new Set((holidays.data ?? []).map((h) => h.holiday_date)), today);
+    const skipped = [
+      plan.past ? `今日より前の ${plan.past} 件（実績）` : "",
+      plan.registered ? `登録済みの ${plan.registered} 件（名前もそのまま）` : "",
+    ].filter(Boolean);
+    if (!plan.toAdd.length) {
+      message.info(`${year}年の日本の祝日 ${plan.total} 件は、すべて取り込み済みか今日より前です。`);
+      return;
+    }
+    modal.confirm({
+      title: `${year}年の日本の祝日 ${plan.toAdd.length} 件を「${calendar!.name}」に取り込みますか？`,
+      width: 560,
+      content: (
+        <Space direction="vertical" size={8}>
+          <ul className="jp-holiday-list">
+            {plan.toAdd.map((h) => (
+              <li key={h.date}>
+                <span className="mono">{fmt(h.date)}</span> {h.name}
+              </li>
+            ))}
+          </ul>
+          {skipped.length > 0 && <span className="muted">取り込まない日付: {skipped.join("、")}</span>}
+          <span className="muted">
+            祝日は法律の規定から計算しています（春分・秋分の日は近似式）。法改正などで内閣府の発表と異なる場合は、取り込んだ後に手で直してください。
+            取り込むと、このカレンダーを使うテンプレートと、ルールで日付を作るマーカーの今日以降の日付が作り直されます。
+          </span>
+        </Space>
+      ),
+      okText: "取り込む",
+      cancelText: "キャンセル",
+      onOk: async () => {
+        try {
+          message.success(describeChange(await calendarApi.addHolidays(calendar!.id, toHolidayInputs(plan.toAdd))), 6);
+        } catch (e) {
+          message.error(`取り込めませんでした: ${e instanceof ApiError ? e.message : "通信に失敗しました。"}`);
+        }
+        holidays.reload();
+      },
+    });
+  };
 
   const columns: ColumnsType<Holiday> = [
     { title: "日付", dataIndex: "holiday_date", className: "mono", render: (d: string) => fmt(d) },
@@ -130,9 +175,23 @@ export function HolidaySettingsPage() {
               {calendar.name} の {year}年の休日 {rows.length} 件（今日以降 {upcoming} 件）・週末:{" "}
               {calendar.weekend_days.map((d) => "月火水木金土日"[d - 1]).join("・") || "なし"}
             </Typography.Text>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditor({ open: true, holiday: null })}>
-              休日を追加
-            </Button>
+            <Space wrap>
+              <Button
+                icon={<ImportOutlined />}
+                onClick={confirmJpImport}
+                disabled={!isSupportedJpHolidayYear(year) || holidays.loading || !holidays.data}
+                title={
+                  isSupportedJpHolidayYear(year)
+                    ? `${year}年の日本の祝日（振替休日・国民の休日を含む）を取り込む`
+                    : `日本の祝日を計算できるのは ${JP_HOLIDAY_YEARS.min}〜${JP_HOLIDAY_YEARS.max}年です`
+                }
+              >
+                日本の祝日を取り込む
+              </Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditor({ open: true, holiday: null })}>
+                休日を追加
+              </Button>
+            </Space>
           </div>
           <Table<Holiday>
             rowKey="holiday_date"

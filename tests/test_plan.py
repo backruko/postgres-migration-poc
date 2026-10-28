@@ -19,7 +19,7 @@ from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFound
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.domain_plan import engine, services
-from src.domain_plan.models import InstanceOrigin, TemplateType, VoidReason
+from src.domain_plan.models import BusinessCalendarHoliday, InstanceOrigin, TemplateType, VoidReason
 from src.domain_plan.schemas import (
     MarkerRule,
     ReferenceSheetCreate,
@@ -1137,3 +1137,30 @@ def test_stop_generating_can_cancel_future_dates_when_the_routine_ends(db, biz_i
     assert not any(e.event_date == added for e in m.events)
     # 参照しているジョブの未来の予定も無くなる（1回の再照合で）
     assert not [i for i in live(db, job.id) if i.scheduled_start >= datetime.now(timezone.utc)]
+
+
+def test_past_holidays_are_read_only(db, biz_id):
+    calendar = make_calendar(db)
+    today = date.today()
+    past = today - timedelta(days=5)
+    # 過去の休日（以前に登録されたもの）。サービスでは今日より前を登録できないため直接入れる
+    calendar.holidays.append(BusinessCalendarHoliday(holiday_date=past, name="過去の休日"))
+    db.commit()
+
+    with pytest.raises(BadRequestError):  # 追加
+        services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=past - timedelta(days=1))]))
+    with pytest.raises(BadRequestError):  # 名前の変更
+        services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=past, name="別名")]))
+    with pytest.raises(BadRequestError):  # 今日以降と混ざっていても、1件でも過去があれば全体を拒否（一部だけ反映しない）
+        services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[
+            HolidayIn(holiday_date=today + timedelta(days=7)), HolidayIn(holiday_date=past - timedelta(days=2)),
+        ]))
+    with pytest.raises(BadRequestError):  # 削除
+        services.delete_holiday(db, calendar.id, past)
+    db.rollback()
+    assert [(h.holiday_date, h.name) for h in services.get_holidays(db, calendar.id)] == [(past, "過去の休日")]
+
+    # 今日の休日は追加・名前の変更・削除ができる
+    services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=today, name="臨時休業")]))
+    assert services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=today, name="創立記念日")])).holidays_renamed == 1
+    assert services.delete_holiday(db, calendar.id, today).holidays_deleted == 1

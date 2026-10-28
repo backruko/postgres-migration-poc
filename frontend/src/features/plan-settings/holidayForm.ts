@@ -1,4 +1,5 @@
 // 休日の入力（貼り付けた一覧の読み取り・API の入力への変換）と結果の表示。UI から独立した純粋な処理。
+import { japaneseHolidays } from "../../domain/plan/lib/jpHolidays";
 import type { CalendarChangeResult, HolidayInput } from "../../domain/plan/types";
 import { dayjs } from "../../shared/lib/datetime";
 
@@ -60,4 +61,21 @@ export function describeChange(result: CalendarChangeResult): string {
   return result.templates_regenerated
     ? `${head}（このカレンダーを使う ${result.templates_regenerated} 件のテンプレートの今日以降の予定を作り直しました）`
     : head;
+}
+
+/**
+ * 日本の祝日の取り込み内容。今日より前（実績）と登録済みの日付は取り込まない（登録済みの名前も変えない）。
+ * 対象外の年（jpHolidays の JP_HOLIDAY_YEARS 以外）は例外。
+ */
+export function planJpHolidayImport(year: number, existing: ReadonlySet<string>, today: string) {
+  const all = japaneseHolidays(year);
+  const toAdd: HolidayRow[] = [];
+  let past = 0;
+  let registered = 0;
+  for (const h of all) {
+    if (!isEditableHoliday(h.date, today)) past++;
+    else if (existing.has(h.date)) registered++;
+    else toAdd.push({ date: h.date, name: h.name });
+  }
+  return { total: all.length, toAdd, past, registered };
 }

@@ -292,6 +292,7 @@ export interface paths {
          * Add Holidays Endpoint
          * @description 休日を一括登録します（登録済みの日付は名前のみ更新）。
          *     このカレンダーを使う全テンプレートの未来の予定が、休日ポリシーに従って再計算されます。
+         *     今日より前（日本時間）の日付は追加も名前の変更もできません（400）。
          */
         post: operations["add_holidays_endpoint_plans_calendars__calendar_id__holidays_post"];
         delete?: never;
@@ -310,7 +311,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Holiday Endpoint */
+        /**
+         * Delete Holiday Endpoint
+         * @description 休日を削除します（その日は営業日に戻ります）。今日より前（日本時間）の休日は削除できません（400）。
+         */
         delete: operations["delete_holiday_endpoint_plans_calendars__calendar_id__holidays__holiday_date__delete"];
         options?: never;
         head?: never;
