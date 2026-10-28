@@ -1,46 +1,57 @@
 # MEMORY.md — Session handoff
 
 Handoff for the next working session. Read this first, then `frontend/README.md` (frontend details) and
-`src/domain_plan/` (backend). Last updated: 2026-10-27.
+`src/domain_plan/` (backend). Last updated: 2026-10-28.
 
 ## 1. Current status
 
-- **Branch:** `feature/plan-holiday-calendar` (not merged to `main`, nothing pushed).
-- **DB:** dev DB is at Alembic head `3493c39bdf43`. Migrations: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
-  `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43`.
-- **Tests:** `pytest tests/test_plan.py` → 41 passed (runs against `test_db` via `tests/conftest.py`).
+- **Branch:** `feature/plan-holiday-calendar` (not merged to `main`, nothing pushed). Working tree clean.
+- **DB:** latest Alembic head is `5c1f7d2a9e04` (sheet event audit trail). Migrations: `ceee1634d6a7` (squashed init) →
+  `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04`.
+  The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
+  without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
+- **Tests:** `pytest tests/test_plan.py` → 45 passed (runs against `test_db` via `tests/conftest.py`, `create_all`, no migrations).
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
+  Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `alembic check` → no drift.
   Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes.
-- **Uncommitted right now: Step 3 (Create Template)** — implemented and verified, waiting for the user's review/commit:
-  - new: `frontend/src/features/plan-settings/CreateTemplateModal.tsx`, `templateForm.ts`,
-    `frontend/src/domain/plan/api/sheetApi.ts`, `domain/plan/hooks/useReferenceSheets.ts`, `frontend/src/shared/ui/color.ts`
-  - modified: `PlanSettingsPage.tsx`, `domain/plan/api/{index,templateApi}.ts`, `domain/plan/types/index.ts`,
-    `features/calendar/components/Icon.tsx` (exports `ICON_NAMES`), `features/schedule-actions/ScheduleFields.tsx`
-    (uses shared color helper), `styles.css`
+- **Not verified yet:** in-browser click-through of the 年間計画シート screen (rule markers, per-date editing). The user
+  is about to test it.
 
 ### Recent commits (newest first)
 | Commit | Content |
 |---|---|
-| `9c7976b` | Step 2: business dropdown on the settings page (`GET /biz/`) |
-| `86efa29` | Step 1: `/settings/templates` page, routing, read-only template list |
-| `2517de5` | Calendar: past days / finished occurrences dimmed |
-| `322f5fe` | Client calendar API + React calendar app |
-| `b2349cd` | Holiday calendars, rule-generated sheet markers, sheet bulk import |
+| `833190e` | Per-date editing UI on 年間計画シート (move / delete / revert / add, past read-only) |
+| `42746b3` | Backend: audit trail of sheet dates, past read-only, `revertable` flag, migration `5c1f7d2a9e04` |
+| `ad1dd99` | 年間計画シート screen + rule-generated markers (create / edit / stop generating) + duplicate warning |
+| `0738f78` | Sticky top nav + sticky weekday row on the calendar |
+| `7de97e6` | Template delete + template categories (定例 / 不定期 / スペシャル) with calendar filter |
+| `679ff6c` | Template edit (Step 4) + nav keeps each page's query string (committed together) |
+| `905f299` | Template create (Step 3) |
+| `9c7976b` | Business dropdown on the settings page (`GET /biz/`) |
+| `86efa29` | `/settings/templates` page, routing, read-only template list |
 
 ## 2. Working agreement with the user
 
-- **Baby steps.** The user defines one small step at a time with strict limits (e.g. "create only, no edit/delete").
-  Do exactly that step; do not pre-build later steps.
-- **The user commits.** Leave each step uncommitted for review unless asked. Before starting a step, check `git status` —
-  once a previous step turned out not to be committed; ask before mixing steps.
-- **Don't touch the user's dev DB or their running uvicorn (port 8000).** For end-to-end checks use a throwaway DB
-  (`plan_check`) + uvicorn on 8001 + Vite on 5174 (`VITE_PROXY_TARGET=http://127.0.0.1:8001 npm --prefix frontend run dev -- --port 5174`).
-  Read-only GETs against the user's server are fine. Never run bare `npx vite` from the repo root (it once downloaded Vite 8).
-- **Verify before claiming.** Build + type check every change; for API-facing frontend work, run the real domain modules
-  through the Vite proxy (esbuild-bundled harness) against the throwaway backend. Say plainly what was *not* checked
-  (so far: no in-browser click-through of any page).
+- **Baby steps.** The user defines one step at a time with strict limits. Do exactly that step; do not pre-build later
+  steps. When a step turns up a real design question, stop and present options with a recommendation; they decide.
+- **Commits.** Leave each step uncommitted for review unless asked. The user usually commits; when they ask, I commit on
+  the feature branch (conventional-commit style, `Co-Authored-By` line). Never push. Before starting a step, check
+  `git status`; if the previous step is uncommitted, say so (they may ask me to split commits).
+- **Don't touch the user's dev DB or their running uvicorn (port 8000).** Read-only GETs against 8000 are fine (useful for
+  diagnosing their test data; `app.log` in the repo root logs SQL for both servers). For end-to-end checks use the
+  throwaway DB `plan_check` (already exists and migrated; seeded with client `MOCK`, biz 1, calendar `JP_BANK` id 1,
+  the mock sheet), uvicorn on 8001 with `DATABASE_URL` pointing at `plan_check`, and Vite on 5174:
+  `VITE_PROXY_TARGET=http://127.0.0.1:8001 exec node node_modules/vite/bin/vite.js --port 5174 --strictPort` (from `frontend/`).
+  Start Vite with `node` directly, not `npm run dev`: TaskStop only kills the npm wrapper and leaves Vite running.
+  Vite binds to `localhost` (IPv6), so harnesses use `http://localhost:5174/api`. Never run bare `npx vite` from the repo root.
+- **Verify before claiming.** Build + type check every change; backend changes need pytest + pyright (+ `alembic check`
+  for migrations). For API-facing frontend work, bundle the real domain/feature modules with esbuild
+  (`--define:import.meta.env='{"VITE_API_BASE_URL":"http://localhost:5174/api","VITE_TIMEZONE":"Asia/Tokyo"}'`) and run
+  them in node against the throwaway backend. Say plainly what was *not* checked (in-browser clicking so far).
 - Code comments in the repo are Japanese; UI text is Japanese; replies to the user in English.
-- Windows: preserve CRLF line endings in existing files; `.env`/`.env.*` are git-ignored.
+- Windows line endings: frontend files are CRLF in the working tree; backend Python files and migrations are LF.
+  Match the file you edit. Japanese in shell arguments gets mangled (cp932): pass JSON via files and run Python with
+  `PYTHONUTF8=1`. `.env`/`.env.*` are git-ignored.
 
 ## 3. Backend architecture (FastAPI + SQLAlchemy 2 + PostgreSQL)
 
@@ -54,7 +65,11 @@ use `.execution_options(include_deleted=True)` to bypass.
 - **Templates** (`plan_template`, soft-deletable) — 3 types:
   `RRULE` (anchor_date + rrule), `EXPLICIT_DATES` (`plan_explicit_date`),
   `REFERENCE_SHEET_BASED` (sheet + marker + `offset_days`/`offset_day_unit` calendar|business + `offset_minutes`).
-  Common: `start_time`, `duration_minutes`, `timezone`, `holiday_policy`, `business_calendar_id`, `ui_metadata` (JSONB).
+  Common: `start_time`, `duration_minutes`, `timezone`, `holiday_policy`, `business_calendar_id`, `ui_metadata` (JSONB,
+  extra keys allowed; replaced as a whole on PATCH).
+- **Template update (PATCH)** compares values: unchanged fields don't bump `revision`; fields of another template type → 400.
+  Name / `ui_metadata` changes never bump revision. Delete = soft delete (future instances voided `TEMPLATE_DELETED`,
+  past kept); template restore exists in the API but the user decided not to build it.
 - **Engine** (`engine.py`, pure functions): local wall-clock + IANA tz → UTC (DST-safe). Holiday policies:
   `as_is`, `skip`, `following`, `preceding`, `modified_following`, `modified_preceding`. Rolled occurrences keep their
   original rule date as slot identity (`occurrence_date`); collisions on one day collapse to one.
@@ -62,21 +77,36 @@ use `.execution_options(include_deleted=True)` to bypass.
   `plan_instance`, `plan_instance_void`, `plan_slot_release`). Changes are append-only:
   - `origin`: `GENERATED` / `OVERRIDE` (manual reschedule, `overrides_instance_id` chain) / `ONE_OFF`.
   - Void reasons: `TEMPLATE_REVISED`, `TEMPLATE_DELETED`, `SOURCE_DATE_CHANGED`, `MANUAL`, `REVERTED`, `CALENDAR_CHANGED`.
-  - Regeneration = **reconcile** (desired vs live generated instances, keyed by start/end/source) over a rolling horizon
-    (`materialized_until`, 90 days; extended lazily on calendar reads). Manually changed/cancelled slots are never
-    regenerated (`_manual_slots`); `plan_slot_release` records "back under the rule".
+  - Regeneration = **reconcile** (desired vs live generated instances) over a rolling horizon (`materialized_until`,
+    90 days; extended lazily on calendar reads). Manually changed/cancelled slots are never regenerated.
   - Generation-affecting template edits bump `revision` and reconcile only the future; the past is never touched.
-- **Manual operations:** override (reschedule), cancel, revert (back to rule), one-off (special case), restore cancelled.
-  Rules: no scheduling into the past (override / one-off / restore); revert only for rule-generated roots whose original
-  time is still in the future (`revertable` flag in calendar responses).
-- **Occurrence cache** (`plan_occurrence_cache`): denormalized, GiST `tstzrange` index, effective `ui_metadata`
-  (template merged with instance). Rebuildable from instances.
-- **Reference sheets** (client annual plans): `reference_sheet` → `reference_sheet_marker` → `reference_sheet_event`.
-  Markers can be **rule-generated** (rrule + calendar + policy, e.g. trading day = 27th, next business day);
-  human edits/additions/cancellations on generated dates always win (`is_manual`, `is_cancelled` tombstones).
-  Bulk import: `POST /plans/sheets/import` (mock file `mock_data/desensitized_mock_data.json`, client `MOCK`).
+- **Manual operations on instances:** override, cancel, revert (back to rule), one-off, restore cancelled
+  (`POST /plans/instances/{id}/restore`, used by the 取消済みの予定 drawer; not the same as template restore).
+- **Occurrence cache** (`plan_occurrence_cache`): denormalized, GiST `tstzrange` index, effective `ui_metadata`.
 - **Business calendars:** `business_calendar` (weekend days) + `business_calendar_holiday`; changes cascade to templates
   and generated markers.
+
+### Reference sheets (client annual plans) — audit rules, decided with the user
+`reference_sheet` → `reference_sheet_marker` → `reference_sheet_event`. Real workflow: one baseline marker per client
+(e.g. 振込日 = 27th, next business day) with several jobs offset from it (3 business days before, …). Every date change
+cascades to all templates referencing the marker (`_propagate_sheet_change`).
+- **Markers:** imported (`POST /plans/sheets/import`, JSON format of `mock_data/desensitized_mock_data.json`; import cannot
+  create rule markers) or **rule-generated** (`POST /plans/sheets/{id}/markers` with `rule`; `PATCH …/markers/{marker}`
+  changes the rule, `rule: null` stops generating).
+- **Event provenance** (never erased, including after stopping a rule): `rule_date` (rule slot), `original_date`
+  (imported/rule date before a person moved or cancelled it), `is_manual` (a person changed it), `is_cancelled`
+  (取消 record). UI labels: ルール / 人が変更 (元: original) / 人が追加 / 取消 / 取り込み.
+- **People always win:** manual edits are kept on rule change, calendar change, re-import and `replace_events`.
+  Option 1 (user's decision): a manual future date can coexist with a new rule date in the same month; the system
+  does not auto-delete it, the UI warns (edit form, after save, orange 「今後: …」 tag) and the user cleans up.
+- **Deleting:** rule/imported dates become 取消 records; hand-added dates (no rule/original date) are hard-deleted
+  (a record would block that day for future rule dates via the unique `(marker_id, event_date)` constraint).
+- **Past is read-only (backend-enforced):** add / move / delete / revert of dates before today → 400. "Today" is JST
+  (`SHEET_TIMEZONE`, `_sheet_today()` in services). Rule and holiday changes don't rewrite past dates; only a new
+  marker's first generation fills the past. Import is still allowed to add past dates (initial loads need it), and
+  `replace_events` can still delete past imported dates that nobody edited.
+- **`revertable`** on each event (computed, not stored; `_annotate_revertable`): true only if the current rule produces
+  that slot on a free date ≥ today. Same conditions as `POST /plans/sheets/events/{id}/revert`.
 
 ### Key endpoints used by the frontend
 | Purpose | Endpoint |
@@ -85,73 +115,54 @@ use `.execution_options(include_deleted=True)` to bypass.
 | Cancelled list / restore | `GET /plans/clients/{code}/cancelled?start=&end=`, `POST /plans/instances/{id}/restore` |
 | Override / cancel / revert | `POST /plans/instances/{id}/override` · `/cancel` · `/revert` |
 | One-off | `POST /plans/templates/{id}/instances` |
-| Template list / create | `GET /plans/templates?biz_id=`, `POST /plans/templates` |
-| Lookups | `GET /clients/`, `GET /biz/` (limit 1000 requested), `GET /plans/calendars`, `GET /plans/sheets?client_code=` |
+| Templates | `GET /plans/templates?biz_id=`, `POST /plans/templates`, `PATCH` / `DELETE /plans/templates/{id}`, `POST` / `DELETE …/dates` |
+| Sheets / markers | `GET /plans/sheets?client_code=`, `POST /plans/sheets/{id}/markers`, `PATCH /plans/sheets/{id}/markers/{marker}` |
+| Sheet dates | `POST …/markers/{marker}/events`, `PATCH` / `DELETE /plans/sheets/events/{id}`, `POST …/events/{id}/revert` |
+| Lookups | `GET /clients/`, `GET /biz/` (limit 1000 requested), `GET /plans/calendars` |
 
 Optional CORS via `CORS_ORIGINS` in `.env` (dev uses the Vite proxy instead).
 
 ## 4. Frontend architecture (`frontend/`)
 
 Vite 5.4 + React 18 + TypeScript + **Ant Design 5.22** (ja_JP locale, theme tokens match `styles.css`) + dayjs +
-react-router-dom 6.28. Exact-pinned versions.
+react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (light/dark), no Tailwind.
 
 - **OpenAPI-generated types:** `python scripts/export_openapi.py` → `frontend/openapi.json`;
-  `npm run gen:api` → `src/shared/api/schema.gen.ts` (never edit by hand). Typed client: `openapi-fetch`
-  (`src/shared/api/http.ts`, `unwrap()` → `ApiError{status, code, message}`).
+  `npm run gen:api` → `src/shared/api/schema.gen.ts` (never edit by hand; regenerate after backend schema changes).
+  Typed client: `openapi-fetch` (`src/shared/api/http.ts`, `unwrap()` → `ApiError{status, code, message}`).
 - **Layering (one direction): `features → domain → shared`.** UI never calls HTTP directly.
   - `domain/{plan,biz,client}/{types,api,hooks,lib}` — types are aliases of generated schemas only.
-  - `shared/` — http client, `useApiQuery` (abort + reload + keep data), `datetime.ts` (dayjs + utc/timezone/
-    customParseFormat; `zonedISO()` sends form times as `Asia/Tokyo` wall-clock), `useNow`, `ui/color.ts`.
-  - `features/calendar` (daily usage), `features/schedule-actions` (override/cancel/one-off modals, cancelled drawer),
-    `features/plan-settings` (pre-configuration).
-- **Routes:** `/` calendar · `/settings/templates?biz=<id>` template management. Production needs SPA fallback to
-  `index.html`.
-- Dev: `npm run dev` (proxy `/api` → `http://127.0.0.1:8000`; IPv4 on purpose).
+    `domain/plan/lib/category.ts`: template category stored in `ui_metadata.category` (missing → 定例).
+  - `shared/` — http client, `useApiQuery`, `datetime.ts`, `useNow`, `ui/color.ts`, `config.ts` (`TIMEZONE`).
+  - `features/calendar`, `features/schedule-actions`, `features/plan-settings`.
+    Pure form logic lives in `templateForm.ts` / `markerForm.ts` (testable in node); modals are UI only.
+- **Routes / nav:** `/` calendar (`?client=&month=&holidays=`) · `/settings/templates?biz=` · `/settings/sheets?client=`.
+  The layout remembers each page's last query string, so switching pages keeps selections. The calendar's
+  `useUrlState` goes through react-router (`useSearchParams`), not `history.replaceState`.
+- **Calendar:** category chips (定例 hidden by default, stored in localStorage) + per-template legend toggles; sticky nav
+  (`--nav-h: 44px`) and sticky weekday row (`.month` uses `overflow: clip` so sticky works).
+- Dev: `npm run dev` (proxy `/api` → `http://127.0.0.1:8000`; IPv4 on purpose). Production needs SPA fallback to `index.html`.
 - Gotchas already fixed — don't regress: ColorPicker `onChange` 2nd arg is `rgb(...)`, use `hexFromColorPicker`;
-  dayjs custom formats need `customParseFormat`; antd Modal + `forceRender` without `destroyOnClose`.
+  dayjs custom formats need `customParseFormat`; antd Modal + `forceRender` without `destroyOnClose` → reset the form in
+  a `useEffect` on `open` and keep the target in state while closing; `ui_metadata` PATCH replaces the whole object, so
+  forms carry over unknown keys (`text_color` …).
 
-## 5. Refactor plan: separate daily usage from pre-configuration (template CRUD)
+## 5. Plan endpoint audit (2026-10-28) — what is still unused, and the agreed MVP
+Done since the audit: rule-marker create/edit, per-date editing. Remaining MVP candidates (recommended, not started):
+1. **Holiday maintenance screen:** `GET` / `POST /plans/calendars/{id}/holidays`, `DELETE …/holidays/{date}`.
+2. **Sheet import UI** (`POST /plans/sheets/import`) + read-only sheet view. Open question for the user: clients may send
+   Excel, not this JSON format.
+3. A way to create a sheet for a client with none (`POST /plans/sheets`) — without it, rule markers have no sheet.
 
-| Step | Scope | State |
-|---|---|---|
-| 1 | Settings page + routing + read-only template list | committed `86efa29` |
-| 2 | Business dropdown (`GET /biz/`) synced to `?biz=` | committed `9c7976b` |
-| 3 | **Create template** (modal form from the OpenAPI union schema) | **implemented, uncommitted — awaiting review** |
-| 4 | Edit template | next (not started) |
-| 5 | Delete / restore template | later |
-
-### Step 3 details (for review)
-- `POST /plans/templates`; body = `RRuleTemplateCreate | ExplicitDatesTemplateCreate | ReferenceSheetTemplateCreate`
-  discriminated by `template_type` (`CreatePlanTemplateInput`).
-- `templateForm.ts` holds `FormValues`, `initialValues()`, `toCreateInput()` (pure; tested via harness).
-  `CreateTemplateModal.tsx` is UI only: type switch, schema-based validation (name ≤100, duration >0,
-  RRULE `FREQ=`…, offset −366…366, marker required), calendar required when policy ≠ `as_is` or business-day offset
-  (mirrors backend validators), sheet/marker dropdowns limited to the selected business's client, optional
-  `ui_metadata` (color/icon/bold). biz_id comes from the page dropdown.
-- Success: message → close → reset → table reload. Failure: Alert inside the modal with the backend message.
-- Verified: build/typecheck; harness 13/13 (all 3 types created, 422/400/404 errors surfaced, no partial writes).
-  Not verified: in-browser clicking.
-
-### Step 4 notes (Edit) — for planning only
-- Endpoint: `PATCH /plans/templates/{id}` with `PlanTemplateUpdate` (all optional). `template_type` and `biz_master_id`
-  cannot change. Fields not applicable to the type → 400; `null` rejected except `business_calendar_id` (detach) and
-  `ui_metadata` (clear, replaces whole object).
-- Generation-affecting changes bump `revision` and regenerate future instances (manual overrides are kept);
-  name / `ui_metadata` changes do not bump revision (cache updated in place).
-- Explicit dates are edited via separate endpoints: `POST /plans/templates/{id}/dates`, `DELETE /plans/templates/{id}/dates/{date}`.
-- Likely reuse: `templateForm.ts` (add a `toUpdateInput` that sends only changed fields), `CreateTemplateModal` patterns.
-
-### Step 5 notes (Delete) — for planning only
-- `DELETE /plans/templates/{id}` = soft delete: future instances voided (`TEMPLATE_DELETED`), past kept as history.
-  `POST /plans/templates/{id}/restore` regenerates from now with a new revision.
+Later / not planned: template audit history (`GET /plans/templates/{id}/instances`, the only way to see a deleted
+template's voided occurrences), calendar create / weekend change, flat occurrence lists, cache rebuild (backend-only),
+template restore (decided not needed). Next domains after Plan: Biz and Client.
 
 ## 6. Known data quirks (user's dev DB)
-- Client `MOCK`, 15 businesses; only 6 have templates (`MOCK0011`–`MOCK0016`, e.g. biz id 10 → template `会員登録`).
-  Template names vs business names look shifted by one (user's test data).
-- Calendar `JP_BANK` (holidays 2026-11-03, 2026-11-23 …).
+- Client `MOCK`, 15 businesses; only some have templates. Template names vs business names look shifted by one.
+- Sheets: `Annual_Schedule` (id 2, imported) and `MOCK_Schedule` (id 1). Marker `引落日` (id 10) was a rule marker; its
+  history was wiped by the old 生成をやめる before the audit-trail fix (unrecoverable, accepted by the user).
+- Calendar `JP_BANK` id 1 (holidays 2026-11-03, 2026-11-23 …).
 - Instance 910 (10/20) was moved into the past and cancelled; it shows in the cancelled list as not restorable.
-
-
-## [Future Enhancements]
-> * Task Categorization: Need to differentiate between Routine (定例), Ad-hoc (不定期), and High-Attention (スペシャル) tasks.
-> * Action: Requires backend schema update (e.g., add task_type or boolean flags). Frontend will then use this to hide routine tasks by default in the calendar and highlight high-attention tasks.
+- Dates moved before migration `5c1f7d2a9e04` have no `original_date`; dates added via the UI on imported markers before
+  it look like 取り込み.
