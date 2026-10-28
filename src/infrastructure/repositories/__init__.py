@@ -6,9 +6,9 @@ from .Plan import (
     reference_sheet_repo, plan_template_repo, plan_instance_repo, plan_instance_void_repo, plan_cache_repo,
     plan_slot_release_repo, business_calendar_repo,
 )
-# from .staff import staff_repo
+from .Staff import role_repo, staff_user_repo
 
 __all__ = ["client_repo", "biz_master_repo","sop_version_repo","sop_step_repo",
            "reference_sheet_repo", "plan_template_repo", "plan_instance_repo",
            "plan_instance_void_repo", "plan_cache_repo", "plan_slot_release_repo",
-           "business_calendar_repo"]
+           "business_calendar_repo", "role_repo", "staff_user_repo"]

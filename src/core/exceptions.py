@@ -27,6 +27,15 @@ class UnauthorizedError(BusinessException):
     def __init__(self, message: str = "Authentication failed", error_code: str = ErrorCode.UNAUTHORIZED):
         super().__init__(error_code=error_code, message=message, status_code=401)
 
+class ForbiddenError(BusinessException):
+    """
+    権限エラー
+    (必要なロールを持っていない、アカウントが利用停止中など)
+    (デフォルト HTTP Status: 403)
+    """
+    def __init__(self, message: str = "Permission denied", error_code: str = ErrorCode.FORBIDDEN):
+        super().__init__(error_code=error_code, message=message, status_code=403)
+
 class NotFoundError(BusinessException):
     """
     データ未検出

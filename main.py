@@ -24,6 +24,7 @@ from src.domain_client.router import router as client_router
 from src.domain_biz.router import router as biz_router 
 from src.domain_plan.router import router as plan_router
 from src.coordination.router import router as ops_router
+from src.domain_staff.router import router as staff_router
 
 app = FastAPI(title="Schedule System")
 
@@ -63,6 +64,7 @@ app.include_router(client_router)
 app.include_router(biz_router) 
 app.include_router(plan_router)
 app.include_router(ops_router)
+app.include_router(staff_router)
 
 @app.get("/")
 def read_root():
