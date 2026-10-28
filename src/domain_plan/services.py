@@ -67,6 +67,7 @@ from src.domain_plan.schemas import (
     ReferenceSheetMarkerUpdate,
     ReferenceSheetResponse,
     ReferenceSheetTemplateCreate,
+    TemplateExtensionResult,
     ui_metadata_to_dict,
 )
 from src.core.error_codes import ErrorCode
@@ -284,6 +285,62 @@ def _regenerate(db: Session, template: PlanTemplate, reason: VoidReason) -> None
     template.revision += 1
     if template.materialized_until is not None:
         _reconcile(db, template, _now(), template.materialized_until, reason)
+    _ensure_next_occurrence(db, template)
+
+
+def _ensure_next_occurrence(db: Session, template: PlanTemplate) -> bool:
+    """
+    生成済み区間を「今から MATERIALIZE_HORIZON 先」と「次の予定」の遅い方まで延ばします（上限 MAX_LOOKAHEAD）。
+    年1回の業務のように次の予定がホライズンより先でも、次の予定が常に生成済み（ダッシュボード等から見える）になります。
+    戻り値: 生成済み区間を延ばしたか
+    """
+    now = _now()
+    cap = now + MAX_LOOKAHEAD
+    before = template.materialized_until
+    # 日単位（UTC の翌0時）に切り上げる。同じ日に何度実行しても区間が動かない（日次ジョブの「延ばした数」が意味を持つ）
+    horizon = datetime.combine((now + MATERIALIZE_HORIZON).date() + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+    _ensure_materialized(db, template, horizon)
+    while not plan_cache_repo.next_starts(db, template_ids=[template.id], after=now):
+        lower = template.materialized_until or now
+        if lower >= cap:
+            break
+        upcoming = _expand(db, template, lower, cap)
+        if not upcoming:
+            break
+        # 次の発生日時を含むところまで生成する（手動で取り消された枠だった場合は、さらに次を探す）
+        _ensure_materialized(db, template, min(min(o.start for o in upcoming) + timedelta(days=1), cap))
+    return template.materialized_until != before
+
+
+def _with_next_occurrence(db: Session, templates: list[PlanTemplate]) -> list[PlanTemplate]:
+    """各テンプレートに next_occurrence_at（次の有効な予定の開始日時）を付けます（レスポンス用。DB には保存しない）。"""
+    next_starts = plan_cache_repo.next_starts(db, template_ids=[t.id for t in templates], after=_now())
+    for t in templates:
+        t.next_occurrence_at = next_starts.get(t.id)  # type: ignore[attr-defined]
+    return templates
+
+
+def extend_all_templates(db: Session) -> TemplateExtensionResult:
+    """
+    日次の生成ジョブ（scripts/extend_plans.py から1日1回実行）。全顧客の有効なテンプレートについて、
+    生成済み区間を「今から MATERIALIZE_HORIZON 先」と「次の予定」の遅い方まで延ばします。何度実行しても同じ結果になります。
+    テンプレートごとにコミットし、行ロックを短く保ちます。
+    """
+    template_ids = [t.id for t in plan_template_repo.get_all(db)]
+    extended = 0
+    without_upcoming = []
+    for template_id in template_ids:
+        template = plan_template_repo.get_locked(db, id=template_id)
+        if template is None:
+            continue  # 実行中に削除された
+        if _ensure_next_occurrence(db, template):
+            extended += 1
+        if not plan_cache_repo.next_starts(db, template_ids=[template.id], after=_now()):
+            without_upcoming.append(template.id)
+        _commit(db, f"Occurrences of PlanTemplate(id={template_id}) could not be generated due to a conflicting record.")
+    return TemplateExtensionResult(
+        templates_checked=len(template_ids), templates_extended=extended, without_upcoming=without_upcoming
+    )
 
 
 def _commit(db: Session, message: str) -> None:
@@ -924,22 +981,22 @@ def create_template(db: Session, template_in: PlanTemplateCreate) -> PlanTemplat
     db.add(template)
     db.flush()
 
-    _ensure_materialized(db, template, _now() + MATERIALIZE_HORIZON)
+    _ensure_next_occurrence(db, template)
     _commit(db, "PlanTemplate could not be created due to a conflicting record.")
     db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def get_template(db: Session, template_id: int) -> PlanTemplate:
     template = plan_template_repo.get(db, id=template_id)
     if not template:
         raise NotFoundError(f"PlanTemplate(id={template_id}) not found.")
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def get_templates(db: Session, biz_id: int) -> list[PlanTemplate]:
     _get_biz(db, biz_id)
-    return plan_template_repo.get_by_biz(db, biz_master_id=biz_id)
+    return _with_next_occurrence(db, plan_template_repo.get_by_biz(db, biz_master_id=biz_id))
 
 
 def update_template(db: Session, template_id: int, template_in: PlanTemplateUpdate) -> PlanTemplate:
@@ -991,7 +1048,7 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
 
     _commit(db, "PlanTemplate could not be updated due to a conflicting record.")
     db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def delete_template(db: Session, template_id: int) -> PlanTemplate:
@@ -1021,11 +1078,11 @@ def restore_template(db: Session, template_id: int) -> PlanTemplate:
     # 削除期間中は生成していないため、今からホライズンまでを新しいリビジョンで生成し直す
     template.revision += 1
     template.materialized_until = None
-    _ensure_materialized(db, template, _now() + MATERIALIZE_HORIZON)
+    _ensure_next_occurrence(db, template)
 
     _commit(db, "PlanTemplate could not be restored due to a conflicting record.")
     db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def add_explicit_dates(db: Session, template_id: int, dates: list[date]) -> PlanTemplate:
@@ -1037,7 +1094,7 @@ def add_explicit_dates(db: Session, template_id: int, dates: list[date]) -> Plan
         _regenerate(db, template, VoidReason.SOURCE_DATE_CHANGED)
         _commit(db, "Some dates already exist for this template.")
         db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def remove_explicit_date(db: Session, template_id: int, local_date: date) -> PlanTemplate:
@@ -1048,7 +1105,7 @@ def remove_explicit_date(db: Session, template_id: int, local_date: date) -> Pla
     _regenerate(db, template, VoidReason.SOURCE_DATE_CHANGED)
     db.commit()
     db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 # ==========================================

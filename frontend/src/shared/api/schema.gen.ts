@@ -1758,6 +1758,11 @@ export interface components {
             materialized_until: string | null;
             /** Explicit Dates */
             explicit_dates: components["schemas"]["PlanExplicitDateResponse"][];
+            /**
+             * Next Occurrence At
+             * @description start of the next live occurrence (null: nothing upcoming within 2 years)
+             */
+            next_occurrence_at?: string | null;
         };
         /** PlanTemplateUpdate */
         PlanTemplateUpdate: {

@@ -549,6 +549,9 @@ class PlanTemplateResponse(BaseModel):
     revision: int
     materialized_until: datetime | None
     explicit_dates: list[PlanExplicitDateResponse]
+    next_occurrence_at: datetime | None = Field(
+        default=None, description="start of the next live occurrence (null: nothing upcoming within 2 years)"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -597,6 +600,13 @@ class PlanRevertResponse(BaseModel):
 class CacheRebuildResponse(BaseModel):
     template_id: int
     occurrences: int
+
+
+class TemplateExtensionResult(BaseModel):
+    """日次の生成ジョブ（scripts/extend_plans.py）の結果"""
+    templates_checked: int
+    templates_extended: int = Field(description="templates whose materialized range was extended")
+    without_upcoming: list[int] = Field(description="ids of templates with no upcoming occurrence within 2 years")
 
 
 class PlanOccurrenceResponse(BaseModel):

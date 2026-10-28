@@ -11,10 +11,14 @@ import { CATEGORY_LABEL, categoryOf, type TemplateCategory } from "../../domain/
 import { describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
 import type { PlanTemplate } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
+import { inZone } from "../../shared/lib/datetime";
 import { chipStyle } from "../calendar/lib/chipStyle";
 import { TemplateFormModal } from "./TemplateFormModal";
 
 const CATEGORY_COLOR: Record<TemplateCategory, string | undefined> = { regular: undefined, adhoc: "gold", special: "red" };
+
+const NO_UPCOMING_HINT =
+  "2年以内に予定がありません。ルール・指定日・参照するシートの日付を確認してください（業務が終わった場合は削除できます）。";
 
 const columns: ColumnsType<PlanTemplate> = [
   { title: "ID", dataIndex: "id", width: 72, className: "mono" },
@@ -49,6 +53,20 @@ const columns: ColumnsType<PlanTemplate> = [
     render: (_, t) => `${t.start_time.slice(0, 5)}〜 ${t.duration_minutes}分`,
   },
   { title: "休日の扱い", dataIndex: "holiday_policy", render: (p: PlanTemplate["holiday_policy"]) => POLICY_LABEL[p] },
+  {
+    title: "次の予定",
+    key: "next",
+    width: 168,
+    // 次の予定は、テンプレートのタイムゾーンでの日時で表示する（2年以内に無い場合は警告）
+    render: (_, t) =>
+      t.next_occurrence_at ? (
+        <span className="mono">{inZone(t.next_occurrence_at, t.timezone).format("YYYY/M/D(dd) HH:mm")}</span>
+      ) : (
+        <Tag color="warning" title={NO_UPCOMING_HINT}>
+          今後の予定がありません
+        </Tag>
+      ),
+  },
   { title: "改訂", dataIndex: "revision", width: 72, className: "mono" },
 ];
 
@@ -85,6 +103,7 @@ export function PlanSettingsPage() {
   const unknownOption = bizId !== null && bizes.data && !selectedBiz ? [{ value: bizId, label: `業務ID ${bizId}` }] : [];
 
   const { data, loading, error, reload } = usePlanTemplates(bizId);
+  const withoutUpcoming = (data ?? []).filter((t) => !t.next_occurrence_at).length;
   // 作成・編集モーダル（template が null なら新規作成）。閉じる間の表示が切り替わらないよう、閉じても template は残す
   const [editor, setEditor] = useState<{ open: boolean; template: PlanTemplate | null }>({ open: false, template: null });
   const openEditor = (template: PlanTemplate | null) => setEditor({ open: true, template });
@@ -193,6 +212,9 @@ export function PlanSettingsPage() {
         <Empty description="業務を選択してください" />
       ) : (
         <>
+          {withoutUpcoming > 0 && (
+            <Alert type="warning" showIcon message={`今後の予定が無いテンプレートが ${withoutUpcoming} 件あります。`} description={NO_UPCOMING_HINT} />
+          )}
           <div className="table-head">
             <Typography.Text type="secondary">
               {selectedBiz ? `${selectedBiz.business_code} ${selectedBiz.name}` : `業務ID ${bizId}`} のテンプレート

@@ -502,6 +502,17 @@ class PlanOccurrenceCacheRepository:
         )
         return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
 
+    def next_starts(self, db: Session, *, template_ids: Sequence[int], after: datetime) -> dict[int, datetime]:
+        """テンプレートごとの、after 以降に開始する最初の有効な予定の開始日時（無いテンプレートは含めない）"""
+        if not template_ids:
+            return {}
+        stmt = (
+            select(PlanOccurrenceCache.template_id, func.min(PlanOccurrenceCache.starts_at))
+            .where(PlanOccurrenceCache.template_id.in_(template_ids), PlanOccurrenceCache.starts_at >= after)
+            .group_by(PlanOccurrenceCache.template_id)
+        )
+        return {row[0]: row[1] for row in db.execute(stmt)}
+
     def query_starting_in(
         self, db: Session, *, start: datetime, end: datetime
     ) -> list[tuple[PlanOccurrenceCache, PlanInstance, BizMaster]]:

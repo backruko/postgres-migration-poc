@@ -1164,3 +1164,69 @@ def test_past_holidays_are_read_only(db, biz_id):
     services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=today, name="臨時休業")]))
     assert services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=today, name="創立記念日")])).holidays_renamed == 1
     assert services.delete_holiday(db, calendar.id, today).holidays_deleted == 1
+
+
+# ==========================================
+# 次の予定の保証（日次の生成ジョブ）
+# ==========================================
+def nine_jst(d: date) -> datetime:
+    return datetime.combine(d, time(9, 0), tzinfo=JST)
+
+
+def test_annual_template_keeps_its_next_occurrence_generated(db, biz_id):
+    # 年1回の業務: 次の予定がホライズン（90日）より先でも、作成時に生成される
+    anchor = date.today() + timedelta(days=200)
+    t = daily_template(db, biz_id, name="Annual", anchor_date=anchor, rrule="FREQ=YEARLY")
+    assert t.next_occurrence_at == nine_jst(anchor)  # type: ignore[attr-defined]
+    assert t.materialized_until is not None and t.materialized_until > nine_jst(anchor)
+    assert [i.scheduled_start for i in live(db, t.id)] == [nine_jst(anchor)]
+
+    # 一覧・単体の取得にも付く
+    [listed] = [x for x in services.get_templates(db, biz_id) if x.id == t.id]
+    assert listed.next_occurrence_at == nine_jst(anchor)  # type: ignore[attr-defined]
+    assert services.get_template(db, t.id).next_occurrence_at == nine_jst(anchor)  # type: ignore[attr-defined]
+
+    # 生成に影響する変更の後も保証される（時刻を変えても次の予定はある）
+    t = services.update_template(db, t.id, PlanTemplateUpdate(start_time=time(10, 0)))
+    assert t.next_occurrence_at == datetime.combine(anchor, time(10, 0), tzinfo=JST)  # type: ignore[attr-defined]
+
+
+def test_extend_job_fixes_old_templates_and_finds_the_next_slot(db, biz_id, monkeypatch):
+    # Phase 2 より前に作られたテンプレート（90日先までしか生成していない）を再現する
+    def old_behaviour(db_, template):
+        services._ensure_materialized(db_, template, services._now() + services.MATERIALIZE_HORIZON)
+        return False
+
+    anchor = date.today() + timedelta(days=200)
+    monkeypatch.setattr(services, "_ensure_next_occurrence", old_behaviour)
+    old = daily_template(db, biz_id, name="Old annual", anchor_date=anchor, rrule="FREQ=YEARLY")
+    monkeypatch.undo()
+    assert old.next_occurrence_at is None and live(db, old.id) == []  # type: ignore[attr-defined]
+
+    # 次の予定が無いテンプレート（ルールが終わっている）
+    ended = daily_template(db, biz_id, name="Ended", anchor_date=date(2026, 1, 1), rrule="FREQ=DAILY;UNTIL=20260105")
+    assert ended.next_occurrence_at is None  # type: ignore[attr-defined]
+
+    # 次の予定を取り消すと、その次（来年）の予定がまだ生成されていない
+    soon = date.today() + timedelta(days=10)
+    yearly = daily_template(db, biz_id, name="Yearly", anchor_date=soon, rrule="FREQ=YEARLY")
+    [first] = live(db, yearly.id)
+    services.cancel_instance(db, first.id, PlanInstanceCancel(note="今年は無し"))
+    assert services.get_template(db, yearly.id).next_occurrence_at is None  # type: ignore[attr-defined]
+
+    result = services.extend_all_templates(db)
+    assert result.templates_checked >= 3 and result.templates_extended >= 2
+    assert ended.id in result.without_upcoming
+    assert old.id not in result.without_upcoming and yearly.id not in result.without_upcoming
+    assert services.get_template(db, old.id).next_occurrence_at == nine_jst(anchor)  # type: ignore[attr-defined]
+    next_year = soon.replace(year=soon.year + 1)
+    assert services.get_template(db, yearly.id).next_occurrence_at == nine_jst(next_year)  # type: ignore[attr-defined]
+    assert [i.scheduled_start for i in live(db, yearly.id)] == [nine_jst(next_year)]  # 取り消した枠は復活しない
+
+    # 何度実行しても同じ結果（もう延ばすものは無い）
+    again = services.extend_all_templates(db)
+    assert old.id not in again.without_upcoming and ended.id in again.without_upcoming
+    ours = {old.id, ended.id, yearly.id}
+    before = {tid: services.get_template(db, tid).materialized_until for tid in ours}
+    services.extend_all_templates(db)
+    assert {tid: services.get_template(db, tid).materialized_until for tid in ours} == before

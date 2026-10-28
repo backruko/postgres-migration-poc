@@ -6942,6 +6942,19 @@
             },
             "type": "array",
             "title": "Explicit Dates"
+          },
+          "next_occurrence_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Occurrence At",
+            "description": "start of the next live occurrence (null: nothing upcoming within 2 years)"
           }
         },
         "type": "object",
