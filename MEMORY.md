@@ -138,7 +138,9 @@ Dependency direction: ope → plan (reads slots), ope → biz (pins SOP version)
 | The slot disappears | Canceled by system | Conflict flag | Conflict flag | Not affected |
 | New slot | New pending order | — | — | — |
 
-Mechanism: reconcile returns its change set per slot; the coordination layer applies it in the same transaction.
+Mechanism (decided 2026-10-28): **slot-change listener** — plan's reconcile / manual changes hand a per-slot change set
+to listeners registered at startup; the coordination layer's listener applies it to orders in the same transaction.
+Plan never imports ope.
 
 ### Client-side events
 - A business with `execution_type = LIGHTWEIGHT` → an order with zero steps, same lifecycle.
@@ -160,6 +162,10 @@ Mechanism: reconcile returns its change set per slot; the coordination layer app
 3. ~~staff (users, roles)~~ **done** (§4 Staff, §5 職員). User decisions: no login yet (trusted `X-Staff-Id` header);
    fixed global roles; backend first, screen second.
 4. ope orders: eager creation, propagation, statuses, release modes, SOP resolution / pinning, conflict flags. ← **next**
+   (branch `feature/ope-orders`). Decided 2026-10-28: slot-change listener; orders only for live occurrences from
+   go-live on (no past backfill); interim finish = operator marks in_progress → finished (Phase 5 replaces it for
+   orders with steps); release config on biz_master = `release_mode`, `release_time` (default 03:00 JST),
+   `release_days_before` (default 0).
 5. Steps: conditions, maker-checker, `is_blocking`.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
