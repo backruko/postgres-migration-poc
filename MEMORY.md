@@ -211,9 +211,10 @@ A future role that sees only its own client code(s). Needs a per-user client sco
 client_code)`) and every read model / API (calendar, dashboard, orders …) filtering by it — so new endpoints should
 take the acting staff into account and keep client filtering in one place. Details are an open question in the doc.
 
-## 2b. Working from a cloud (web) session
+## 2b. Working away from the office (web session or home PC)
 
-The user sometimes continues in a Claude Code web session (cloud sandbox, Linux) instead of their Windows machine.
+The user sometimes continues away from the office PC: in a Claude Code web session (cloud sandbox, Linux) or on a
+home PC. Their office `.env` (dev DB) is not available there.
 - It clones from GitHub: only **pushed** commits exist there. Push nothing yourself; when done, commit on the branch
   and tell the user to push / pull.
 - Not available there: the user's dev DB, their uvicorn on 8000, `plan_check`, Task Scheduler, the Windows paths and
