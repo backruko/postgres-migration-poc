@@ -1,4 +1,5 @@
 import createClient from "openapi-fetch";
+import { getActingStaffId } from "./actingStaff";
 import type { components, paths } from "./schema.gen";
 
 /**
@@ -14,6 +15,15 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, ""
  * 各ドメインの api/ からのみ使い、UI からは直接呼ばない。
  */
 export const http = createClient<paths>({ baseUrl: API_BASE });
+
+// 操作している職員をすべてのリクエストに付ける（職員・ロールの判定があるエンドポイントで使われる）
+http.use({
+  onRequest({ request }) {
+    const staffId = getActingStaffId();
+    if (staffId !== null) request.headers.set("X-Staff-Id", String(staffId));
+    return request;
+  },
+});
 
 type BusinessErrorBody = components["schemas"]["ErrorResponse"];
 type ValidationErrorBody = components["schemas"]["HTTPValidationError"];

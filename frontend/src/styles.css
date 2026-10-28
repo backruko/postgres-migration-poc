@@ -68,6 +68,25 @@ button, input, select { font: inherit; color: inherit; }
 .nav-link:hover { color: var(--ink); }
 .nav-link.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
 .nav-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 操作する職員（ログインが入るまでの開発用） */
+.nav-spacer { flex: 1; }
+.acting-staff {
+  display: inline-flex; align-items: center; gap: 6px; align-self: center; max-width: 260px;
+  border: 1px solid var(--rule-strong); background: var(--sheet); border-radius: 999px; padding: 3px 12px; font-size: 13px; cursor: pointer;
+}
+.acting-staff:hover { border-color: var(--accent); }
+.acting-staff:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.acting-staff.is-warning { border-color: var(--sun); color: var(--sun); }
+.acting-staff .ant-tag { margin-inline-end: 0; }
+.acting-staff-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+@media (max-width: 720px) { .acting-staff-name { display: none; } }
+.acting-staff-panel { width: 280px; }
+.acting-staff-note { font-size: 12px; }
+
+/* 職員: ロールの選択 */
+.role-checks { display: grid; gap: 6px; }
+.role-check-name { font-weight: 700; margin-right: 8px; }
+.role-check-desc { font-size: 12px; }
 
 /* ---------------- 予定テンプレート設定 ---------------- */
 .template-name { display: inline-flex; align-items: center; gap: 8px; }

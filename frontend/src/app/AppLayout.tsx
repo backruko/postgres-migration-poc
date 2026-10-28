@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { ActingStaffPicker } from "./ActingStaffPicker";
 
 const PAGES = [
   { path: "/", label: "カレンダー", end: true },
@@ -7,6 +8,7 @@ const PAGES = [
   { path: "/settings/templates", label: "予定テンプレート設定", end: false },
   { path: "/settings/sheets", label: "年間計画シート", end: false },
   { path: "/settings/holidays", label: "休日カレンダー", end: false },
+  { path: "/settings/staff", label: "職員", end: false },
 ];
 
 /** 全画面共通のレイアウト（上部のナビゲーション + 各画面） */
@@ -28,6 +30,8 @@ export function AppLayout() {
               {p.label}
             </NavLink>
           ))}
+          <span className="nav-spacer" />
+          <ActingStaffPicker />
         </div>
       </nav>
       <Outlet />
