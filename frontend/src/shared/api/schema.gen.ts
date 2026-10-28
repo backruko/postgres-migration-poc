@@ -1639,21 +1639,32 @@ export interface components {
             event_date: string;
             /**
              * Rule Date
-             * @description generated markers: the rule date this date came from
+             * @description the rule date this date came from (kept after a rule is stopped)
              */
             rule_date?: string | null;
             /**
+             * Original Date
+             * @description the imported / rule date before a person moved or cancelled it (null for dates a person added)
+             */
+            original_date?: string | null;
+            /**
              * Is Manual
-             * @description edited, added or cancelled by a person (kept on regeneration)
+             * @description edited, added or cancelled by a person (kept on regeneration and re-import)
              * @default false
              */
             is_manual: boolean;
             /**
              * Is Cancelled
-             * @description a generated date cancelled by a person
+             * @description cancelled by a person; kept as a record so it does not come back
              * @default false
              */
             is_cancelled: boolean;
+            /**
+             * Revertable
+             * @description the current rule can put this slot back on a free date from today on (see /revert)
+             * @default false
+             */
+            revertable: boolean;
         };
         /** ReferenceSheetEventUpdate */
         ReferenceSheetEventUpdate: {

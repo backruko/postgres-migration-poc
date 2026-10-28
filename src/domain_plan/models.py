@@ -223,13 +223,17 @@ class ReferenceSheetEvent(Base):
     )
     event_date: Mapped[date] = mapped_column(Date, nullable=False)
 
-    # --- 生成マーカー用 ---
+    # --- 出どころと人の判断（監査のため、生成をやめた後も消さない） ---
+    # 出どころ: rule_date あり = ルール、なし かつ original_date あり / is_manual なし = 取り込み、どちらもなし かつ is_manual = 人が追加
     rule_date: Mapped[date | None] = mapped_column(Date, comment="生成元のルール上の日付（発生枠の識別子）")
+    original_date: Mapped[date | None] = mapped_column(
+        Date, comment="人が変更・取消する前の日付（取り込み・ルール由来の日付のみ。人が追加した日付は NULL）"
+    )
     is_manual: Mapped[bool] = mapped_column(
-        default=False, server_default=text("false"), comment="人が編集・追加・取消した日付（再生成で上書きしない）"
+        default=False, server_default=text("false"), comment="人が編集・追加・取消した日付（再生成・再取り込みで上書きしない）"
     )
     is_cancelled: Mapped[bool] = mapped_column(
-        default=False, server_default=text("false"), comment="人が取り消した生成日（再生成で復活させないための記録）"
+        default=False, server_default=text("false"), comment="人が取り消した日付（再生成・再取り込みで復活させないための記録）"
     )
 
     marker_def: Mapped["ReferenceSheetMarker"] = relationship(back_populates="events")
@@ -243,7 +247,7 @@ class ReferenceSheetEvent(Base):
             "uq_reference_sheet_event_rule_date", "marker_id", "rule_date",
             unique=True, postgresql_where=text("rule_date IS NOT NULL"),
         ),
-        CheckConstraint("NOT is_cancelled OR (is_manual AND rule_date IS NOT NULL)", name="ck_reference_sheet_event_cancel"),
+        CheckConstraint("NOT is_cancelled OR is_manual", name="ck_reference_sheet_event_cancel"),
     )
 
 

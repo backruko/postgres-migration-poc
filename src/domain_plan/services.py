@@ -90,6 +90,24 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# 年間計画シートの日付は顧客の現地の日付。シートにタイムゾーンは無いため、日本の日付で「今日」を判定する
+SHEET_TIMEZONE = ZoneInfo("Asia/Tokyo")
+
+
+def _sheet_today() -> date:
+    """シートの日付の「今日」。これより前の日付は実際に行った業務の記録（実績）として、人の操作でも再生成でも変えない"""
+    return _now().astimezone(SHEET_TIMEZONE).date()
+
+
+def _check_not_past(dates: list[date], action: str) -> None:
+    today = _sheet_today()
+    past = sorted(d for d in dates if d < today)
+    if past:
+        raise BadRequestError(
+            f"Cannot {action} dates before today ({today}): {[d.isoformat() for d in past]}. Past dates are the operating record."
+        )
+
+
 # ==========================================
 # 生成エンジン（内部処理）
 # ==========================================
@@ -384,19 +402,23 @@ def create_sheet(db: Session, sheet_in: ReferenceSheetCreate) -> ReferenceSheet:
     return sheet
 
 
-def get_sheet(db: Session, sheet_id: int) -> ReferenceSheet:
+def _get_sheet(db: Session, sheet_id: int) -> ReferenceSheet:
     sheet = reference_sheet_repo.get(db, id=sheet_id)
     if not sheet:
         raise NotFoundError(f"ReferenceSheet(id={sheet_id}) not found.")
     return sheet
 
 
+def get_sheet(db: Session, sheet_id: int) -> ReferenceSheet:
+    return _annotate_sheet(db, _get_sheet(db, sheet_id))
+
+
 def get_sheets(db: Session, client_code: str) -> list[ReferenceSheet]:
-    return reference_sheet_repo.get_by_client(db, client_code=client_code)
+    return [_annotate_sheet(db, s) for s in reference_sheet_repo.get_by_client(db, client_code=client_code)]
 
 
 def add_marker(db: Session, sheet_id: int, marker_in: ReferenceSheetMarkerCreate) -> ReferenceSheet:
-    sheet = get_sheet(db, sheet_id)
+    sheet = _get_sheet(db, sheet_id)
     if reference_sheet_repo.get_marker(db, sheet_id=sheet_id, marker=marker_in.marker):
         raise DuplicatedRecordError(f"Marker '{marker_in.marker}' already exists on this sheet.")
 
@@ -408,7 +430,7 @@ def add_marker(db: Session, sheet_id: int, marker_in: ReferenceSheetMarkerCreate
         _generate_marker_events(db, marker)
     _commit(db, f"Marker '{marker_in.marker}' already exists on this sheet.")
     db.refresh(sheet)
-    return sheet
+    return _annotate_sheet(db, sheet)
 
 
 # ==========================================
@@ -432,6 +454,8 @@ def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
     人の判断が常に優先されます:
     - 人が編集・取消した日付（is_manual）は変更しない。その発生枠をルールで作り直すこともしない
     - 人が置いた日付と同じ日には、ルールの日付を置かない
+    今日より前の日付は実績のため変えません（ルール・カレンダーを変えても、過去の日付の追加・移動・削除はしない）。
+    ただし新しいマーカーの最初の生成では、シートの期間全体（過去も含む）を作ります。
     ルールの日付は rule_date（発生枠）で照合するため、日付が動いても同じ行（id）が更新され、
     参照しているテンプレート側の手動変更もそのまま維持されます。
     """
@@ -451,6 +475,8 @@ def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
     except engine.CalendarError as e:
         raise BadRequestError(f"Marker '{marker.marker}': {e}")
 
+    first_run = not marker.events
+    today = _sheet_today()
     by_rule_date = {e.rule_date: e for e in marker.events if e.rule_date is not None}
     human_dates = {e.event_date for e in marker.events if e.is_manual}
 
@@ -461,10 +487,14 @@ def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
             continue
         if rd.actual_date in human_dates:
             continue
+        if not first_run and (rd.actual_date < today or (current is not None and current.event_date < today)):
+            continue  # 過去（実績）は作らない・動かさない
         targets[rd.rule_date] = rd.actual_date
 
     changed = False
     for event in list(marker.events):
+        if not first_run and event.event_date < today:
+            continue  # 過去（実績）は消さない
         if not event.is_manual and event.rule_date is not None and event.rule_date not in targets:
             marker.events.remove(event)  # delete-orphan により削除
             changed = True
@@ -480,13 +510,54 @@ def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
     return changed
 
 
+def _annotate_revertable(db: Session, marker: ReferenceSheetMarker) -> ReferenceSheetMarker:
+    """
+    各日付に revertable（「ルールに戻す」が通るか）を付けます（レスポンス用。DB には保存しない）。
+    revert_sheet_event と同じ条件: 生成マーカーの、人が変更・取消したルール由来の日付で、
+    今のルールがその発生枠を作り、その日が他の人の日付と重ならず、戻した後の日付も今日以降であること。
+    """
+    for e in marker.events:
+        e.revertable = False  # type: ignore[attr-defined]
+    if not marker.is_generated or not any(e.is_manual and e.rule_date is not None for e in marker.events):
+        return marker
+    assert marker.rrule is not None and marker.anchor_date is not None
+    try:
+        desired = {
+            rd.rule_date: rd.actual_date
+            for rd in engine.expand_rule_dates(
+                rrule=marker.rrule,
+                anchor_date=marker.anchor_date,
+                period_start=marker.sheet.period_start,
+                period_end=marker.sheet.period_end,
+                calendar=_load_engine_calendar(db, marker.business_calendar_id),
+                holiday_policy=marker.holiday_policy,
+            )
+        }
+    except engine.CalendarError:
+        return marker
+    today = _sheet_today()
+    for e in marker.events:
+        if not e.is_manual or e.rule_date is None or e.event_date < today:
+            continue
+        actual = desired.get(e.rule_date)
+        others = {x.event_date for x in marker.events if x.is_manual and x is not e}
+        e.revertable = actual is not None and actual >= today and actual not in others  # type: ignore[attr-defined]
+    return marker
+
+
+def _annotate_sheet(db: Session, sheet: ReferenceSheet) -> ReferenceSheet:
+    for m in sheet.markers:
+        _annotate_revertable(db, m)
+    return sheet
+
+
 def _regenerate_sheet_markers(db: Session, sheet: ReferenceSheet) -> list[str]:
     """シートの全生成マーカーを再生成し、日付が変わったマーカー名を返します（シート期間の変更時など）"""
     return [m.marker for m in sheet.markers if _generate_marker_events(db, m)]
 
 
 def update_marker(db: Session, sheet_id: int, marker: str, marker_in: ReferenceSheetMarkerUpdate) -> ReferenceSheetMarker:
-    get_sheet(db, sheet_id)
+    _get_sheet(db, sheet_id)
     marker_obj = reference_sheet_repo.get_marker(db, sheet_id=sheet_id, marker=marker)
     if not marker_obj:
         raise NotFoundError(f"Marker '{marker}' not found on ReferenceSheet(id={sheet_id}).")
@@ -497,13 +568,8 @@ def update_marker(db: Session, sheet_id: int, marker: str, marker_in: ReferenceS
     changed = False
     if "rule" in marker_in.model_fields_set:
         if marker_in.rule is None:
-            # 生成をやめる: 取消の記録は削除し、残りは通常の（取り込みと同じ扱いの）日付にする
-            for event in list(marker_obj.events):
-                if event.is_cancelled:
-                    marker_obj.events.remove(event)
-                else:
-                    event.rule_date = None
-                    event.is_manual = False
+            # 生成をやめる: 日付はそのまま残し、以後ルールで作り直さない。
+            # 出どころ（rule_date）・人の判断（is_manual）・取消の記録は監査のため消さない
             _apply_marker_rule(db, marker_obj, None)
         else:
             _apply_marker_rule(db, marker_obj, marker_in.rule)
@@ -514,7 +580,7 @@ def update_marker(db: Session, sheet_id: int, marker: str, marker_in: ReferenceS
         _propagate_sheet_change(db, sheet_id, marker)
     _commit(db, "Marker dates conflict with each other.")
     db.refresh(marker_obj)
-    return marker_obj
+    return _annotate_revertable(db, marker_obj)
 
 
 def import_sheet(db: Session, import_in: ReferenceSheetImport, replace_events: bool = False) -> ReferenceSheetImportResult:
@@ -590,8 +656,13 @@ def import_sheet(db: Session, import_in: ReferenceSheetImport, replace_events: b
         if name not in wanted and not replace_events:
             continue
         current = {e.event_date: e for e in marker_obj.events}
-        to_add = sorted(wanted[name] - current.keys())
-        to_delete = [current[d] for d in current.keys() - wanted[name]] if replace_events else []
+        # 人が動かした・取り消した日付（元の日付）はファイルにあっても追加し直さない（人の判断が優先）
+        decided = {e.original_date for e in marker_obj.events if e.is_manual and e.original_date is not None}
+        to_add = sorted(wanted[name] - current.keys() - decided)
+        # replace_events でも、人が変更・追加・取消した日付は消さない（監査の記録）
+        to_delete = (
+            [e for d, e in current.items() if d not in wanted[name] and not e.is_manual] if replace_events else []
+        )
         for d in to_add:
             marker_obj.events.append(ReferenceSheetEvent(event_date=d))
         for event in to_delete:
@@ -628,7 +699,7 @@ def import_sheet(db: Session, import_in: ReferenceSheetImport, replace_events: b
         events_created=events_created,
         events_deleted=events_deleted,
         templates_regenerated=templates_regenerated,
-        sheet=ReferenceSheetResponse.model_validate(sheet),
+        sheet=ReferenceSheetResponse.model_validate(_annotate_sheet(db, sheet)),
     )
 
 
@@ -652,27 +723,32 @@ def _propagate_sheet_change(db: Session, sheet_id: int, marker: str) -> int:
 def add_sheet_events(
     db: Session, sheet_id: int, marker: str, events_in: ReferenceSheetEventsCreate
 ) -> ReferenceSheetMarker:
-    sheet = get_sheet(db, sheet_id)
+    sheet = _get_sheet(db, sheet_id)
     marker_obj = reference_sheet_repo.get_marker(db, sheet_id=sheet_id, marker=marker)
     if not marker_obj:
         raise NotFoundError(f"Marker '{marker}' not found on ReferenceSheet(id={sheet_id}).")
     _check_in_sheet_period(sheet, events_in.dates)
+    _check_not_past(events_in.dates, "add")
 
     existing = {e.event_date: e for e in marker_obj.events}
     new_dates = sorted(set(events_in.dates) - existing.keys())
-    # 生成マーカーで取り消した日付を再度追加した場合は、取消を解除する（人の判断のまま）
+    # 取り消した日付を再度追加した場合は、取消を解除する
     reactivated = [existing[d] for d in set(events_in.dates) if d in existing and existing[d].is_cancelled]
     if new_dates or reactivated:
         for d in new_dates:
-            # 生成マーカーへの追加は人の判断（再生成で消さない）
-            marker_obj.events.append(ReferenceSheetEvent(event_date=d, is_manual=marker_obj.is_generated))
+            # 人が追加した日付（出どころの日付は無い。再生成・再取り込みで消さない）
+            marker_obj.events.append(ReferenceSheetEvent(event_date=d, is_manual=True))
         for event in reactivated:
             event.is_cancelled = False
+            if event.rule_date is None and event.original_date == event.event_date:
+                # 取り込んだ日付の取消を、同じ日付のまま元に戻した: 取り込んだままの日付に戻る
+                event.is_manual = False
+                event.original_date = None
         db.flush()
         _propagate_sheet_change(db, sheet_id, marker)
         _commit(db, "Some dates already exist for this marker.")
         db.refresh(marker_obj)
-    return marker_obj
+    return _annotate_revertable(db, marker_obj)
 
 
 def update_sheet_event(db: Session, event_id: int, event_in: ReferenceSheetEventUpdate) -> ReferenceSheetEvent:
@@ -683,11 +759,13 @@ def update_sheet_event(db: Session, event_id: int, event_in: ReferenceSheetEvent
     if event.is_cancelled:
         raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) has been cancelled. Revert it or add the date again.")
     _check_in_sheet_period(marker_obj.sheet, [event_in.event_date])
+    _check_not_past([event.event_date, event_in.event_date], "move")
 
     if event.event_date != event_in.event_date:
+        if event.original_date is None and (event.rule_date is not None or not event.is_manual):
+            event.original_date = event.event_date  # 取り込み・ルール由来の日付を初めて動かす: 元の日付を残す
         event.event_date = event_in.event_date
-        if marker_obj.is_generated:
-            event.is_manual = True  # 人の編集は再生成で上書きしない
+        event.is_manual = True  # 人の編集は再生成・再取り込みで上書きしない
         try:
             db.flush()
         except IntegrityError:
@@ -696,6 +774,7 @@ def update_sheet_event(db: Session, event_id: int, event_in: ReferenceSheetEvent
         _propagate_sheet_change(db, marker_obj.sheet_id, marker_obj.marker)
         _commit(db, f"Date {event_in.event_date} already exists for this marker.")
         db.refresh(event)
+    _annotate_revertable(db, marker_obj)
     return event
 
 
@@ -703,17 +782,24 @@ def delete_sheet_event(db: Session, event_id: int) -> ReferenceSheetEventRespons
     event = reference_sheet_repo.get_event(db, event_id=event_id)
     if not event:
         raise NotFoundError(f"ReferenceSheetEvent(id={event_id}) not found.")
-    sheet_id, marker = event.marker_def.sheet_id, event.marker_def.marker
+    marker_obj = event.marker_def
+    sheet_id, marker = marker_obj.sheet_id, marker_obj.marker
+    if event.is_cancelled:
+        raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) is already cancelled.")
+    _check_not_past([event.event_date], "delete")
 
-    if event.rule_date is not None:
-        # ルール由来の日付は、再生成で復活しないよう「取消」として記録を残す
-        if event.is_cancelled:
-            raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) is already cancelled.")
+    added_by_person = event.rule_date is None and event.original_date is None and event.is_manual
+    if not added_by_person:
+        # ルール・取り込み由来の日付は、出どころを残して「取消」として記録する（再生成・再取り込みでも復活しない）
+        if event.original_date is None:
+            event.original_date = event.event_date
         event.is_cancelled = True
         event.is_manual = True
         db.flush()
+        _annotate_revertable(db, marker_obj)
         result = ReferenceSheetEventResponse.model_validate(event)
     else:
+        # 人が追加した日付は出どころが無いため削除する（記録を残すと、その日にルールの日付を置けなくなる）
         result = ReferenceSheetEventResponse.model_validate(event)
         db.delete(event)
         db.flush()
@@ -732,12 +818,14 @@ def revert_sheet_event(db: Session, event_id: int) -> ReferenceSheetEvent:
         raise BadRequestError("Only dates generated from a marker rule can be reverted. Delete manually added dates instead.")
     if not event.is_manual:
         raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) has not been edited or cancelled.")
+    _check_not_past([event.event_date], "revert")
 
     event.is_manual = False
     event.is_cancelled = False
+    event.original_date = None
     db.flush()
     _generate_marker_events(db, marker_obj)
-    if event not in marker_obj.events:
+    if event not in marker_obj.events or event.event_date < _sheet_today():
         # ルールがこの発生枠をもう作らない、またはその日に人が置いた日付があるため、戻すと日付が消えてしまう
         db.rollback()
         raise BadRequestError(
@@ -746,6 +834,7 @@ def revert_sheet_event(db: Session, event_id: int) -> ReferenceSheetEvent:
     _propagate_sheet_change(db, marker_obj.sheet_id, marker_obj.marker)
     _commit(db, "Marker dates conflict with each other.")
     db.refresh(event)
+    _annotate_revertable(db, marker_obj)
     return event
 
 

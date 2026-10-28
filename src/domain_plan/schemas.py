@@ -189,9 +189,15 @@ class ReferenceSheetEventUpdate(BaseModel):
 class ReferenceSheetEventResponse(BaseModel):
     id: int
     event_date: date
-    rule_date: date | None = Field(default=None, description="generated markers: the rule date this date came from")
-    is_manual: bool = Field(default=False, description="edited, added or cancelled by a person (kept on regeneration)")
-    is_cancelled: bool = Field(default=False, description="a generated date cancelled by a person")
+    rule_date: date | None = Field(default=None, description="the rule date this date came from (kept after a rule is stopped)")
+    original_date: date | None = Field(
+        default=None, description="the imported / rule date before a person moved or cancelled it (null for dates a person added)"
+    )
+    is_manual: bool = Field(default=False, description="edited, added or cancelled by a person (kept on regeneration and re-import)")
+    is_cancelled: bool = Field(default=False, description="cancelled by a person; kept as a record so it does not come back")
+    revertable: bool = Field(
+        default=False, description="the current rule can put this slot back on a free date from today on (see /revert)"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
