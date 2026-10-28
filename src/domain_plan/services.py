@@ -67,6 +67,7 @@ from src.domain_plan.schemas import (
     ReferenceSheetMarkerUpdate,
     ReferenceSheetResponse,
     ReferenceSheetTemplateCreate,
+    TemplateExtensionResult,
     ui_metadata_to_dict,
 )
 from src.core.error_codes import ErrorCode
@@ -88,6 +89,27 @@ NULLABLE_UPDATE_FIELDS = {"business_calendar_id"}
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# シートの日付・休日は顧客の現地の日付。どちらにもタイムゾーンは無いため、日本の日付で「今日」を判定する
+LOCAL_TIMEZONE = ZoneInfo("Asia/Tokyo")
+
+
+def _local_today() -> date:
+    """
+    シートの日付・休日の「今日」。これより前の日付は実際に行った業務の記録（実績）として、
+    人の操作でも再生成でも変えない（過去の休日を変えると、過去の月の表示が実際と食い違うため）
+    """
+    return _now().astimezone(LOCAL_TIMEZONE).date()
+
+
+def _check_not_past(dates: list[date], action: str) -> None:
+    today = _local_today()
+    past = sorted(d for d in dates if d < today)
+    if past:
+        raise BadRequestError(
+            f"Cannot {action} dates before today ({today}): {[d.isoformat() for d in past]}. Past dates are the operating record."
+        )
 
 
 # ==========================================
@@ -263,6 +285,62 @@ def _regenerate(db: Session, template: PlanTemplate, reason: VoidReason) -> None
     template.revision += 1
     if template.materialized_until is not None:
         _reconcile(db, template, _now(), template.materialized_until, reason)
+    _ensure_next_occurrence(db, template)
+
+
+def _ensure_next_occurrence(db: Session, template: PlanTemplate) -> bool:
+    """
+    生成済み区間を「今から MATERIALIZE_HORIZON 先」と「次の予定」の遅い方まで延ばします（上限 MAX_LOOKAHEAD）。
+    年1回の業務のように次の予定がホライズンより先でも、次の予定が常に生成済み（ダッシュボード等から見える）になります。
+    戻り値: 生成済み区間を延ばしたか
+    """
+    now = _now()
+    cap = now + MAX_LOOKAHEAD
+    before = template.materialized_until
+    # 日単位（UTC の翌0時）に切り上げる。同じ日に何度実行しても区間が動かない（日次ジョブの「延ばした数」が意味を持つ）
+    horizon = datetime.combine((now + MATERIALIZE_HORIZON).date() + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+    _ensure_materialized(db, template, horizon)
+    while not plan_cache_repo.next_starts(db, template_ids=[template.id], after=now):
+        lower = template.materialized_until or now
+        if lower >= cap:
+            break
+        upcoming = _expand(db, template, lower, cap)
+        if not upcoming:
+            break
+        # 次の発生日時を含むところまで生成する（手動で取り消された枠だった場合は、さらに次を探す）
+        _ensure_materialized(db, template, min(min(o.start for o in upcoming) + timedelta(days=1), cap))
+    return template.materialized_until != before
+
+
+def _with_next_occurrence(db: Session, templates: list[PlanTemplate]) -> list[PlanTemplate]:
+    """各テンプレートに next_occurrence_at（次の有効な予定の開始日時）を付けます（レスポンス用。DB には保存しない）。"""
+    next_starts = plan_cache_repo.next_starts(db, template_ids=[t.id for t in templates], after=_now())
+    for t in templates:
+        t.next_occurrence_at = next_starts.get(t.id)  # type: ignore[attr-defined]
+    return templates
+
+
+def extend_all_templates(db: Session) -> TemplateExtensionResult:
+    """
+    日次の生成ジョブ（scripts/extend_plans.py から1日1回実行）。全顧客の有効なテンプレートについて、
+    生成済み区間を「今から MATERIALIZE_HORIZON 先」と「次の予定」の遅い方まで延ばします。何度実行しても同じ結果になります。
+    テンプレートごとにコミットし、行ロックを短く保ちます。
+    """
+    template_ids = [t.id for t in plan_template_repo.get_all(db)]
+    extended = 0
+    without_upcoming = []
+    for template_id in template_ids:
+        template = plan_template_repo.get_locked(db, id=template_id)
+        if template is None:
+            continue  # 実行中に削除された
+        if _ensure_next_occurrence(db, template):
+            extended += 1
+        if not plan_cache_repo.next_starts(db, template_ids=[template.id], after=_now()):
+            without_upcoming.append(template.id)
+        _commit(db, f"Occurrences of PlanTemplate(id={template_id}) could not be generated due to a conflicting record.")
+    return TemplateExtensionResult(
+        templates_checked=len(template_ids), templates_extended=extended, without_upcoming=without_upcoming
+    )
 
 
 def _commit(db: Session, message: str) -> None:
@@ -336,7 +414,11 @@ def get_holidays(db: Session, calendar_id: int, year: int | None = None) -> list
 
 
 def add_holidays(db: Session, calendar_id: int, holidays_in: HolidaysAdd) -> CalendarChangeResult:
-    """休日を一括登録します（登録済みの日付は名前のみ更新）。日付が増えた場合は使用中のテンプレートへ反映します。"""
+    """
+    休日を一括登録します（登録済みの日付は名前のみ更新）。日付が増えた場合は使用中のテンプレートへ反映します。
+    今日より前の日付は追加も名前の変更もできません（実績のため）。
+    """
+    _check_not_past([h.holiday_date for h in holidays_in.holidays], "add or rename holidays on")
     calendar = get_calendar(db, calendar_id)
     existing = {h.holiday_date: h for h in calendar.holidays}
 
@@ -358,7 +440,9 @@ def add_holidays(db: Session, calendar_id: int, holidays_in: HolidaysAdd) -> Cal
 
 
 def delete_holiday(db: Session, calendar_id: int, holiday_date: date) -> CalendarChangeResult:
+    """休日を削除します（その日は営業日に戻ります）。今日より前の休日は削除できません（実績のため）。"""
     calendar = get_calendar(db, calendar_id)
+    _check_not_past([holiday_date], "delete holidays on")
     target = next((h for h in calendar.holidays if h.holiday_date == holiday_date), None)
     if target is None:
         raise NotFoundError(f"Holiday {holiday_date} not found in BusinessCalendar(id={calendar_id}).")
@@ -384,19 +468,23 @@ def create_sheet(db: Session, sheet_in: ReferenceSheetCreate) -> ReferenceSheet:
     return sheet
 
 
-def get_sheet(db: Session, sheet_id: int) -> ReferenceSheet:
+def _get_sheet(db: Session, sheet_id: int) -> ReferenceSheet:
     sheet = reference_sheet_repo.get(db, id=sheet_id)
     if not sheet:
         raise NotFoundError(f"ReferenceSheet(id={sheet_id}) not found.")
     return sheet
 
 
+def get_sheet(db: Session, sheet_id: int) -> ReferenceSheet:
+    return _annotate_sheet(db, _get_sheet(db, sheet_id))
+
+
 def get_sheets(db: Session, client_code: str) -> list[ReferenceSheet]:
-    return reference_sheet_repo.get_by_client(db, client_code=client_code)
+    return [_annotate_sheet(db, s) for s in reference_sheet_repo.get_by_client(db, client_code=client_code)]
 
 
 def add_marker(db: Session, sheet_id: int, marker_in: ReferenceSheetMarkerCreate) -> ReferenceSheet:
-    sheet = get_sheet(db, sheet_id)
+    sheet = _get_sheet(db, sheet_id)
     if reference_sheet_repo.get_marker(db, sheet_id=sheet_id, marker=marker_in.marker):
         raise DuplicatedRecordError(f"Marker '{marker_in.marker}' already exists on this sheet.")
 
@@ -408,7 +496,7 @@ def add_marker(db: Session, sheet_id: int, marker_in: ReferenceSheetMarkerCreate
         _generate_marker_events(db, marker)
     _commit(db, f"Marker '{marker_in.marker}' already exists on this sheet.")
     db.refresh(sheet)
-    return sheet
+    return _annotate_sheet(db, sheet)
 
 
 # ==========================================
@@ -432,6 +520,8 @@ def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
     人の判断が常に優先されます:
     - 人が編集・取消した日付（is_manual）は変更しない。その発生枠をルールで作り直すこともしない
     - 人が置いた日付と同じ日には、ルールの日付を置かない
+    今日より前の日付は実績のため変えません（ルール・カレンダーを変えても、過去の日付の追加・移動・削除はしない）。
+    ただし新しいマーカーの最初の生成では、シートの期間全体（過去も含む）を作ります。
     ルールの日付は rule_date（発生枠）で照合するため、日付が動いても同じ行（id）が更新され、
     参照しているテンプレート側の手動変更もそのまま維持されます。
     """
@@ -451,6 +541,8 @@ def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
     except engine.CalendarError as e:
         raise BadRequestError(f"Marker '{marker.marker}': {e}")
 
+    first_run = not marker.events
+    today = _local_today()
     by_rule_date = {e.rule_date: e for e in marker.events if e.rule_date is not None}
     human_dates = {e.event_date for e in marker.events if e.is_manual}
 
@@ -461,10 +553,14 @@ def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
             continue
         if rd.actual_date in human_dates:
             continue
+        if not first_run and (rd.actual_date < today or (current is not None and current.event_date < today)):
+            continue  # 過去（実績）は作らない・動かさない
         targets[rd.rule_date] = rd.actual_date
 
     changed = False
     for event in list(marker.events):
+        if not first_run and event.event_date < today:
+            continue  # 過去（実績）は消さない
         if not event.is_manual and event.rule_date is not None and event.rule_date not in targets:
             marker.events.remove(event)  # delete-orphan により削除
             changed = True
@@ -480,13 +576,54 @@ def _generate_marker_events(db: Session, marker: ReferenceSheetMarker) -> bool:
     return changed
 
 
+def _annotate_revertable(db: Session, marker: ReferenceSheetMarker) -> ReferenceSheetMarker:
+    """
+    各日付に revertable（「ルールに戻す」が通るか）を付けます（レスポンス用。DB には保存しない）。
+    revert_sheet_event と同じ条件: 生成マーカーの、人が変更・取消したルール由来の日付で、
+    今のルールがその発生枠を作り、その日が他の人の日付と重ならず、戻した後の日付も今日以降であること。
+    """
+    for e in marker.events:
+        e.revertable = False  # type: ignore[attr-defined]
+    if not marker.is_generated or not any(e.is_manual and e.rule_date is not None for e in marker.events):
+        return marker
+    assert marker.rrule is not None and marker.anchor_date is not None
+    try:
+        desired = {
+            rd.rule_date: rd.actual_date
+            for rd in engine.expand_rule_dates(
+                rrule=marker.rrule,
+                anchor_date=marker.anchor_date,
+                period_start=marker.sheet.period_start,
+                period_end=marker.sheet.period_end,
+                calendar=_load_engine_calendar(db, marker.business_calendar_id),
+                holiday_policy=marker.holiday_policy,
+            )
+        }
+    except engine.CalendarError:
+        return marker
+    today = _local_today()
+    for e in marker.events:
+        if not e.is_manual or e.rule_date is None or e.event_date < today:
+            continue
+        actual = desired.get(e.rule_date)
+        others = {x.event_date for x in marker.events if x.is_manual and x is not e}
+        e.revertable = actual is not None and actual >= today and actual not in others  # type: ignore[attr-defined]
+    return marker
+
+
+def _annotate_sheet(db: Session, sheet: ReferenceSheet) -> ReferenceSheet:
+    for m in sheet.markers:
+        _annotate_revertable(db, m)
+    return sheet
+
+
 def _regenerate_sheet_markers(db: Session, sheet: ReferenceSheet) -> list[str]:
     """シートの全生成マーカーを再生成し、日付が変わったマーカー名を返します（シート期間の変更時など）"""
     return [m.marker for m in sheet.markers if _generate_marker_events(db, m)]
 
 
 def update_marker(db: Session, sheet_id: int, marker: str, marker_in: ReferenceSheetMarkerUpdate) -> ReferenceSheetMarker:
-    get_sheet(db, sheet_id)
+    _get_sheet(db, sheet_id)
     marker_obj = reference_sheet_repo.get_marker(db, sheet_id=sheet_id, marker=marker)
     if not marker_obj:
         raise NotFoundError(f"Marker '{marker}' not found on ReferenceSheet(id={sheet_id}).")
@@ -497,14 +634,15 @@ def update_marker(db: Session, sheet_id: int, marker: str, marker_in: ReferenceS
     changed = False
     if "rule" in marker_in.model_fields_set:
         if marker_in.rule is None:
-            # 生成をやめる: 取消の記録は削除し、残りは通常の（取り込みと同じ扱いの）日付にする
-            for event in list(marker_obj.events):
-                if event.is_cancelled:
-                    marker_obj.events.remove(event)
-                else:
-                    event.rule_date = None
-                    event.is_manual = False
+            # 生成をやめる: 以後ルールで作り直さない。
+            # 出どころ（rule_date）・人の判断（is_manual）・取消の記録は監査のため消さない
             _apply_marker_rule(db, marker_obj, None)
+            if marker_in.cancel_future_dates:
+                # 業務が終わった場合: 今日以降の日付をすべて取り消す（過去は実績のため残す）。1トランザクションで反映する
+                today = _local_today()
+                for event in [e for e in marker_obj.events if e.event_date >= today and not e.is_cancelled]:
+                    _cancel_sheet_event(db, marker_obj, event)
+                    changed = True
         else:
             _apply_marker_rule(db, marker_obj, marker_in.rule)
             db.flush()
@@ -514,7 +652,7 @@ def update_marker(db: Session, sheet_id: int, marker: str, marker_in: ReferenceS
         _propagate_sheet_change(db, sheet_id, marker)
     _commit(db, "Marker dates conflict with each other.")
     db.refresh(marker_obj)
-    return marker_obj
+    return _annotate_revertable(db, marker_obj)
 
 
 def import_sheet(db: Session, import_in: ReferenceSheetImport, replace_events: bool = False) -> ReferenceSheetImportResult:
@@ -590,8 +728,13 @@ def import_sheet(db: Session, import_in: ReferenceSheetImport, replace_events: b
         if name not in wanted and not replace_events:
             continue
         current = {e.event_date: e for e in marker_obj.events}
-        to_add = sorted(wanted[name] - current.keys())
-        to_delete = [current[d] for d in current.keys() - wanted[name]] if replace_events else []
+        # 人が動かした・取り消した日付（元の日付）はファイルにあっても追加し直さない（人の判断が優先）
+        decided = {e.original_date for e in marker_obj.events if e.is_manual and e.original_date is not None}
+        to_add = sorted(wanted[name] - current.keys() - decided)
+        # replace_events でも、人が変更・追加・取消した日付は消さない（監査の記録）
+        to_delete = (
+            [e for d, e in current.items() if d not in wanted[name] and not e.is_manual] if replace_events else []
+        )
         for d in to_add:
             marker_obj.events.append(ReferenceSheetEvent(event_date=d))
         for event in to_delete:
@@ -628,7 +771,7 @@ def import_sheet(db: Session, import_in: ReferenceSheetImport, replace_events: b
         events_created=events_created,
         events_deleted=events_deleted,
         templates_regenerated=templates_regenerated,
-        sheet=ReferenceSheetResponse.model_validate(sheet),
+        sheet=ReferenceSheetResponse.model_validate(_annotate_sheet(db, sheet)),
     )
 
 
@@ -652,27 +795,32 @@ def _propagate_sheet_change(db: Session, sheet_id: int, marker: str) -> int:
 def add_sheet_events(
     db: Session, sheet_id: int, marker: str, events_in: ReferenceSheetEventsCreate
 ) -> ReferenceSheetMarker:
-    sheet = get_sheet(db, sheet_id)
+    sheet = _get_sheet(db, sheet_id)
     marker_obj = reference_sheet_repo.get_marker(db, sheet_id=sheet_id, marker=marker)
     if not marker_obj:
         raise NotFoundError(f"Marker '{marker}' not found on ReferenceSheet(id={sheet_id}).")
     _check_in_sheet_period(sheet, events_in.dates)
+    _check_not_past(events_in.dates, "add")
 
     existing = {e.event_date: e for e in marker_obj.events}
     new_dates = sorted(set(events_in.dates) - existing.keys())
-    # 生成マーカーで取り消した日付を再度追加した場合は、取消を解除する（人の判断のまま）
+    # 取り消した日付を再度追加した場合は、取消を解除する
     reactivated = [existing[d] for d in set(events_in.dates) if d in existing and existing[d].is_cancelled]
     if new_dates or reactivated:
         for d in new_dates:
-            # 生成マーカーへの追加は人の判断（再生成で消さない）
-            marker_obj.events.append(ReferenceSheetEvent(event_date=d, is_manual=marker_obj.is_generated))
+            # 人が追加した日付（出どころの日付は無い。再生成・再取り込みで消さない）
+            marker_obj.events.append(ReferenceSheetEvent(event_date=d, is_manual=True))
         for event in reactivated:
             event.is_cancelled = False
+            if event.rule_date is None and event.original_date == event.event_date:
+                # 取り込んだ日付の取消を、同じ日付のまま元に戻した: 取り込んだままの日付に戻る
+                event.is_manual = False
+                event.original_date = None
         db.flush()
         _propagate_sheet_change(db, sheet_id, marker)
         _commit(db, "Some dates already exist for this marker.")
         db.refresh(marker_obj)
-    return marker_obj
+    return _annotate_revertable(db, marker_obj)
 
 
 def update_sheet_event(db: Session, event_id: int, event_in: ReferenceSheetEventUpdate) -> ReferenceSheetEvent:
@@ -683,11 +831,13 @@ def update_sheet_event(db: Session, event_id: int, event_in: ReferenceSheetEvent
     if event.is_cancelled:
         raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) has been cancelled. Revert it or add the date again.")
     _check_in_sheet_period(marker_obj.sheet, [event_in.event_date])
+    _check_not_past([event.event_date, event_in.event_date], "move")
 
     if event.event_date != event_in.event_date:
+        if event.original_date is None and (event.rule_date is not None or not event.is_manual):
+            event.original_date = event.event_date  # 取り込み・ルール由来の日付を初めて動かす: 元の日付を残す
         event.event_date = event_in.event_date
-        if marker_obj.is_generated:
-            event.is_manual = True  # 人の編集は再生成で上書きしない
+        event.is_manual = True  # 人の編集は再生成・再取り込みで上書きしない
         try:
             db.flush()
         except IntegrityError:
@@ -696,27 +846,43 @@ def update_sheet_event(db: Session, event_id: int, event_in: ReferenceSheetEvent
         _propagate_sheet_change(db, marker_obj.sheet_id, marker_obj.marker)
         _commit(db, f"Date {event_in.event_date} already exists for this marker.")
         db.refresh(event)
+    _annotate_revertable(db, marker_obj)
     return event
+
+
+def _cancel_sheet_event(db: Session, marker_obj: ReferenceSheetMarker, event: ReferenceSheetEvent) -> bool:
+    """
+    日付を取り消します（flush 済み）。物理削除した場合は True を返します。
+    - ルール・取り込み由来の日付: 出どころを残して「取消」として記録する（再生成・再取り込みでも復活しない）
+    - 人が追加した日付: 出どころが無いため削除する（記録を残すと、その日にルールの日付を置けなくなる）
+    """
+    if event.rule_date is None and event.original_date is None and event.is_manual:
+        marker_obj.events.remove(event)  # delete-orphan により削除
+        db.flush()
+        return True
+    if event.original_date is None:
+        event.original_date = event.event_date
+    event.is_cancelled = True
+    event.is_manual = True
+    db.flush()
+    return False
 
 
 def delete_sheet_event(db: Session, event_id: int) -> ReferenceSheetEventResponse:
     event = reference_sheet_repo.get_event(db, event_id=event_id)
     if not event:
         raise NotFoundError(f"ReferenceSheetEvent(id={event_id}) not found.")
-    sheet_id, marker = event.marker_def.sheet_id, event.marker_def.marker
+    marker_obj = event.marker_def
+    sheet_id, marker = marker_obj.sheet_id, marker_obj.marker
+    if event.is_cancelled:
+        raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) is already cancelled.")
+    _check_not_past([event.event_date], "delete")
 
-    if event.rule_date is not None:
-        # ルール由来の日付は、再生成で復活しないよう「取消」として記録を残す
-        if event.is_cancelled:
-            raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) is already cancelled.")
-        event.is_cancelled = True
-        event.is_manual = True
-        db.flush()
-        result = ReferenceSheetEventResponse.model_validate(event)
-    else:
-        result = ReferenceSheetEventResponse.model_validate(event)
-        db.delete(event)
-        db.flush()
+    before = ReferenceSheetEventResponse.model_validate(event)
+    removed = _cancel_sheet_event(db, marker_obj, event)
+    if not removed:
+        _annotate_revertable(db, marker_obj)
+    result = before if removed else ReferenceSheetEventResponse.model_validate(event)
     _propagate_sheet_change(db, sheet_id, marker)
     db.commit()
     return result
@@ -732,12 +898,14 @@ def revert_sheet_event(db: Session, event_id: int) -> ReferenceSheetEvent:
         raise BadRequestError("Only dates generated from a marker rule can be reverted. Delete manually added dates instead.")
     if not event.is_manual:
         raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) has not been edited or cancelled.")
+    _check_not_past([event.event_date], "revert")
 
     event.is_manual = False
     event.is_cancelled = False
+    event.original_date = None
     db.flush()
     _generate_marker_events(db, marker_obj)
-    if event not in marker_obj.events:
+    if event not in marker_obj.events or event.event_date < _local_today():
         # ルールがこの発生枠をもう作らない、またはその日に人が置いた日付があるため、戻すと日付が消えてしまう
         db.rollback()
         raise BadRequestError(
@@ -746,6 +914,7 @@ def revert_sheet_event(db: Session, event_id: int) -> ReferenceSheetEvent:
     _propagate_sheet_change(db, marker_obj.sheet_id, marker_obj.marker)
     _commit(db, "Marker dates conflict with each other.")
     db.refresh(event)
+    _annotate_revertable(db, marker_obj)
     return event
 
 
@@ -812,22 +981,22 @@ def create_template(db: Session, template_in: PlanTemplateCreate) -> PlanTemplat
     db.add(template)
     db.flush()
 
-    _ensure_materialized(db, template, _now() + MATERIALIZE_HORIZON)
+    _ensure_next_occurrence(db, template)
     _commit(db, "PlanTemplate could not be created due to a conflicting record.")
     db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def get_template(db: Session, template_id: int) -> PlanTemplate:
     template = plan_template_repo.get(db, id=template_id)
     if not template:
         raise NotFoundError(f"PlanTemplate(id={template_id}) not found.")
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def get_templates(db: Session, biz_id: int) -> list[PlanTemplate]:
     _get_biz(db, biz_id)
-    return plan_template_repo.get_by_biz(db, biz_master_id=biz_id)
+    return _with_next_occurrence(db, plan_template_repo.get_by_biz(db, biz_master_id=biz_id))
 
 
 def update_template(db: Session, template_id: int, template_in: PlanTemplateUpdate) -> PlanTemplate:
@@ -879,7 +1048,7 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
 
     _commit(db, "PlanTemplate could not be updated due to a conflicting record.")
     db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def delete_template(db: Session, template_id: int) -> PlanTemplate:
@@ -909,11 +1078,11 @@ def restore_template(db: Session, template_id: int) -> PlanTemplate:
     # 削除期間中は生成していないため、今からホライズンまでを新しいリビジョンで生成し直す
     template.revision += 1
     template.materialized_until = None
-    _ensure_materialized(db, template, _now() + MATERIALIZE_HORIZON)
+    _ensure_next_occurrence(db, template)
 
     _commit(db, "PlanTemplate could not be restored due to a conflicting record.")
     db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def add_explicit_dates(db: Session, template_id: int, dates: list[date]) -> PlanTemplate:
@@ -925,7 +1094,7 @@ def add_explicit_dates(db: Session, template_id: int, dates: list[date]) -> Plan
         _regenerate(db, template, VoidReason.SOURCE_DATE_CHANGED)
         _commit(db, "Some dates already exist for this template.")
         db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 def remove_explicit_date(db: Session, template_id: int, local_date: date) -> PlanTemplate:
@@ -936,7 +1105,7 @@ def remove_explicit_date(db: Session, template_id: int, local_date: date) -> Pla
     _regenerate(db, template, VoidReason.SOURCE_DATE_CHANGED)
     db.commit()
     db.refresh(template)
-    return template
+    return _with_next_occurrence(db, [template])[0]
 
 
 # ==========================================
@@ -1289,6 +1458,11 @@ def _materialize_templates(db: Session, templates: list[PlanTemplate], end: date
             materialized = True
     if materialized:
         _commit(db, "Occurrences could not be generated due to a conflicting record.")
+
+
+def materialize_all_templates(db: Session, end: datetime) -> None:
+    """全顧客の有効なテンプレートについて、end までの未生成区間を生成します（日次ダッシュボードなど顧客横断の表示用）。"""
+    _materialize_templates(db, plan_template_repo.get_all(db), end)
 
 
 def _get_client_code(db: Session, client_code: str) -> str:

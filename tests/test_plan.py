@@ -19,7 +19,7 @@ from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFound
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.domain_plan import engine, services
-from src.domain_plan.models import InstanceOrigin, TemplateType, VoidReason
+from src.domain_plan.models import BusinessCalendarHoliday, InstanceOrigin, TemplateType, VoidReason
 from src.domain_plan.schemas import (
     MarkerRule,
     ReferenceSheetCreate,
@@ -756,10 +756,152 @@ def test_generated_marker_rejects_import_and_can_stop_generating(db, biz_id):
     count = len(active_events(db, sheet.id))
     assert count >= 11
 
-    # 生成をやめると、現在の日付が通常の日付として残る
+    # 生成をやめても日付はそのまま残り、出どころ（ルール）・人の判断・取消の記録も消えない（監査のため）
+    future = [e for e in active_events(db, sheet.id) if e.event_date > date.today() + timedelta(days=1)]
+    moved_id, moved_to = future[0].id, future[0].event_date + timedelta(days=1)
+    cancelled_id = future[2].id
+    services.update_sheet_event(db, moved_id, ReferenceSheetEventUpdate(event_date=moved_to))
+    services.delete_sheet_event(db, cancelled_id)
+    before = {e.id: (e.event_date, e.rule_date, e.original_date, e.is_manual, e.is_cancelled)
+              for e in services.get_sheet(db, sheet.id).markers[0].events}
+
     m = services.update_marker(db, sheet.id, "取引日", ReferenceSheetMarkerUpdate(rule=None))
     assert not m.is_generated and len(m.events) == count
-    assert all(e.rule_date is None and not e.is_manual for e in m.events)
+    assert {e.id: (e.event_date, e.rule_date, e.original_date, e.is_manual, e.is_cancelled) for e in m.events} == before
+    assert all(e.rule_date is not None for e in m.events)
+    assert next(e for e in m.events if e.id == cancelled_id).is_cancelled
+    # 生成マーカーではなくなったため「ルールに戻す」はできない
+    assert not any(e.revertable for e in m.events)  # type: ignore[attr-defined]
+    with pytest.raises(BadRequestError):
+        services.revert_sheet_event(db, moved_id)
+
+
+def _imported_sheet(db, biz_id):
+    """取り込んだシート（マーカー「本締」に、今日以降の日付が3件と過去の日付が1件）"""
+    today = date.today()
+    dates = [today - timedelta(days=10), today + timedelta(days=10), today + timedelta(days=40), today + timedelta(days=70)]
+    data = {
+        "client_code": client_code_of(db, biz_id), "sheet_name": "Imported",
+        "period_start": (today - timedelta(days=60)).isoformat(), "period_end": (today + timedelta(days=300)).isoformat(),
+        "markers": [{"marker": "本締"}], "events": [{"event_date": d.isoformat(), "marker": "本締"} for d in dates],
+    }
+    sheet = services.import_sheet(db, ReferenceSheetImport.model_validate(data)).sheet
+    return data, sheet, dates
+
+
+def imported_events(db, sheet_id):
+    sheet = services.get_sheet(db, sheet_id)
+    [m] = [m for m in sheet.markers if m.marker == "本締"]
+    return {e.event_date: e for e in m.events}
+
+
+def test_edits_on_imported_dates_leave_a_trace_and_win_over_reimport(db, biz_id):
+    data, sheet, (past, d1, d2, d3) = _imported_sheet(db, biz_id)
+    ev = imported_events(db, sheet.id)
+    assert all(not e.is_manual and e.original_date is None for e in ev.values())
+
+    # 人が動かす: 元の日付が残る / 取り消す: 記録が残る（物理削除しない） / 追加: 人が追加した日付
+    moved_to = d1 + timedelta(days=1)
+    services.update_sheet_event(db, ev[d1].id, ReferenceSheetEventUpdate(event_date=moved_to))
+    services.delete_sheet_event(db, ev[d2].id)
+    extra = d3 + timedelta(days=5)
+    services.add_sheet_events(db, sheet.id, "本締", ReferenceSheetEventsCreate(dates=[extra]))
+    ev = imported_events(db, sheet.id)
+    assert (ev[moved_to].original_date, ev[moved_to].is_manual, ev[moved_to].rule_date) == (d1, True, None)
+    assert (ev[d2].is_cancelled, ev[d2].is_manual, ev[d2].original_date) == (True, True, d2)
+    assert (ev[extra].is_manual, ev[extra].original_date) == (True, None)
+
+    # 同じファイルを取り込み直しても、人が動かした・取り消した日付は復活しない
+    again = services.import_sheet(db, ReferenceSheetImport.model_validate(data))
+    assert again.events_created == 0
+    ev = imported_events(db, sheet.id)
+    assert d1 not in ev and ev[d2].is_cancelled
+    # replace_events でも、人が変更・追加・取消した日付は消えない
+    services.import_sheet(db, ReferenceSheetImport.model_validate(data), replace_events=True)
+    ev = imported_events(db, sheet.id)
+    assert {moved_to, d2, extra} <= ev.keys()
+
+    # 取消した日付を同じ日付のまま追加し直すと、取り込んだままの日付に戻る
+    services.add_sheet_events(db, sheet.id, "本締", ReferenceSheetEventsCreate(dates=[d2]))
+    e2 = imported_events(db, sheet.id)[d2]
+    assert (e2.is_cancelled, e2.is_manual, e2.original_date) == (False, False, None)
+
+    # 人が追加した日付は出どころが無いため、削除すると消える
+    services.delete_sheet_event(db, imported_events(db, sheet.id)[extra].id)
+    assert extra not in imported_events(db, sheet.id)
+
+
+def test_past_sheet_dates_are_read_only(db, biz_id):
+    _, sheet, (past, d1, _, _) = _imported_sheet(db, biz_id)
+    ev = imported_events(db, sheet.id)
+    yesterday = date.today() - timedelta(days=1)
+
+    with pytest.raises(BadRequestError):
+        services.add_sheet_events(db, sheet.id, "本締", ReferenceSheetEventsCreate(dates=[yesterday]))
+    with pytest.raises(BadRequestError):
+        services.update_sheet_event(db, ev[past].id, ReferenceSheetEventUpdate(event_date=d1 + timedelta(days=2)))
+    with pytest.raises(BadRequestError):  # 未来の日付を過去へ動かすこともできない
+        services.update_sheet_event(db, ev[d1].id, ReferenceSheetEventUpdate(event_date=yesterday))
+    with pytest.raises(BadRequestError):
+        services.delete_sheet_event(db, ev[past].id)
+    after = imported_events(db, sheet.id)
+    assert after[past].event_date == past and not after[past].is_manual and d1 in after
+
+    # 今日の日付は変更できる
+    services.add_sheet_events(db, sheet.id, "本締", ReferenceSheetEventsCreate(dates=[date.today()]))
+    assert date.today() in imported_events(db, sheet.id)
+
+
+def test_rule_change_does_not_rewrite_past_dates(db, biz_id):
+    calendar, sheet, marker = _trading_day_setup(db, biz_id)
+    today = date.today()
+    # 最初の生成ではシートの期間全体（過去も含む）を作る
+    before = {e.rule_date: e.event_date for e in active_events(db, sheet.id)}
+    past = {r: d for r, d in before.items() if d < today}
+    assert past, "the sheet starts 30 days ago, so at least one 27th is in the past"
+
+    services.update_marker(db, sheet.id, "取引日", ReferenceSheetMarkerUpdate(
+        rule=MarkerRule(rrule="FREQ=MONTHLY;BYMONTHDAY=25", anchor_date=date(2026, 1, 1),
+                        business_calendar_id=calendar.id, holiday_policy=engine.HolidayPolicy.FOLLOWING)))
+    after = active_events(db, sheet.id)
+    # 過去（実績）の27日はそのまま、過去の25日は作られない。未来だけが25日に変わる
+    assert {e.rule_date: e.event_date for e in after if e.event_date < today} == past
+    future = [e for e in after if e.event_date >= today]
+    assert future and all(e.rule_date is not None and e.rule_date.day == 25 for e in future)
+
+
+def test_revertable_flag_matches_what_sheet_revert_accepts(db, biz_id):
+    calendar, sheet, marker = _trading_day_setup(db, biz_id)
+    future = [e for e in active_events(db, sheet.id) if e.event_date > date.today() + timedelta(days=1)]
+    a, b = future[0], future[1]
+    a_id, b_id, b_rule = a.id, b.id, b.rule_date
+    services.update_sheet_event(db, a_id, ReferenceSheetEventUpdate(event_date=a.event_date + timedelta(days=1)))
+    services.delete_sheet_event(db, b_id)
+
+    def flags():
+        return {e.id: e.revertable for e in services.get_sheet(db, sheet.id).markers[0].events}  # type: ignore[attr-defined]
+
+    f = flags()
+    assert f[a_id] and f[b_id]
+    assert not any(v for k, v in f.items() if k not in (a_id, b_id))  # ルールどおりの日付は戻す必要がない
+
+    # ルールを変えて、その発生枠が無くなると戻せない（フラグも False、revert も拒否）
+    services.update_marker(db, sheet.id, "取引日", ReferenceSheetMarkerUpdate(
+        rule=MarkerRule(rrule="FREQ=MONTHLY;BYMONTHDAY=25", anchor_date=date(2026, 1, 1),
+                        business_calendar_id=calendar.id, holiday_policy=engine.HolidayPolicy.FOLLOWING)))
+    f = flags()
+    assert not f[a_id] and not f[b_id]
+    with pytest.raises(BadRequestError):
+        services.revert_sheet_event(db, b_id)
+    db.rollback()
+
+    # ルールを戻すと、また戻せる
+    services.update_marker(db, sheet.id, "取引日", ReferenceSheetMarkerUpdate(
+        rule=MarkerRule(rrule="FREQ=MONTHLY;BYMONTHDAY=27", anchor_date=date(2026, 1, 1),
+                        business_calendar_id=calendar.id, holiday_policy=engine.HolidayPolicy.FOLLOWING)))
+    assert flags()[b_id]
+    reverted = services.revert_sheet_event(db, b_id)
+    assert not reverted.is_cancelled and reverted.rule_date == b_rule and reverted.original_date is None
 
 
 # ==========================================
@@ -955,3 +1097,136 @@ def test_cancelled_list_and_restore(db, biz_id, monkeypatch):
     assert not entry.restorable and entry.not_restorable_reason == "past"
     with pytest.raises(BadRequestError, match="passed"):
         services.restore_cancelled_instance(db, target.id)
+
+
+def test_stop_generating_can_cancel_future_dates_when_the_routine_ends(db, biz_id):
+    calendar, sheet, marker = _trading_day_setup(db, biz_id)
+    today = date.today()
+    job = services.create_template(db, ReferenceSheetTemplateCreate(
+        biz_master_id=biz_id, name="取引日の前日", template_type=TemplateType.REFERENCE_SHEET_BASED, start_time=time(9, 0),
+        duration_minutes=60, reference_sheet_id=sheet.id, reference_event_marker="取引日",
+        offset_days=-1, offset_day_unit=engine.DayUnit.BUSINESS, business_calendar_id=calendar.id,
+    ))
+    assert live(db, job.id)
+
+    future = [e for e in active_events(db, sheet.id) if e.event_date > today + timedelta(days=1)]
+    moved_id, moved_from = future[0].id, future[0].event_date
+    services.update_sheet_event(db, moved_id, ReferenceSheetEventUpdate(event_date=moved_from + timedelta(days=1)))
+    added = future[1].event_date + timedelta(days=3)
+    services.add_sheet_events(db, sheet.id, "取引日", ReferenceSheetEventsCreate(dates=[added]))
+    past_before = {e.id: (e.event_date, e.is_manual, e.is_cancelled) for e in active_events(db, sheet.id) if e.event_date < today}
+    assert past_before
+
+    # cancel_future_dates は生成をやめるときだけ指定できる
+    with pytest.raises(ValidationError):
+        ReferenceSheetMarkerUpdate(cancel_future_dates=True)
+    with pytest.raises(ValidationError):
+        ReferenceSheetMarkerUpdate(rule=MarkerRule(rrule="FREQ=MONTHLY;BYMONTHDAY=27", anchor_date=date(2026, 1, 1)),
+                                   cancel_future_dates=True)
+
+    m = services.update_marker(db, sheet.id, "取引日", ReferenceSheetMarkerUpdate(rule=None, cancel_future_dates=True))
+    assert not m.is_generated
+    events = {e.id: e for e in m.events}
+    # 過去（実績）はそのまま
+    assert {i: (events[i].event_date, events[i].is_manual, events[i].is_cancelled) for i in past_before} == past_before
+    # 今日以降: ルール・人が変更した日付は出どころを残して取消、人が追加した日付は消える
+    upcoming = [e for e in m.events if e.event_date >= today]
+    assert upcoming and all(e.is_cancelled and e.is_manual for e in upcoming)
+    assert all(e.rule_date is not None and e.original_date is not None for e in upcoming)
+    assert events[moved_id].original_date == moved_from
+    assert not any(e.event_date == added for e in m.events)
+    # 参照しているジョブの未来の予定も無くなる（1回の再照合で）
+    assert not [i for i in live(db, job.id) if i.scheduled_start >= datetime.now(timezone.utc)]
+
+
+def test_past_holidays_are_read_only(db, biz_id):
+    calendar = make_calendar(db)
+    today = date.today()
+    past = today - timedelta(days=5)
+    # 過去の休日（以前に登録されたもの）。サービスでは今日より前を登録できないため直接入れる
+    calendar.holidays.append(BusinessCalendarHoliday(holiday_date=past, name="過去の休日"))
+    db.commit()
+
+    with pytest.raises(BadRequestError):  # 追加
+        services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=past - timedelta(days=1))]))
+    with pytest.raises(BadRequestError):  # 名前の変更
+        services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=past, name="別名")]))
+    with pytest.raises(BadRequestError):  # 今日以降と混ざっていても、1件でも過去があれば全体を拒否（一部だけ反映しない）
+        services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[
+            HolidayIn(holiday_date=today + timedelta(days=7)), HolidayIn(holiday_date=past - timedelta(days=2)),
+        ]))
+    with pytest.raises(BadRequestError):  # 削除
+        services.delete_holiday(db, calendar.id, past)
+    db.rollback()
+    assert [(h.holiday_date, h.name) for h in services.get_holidays(db, calendar.id)] == [(past, "過去の休日")]
+
+    # 今日の休日は追加・名前の変更・削除ができる
+    services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=today, name="臨時休業")]))
+    assert services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[HolidayIn(holiday_date=today, name="創立記念日")])).holidays_renamed == 1
+    assert services.delete_holiday(db, calendar.id, today).holidays_deleted == 1
+
+
+# ==========================================
+# 次の予定の保証（日次の生成ジョブ）
+# ==========================================
+def nine_jst(d: date) -> datetime:
+    return datetime.combine(d, time(9, 0), tzinfo=JST)
+
+
+def test_annual_template_keeps_its_next_occurrence_generated(db, biz_id):
+    # 年1回の業務: 次の予定がホライズン（90日）より先でも、作成時に生成される
+    anchor = date.today() + timedelta(days=200)
+    t = daily_template(db, biz_id, name="Annual", anchor_date=anchor, rrule="FREQ=YEARLY")
+    assert t.next_occurrence_at == nine_jst(anchor)  # type: ignore[attr-defined]
+    assert t.materialized_until is not None and t.materialized_until > nine_jst(anchor)
+    assert [i.scheduled_start for i in live(db, t.id)] == [nine_jst(anchor)]
+
+    # 一覧・単体の取得にも付く
+    [listed] = [x for x in services.get_templates(db, biz_id) if x.id == t.id]
+    assert listed.next_occurrence_at == nine_jst(anchor)  # type: ignore[attr-defined]
+    assert services.get_template(db, t.id).next_occurrence_at == nine_jst(anchor)  # type: ignore[attr-defined]
+
+    # 生成に影響する変更の後も保証される（時刻を変えても次の予定はある）
+    t = services.update_template(db, t.id, PlanTemplateUpdate(start_time=time(10, 0)))
+    assert t.next_occurrence_at == datetime.combine(anchor, time(10, 0), tzinfo=JST)  # type: ignore[attr-defined]
+
+
+def test_extend_job_fixes_old_templates_and_finds_the_next_slot(db, biz_id, monkeypatch):
+    # Phase 2 より前に作られたテンプレート（90日先までしか生成していない）を再現する
+    def old_behaviour(db_, template):
+        services._ensure_materialized(db_, template, services._now() + services.MATERIALIZE_HORIZON)
+        return False
+
+    anchor = date.today() + timedelta(days=200)
+    monkeypatch.setattr(services, "_ensure_next_occurrence", old_behaviour)
+    old = daily_template(db, biz_id, name="Old annual", anchor_date=anchor, rrule="FREQ=YEARLY")
+    monkeypatch.undo()
+    assert old.next_occurrence_at is None and live(db, old.id) == []  # type: ignore[attr-defined]
+
+    # 次の予定が無いテンプレート（ルールが終わっている）
+    ended = daily_template(db, biz_id, name="Ended", anchor_date=date(2026, 1, 1), rrule="FREQ=DAILY;UNTIL=20260105")
+    assert ended.next_occurrence_at is None  # type: ignore[attr-defined]
+
+    # 次の予定を取り消すと、その次（来年）の予定がまだ生成されていない
+    soon = date.today() + timedelta(days=10)
+    yearly = daily_template(db, biz_id, name="Yearly", anchor_date=soon, rrule="FREQ=YEARLY")
+    [first] = live(db, yearly.id)
+    services.cancel_instance(db, first.id, PlanInstanceCancel(note="今年は無し"))
+    assert services.get_template(db, yearly.id).next_occurrence_at is None  # type: ignore[attr-defined]
+
+    result = services.extend_all_templates(db)
+    assert result.templates_checked >= 3 and result.templates_extended >= 2
+    assert ended.id in result.without_upcoming
+    assert old.id not in result.without_upcoming and yearly.id not in result.without_upcoming
+    assert services.get_template(db, old.id).next_occurrence_at == nine_jst(anchor)  # type: ignore[attr-defined]
+    next_year = soon.replace(year=soon.year + 1)
+    assert services.get_template(db, yearly.id).next_occurrence_at == nine_jst(next_year)  # type: ignore[attr-defined]
+    assert [i.scheduled_start for i in live(db, yearly.id)] == [nine_jst(next_year)]  # 取り消した枠は復活しない
+
+    # 何度実行しても同じ結果（もう延ばすものは無い）
+    again = services.extend_all_templates(db)
+    assert old.id not in again.without_upcoming and ended.id in again.without_upcoming
+    ours = {old.id, ended.id, yearly.id}
+    before = {tid: services.get_template(db, tid).materialized_until for tid in ours}
+    services.extend_all_templates(db)
+    assert {tid: services.get_template(db, tid).materialized_until for tid in ours} == before

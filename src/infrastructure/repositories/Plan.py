@@ -105,6 +105,21 @@ class ReferenceSheetRepository(CRUDBase[ReferenceSheet, BaseModel, BaseModel]):
         )
         return [(row.id, row.event_date) for row in db.execute(stmt)]
 
+    def get_events_on(
+        self, db: Session, *, day: date, include_cancelled: bool
+    ) -> list[tuple[ReferenceSheetEvent, ReferenceSheetMarker, ReferenceSheet]]:
+        """全顧客のシートの、指定日の日付を返します（顧客コード・シート名・マーカー順）"""
+        stmt = (
+            select(ReferenceSheetEvent, ReferenceSheetMarker, ReferenceSheet)
+            .join(ReferenceSheetMarker, ReferenceSheetMarker.id == ReferenceSheetEvent.marker_id)
+            .join(ReferenceSheet, ReferenceSheet.id == ReferenceSheetMarker.sheet_id)
+            .where(ReferenceSheetEvent.event_date == day)
+            .order_by(ReferenceSheet.client_code, ReferenceSheet.name, ReferenceSheetMarker.marker, ReferenceSheetEvent.id)
+        )
+        if not include_cancelled:
+            stmt = stmt.where(ReferenceSheetEvent.is_cancelled.is_(False))
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
 
 # ==========================================
 #  PlanTemplate Repository
@@ -151,6 +166,15 @@ class PlanTemplateRepository(SoftCRUDBase[PlanTemplate, BaseModel, PlanTemplateU
             .order_by(BizMaster.business_code, self.model.id)
         )
         return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
+    def get_all(self, db: Session) -> list[PlanTemplate]:
+        """全顧客の有効なテンプレート（論理削除された業務・テンプレートは全局scopeで除外）"""
+        stmt = (
+            select(self.model)
+            .join(BizMaster, BizMaster.id == self.model.biz_master_id)
+            .order_by(self.model.id)
+        )
+        return list(db.scalars(stmt).all())
 
     def get_by_sheet_marker(self, db: Session, *, sheet_id: int, marker: str | None = None) -> list[PlanTemplate]:
         """シート（とマーカー）を参照している有効なテンプレートを行ロック付きで取得します"""
@@ -259,6 +283,28 @@ class PlanInstanceRepository(CRUDBase[PlanInstance, BaseModel, BaseModel]):
             .order_by(PlanInstance.scheduled_start, PlanInstance.id)
         )
         return [(row[0], row[1], row[2], row[3], row[4]) for row in db.execute(stmt)]
+
+    def get_voided_starting_in(
+        self, db: Session, *, start: datetime, end: datetime
+    ) -> list[tuple[PlanInstance, PlanInstanceVoid, PlanTemplate, BizMaster]]:
+        """
+        全顧客の、範囲内に開始する予定だった無効化済みインスタンスを開始時刻順に返します（理由付き）。
+        削除されたテンプレートの予定も履歴として含めます（論理削除された業務の予定は含めません）。
+        """
+        stmt = (
+            select(PlanInstance, PlanInstanceVoid, PlanTemplate, BizMaster)
+            .join(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .join(PlanTemplate, PlanTemplate.id == PlanInstance.template_id)
+            .join(BizMaster, BizMaster.id == PlanTemplate.biz_master_id)
+            .where(
+                BizMaster.is_deleted.is_(False),
+                PlanInstance.scheduled_start >= start,
+                PlanInstance.scheduled_start < end,
+            )
+            .order_by(PlanInstance.scheduled_start, PlanInstance.id)
+            .execution_options(include_deleted=True)
+        )
+        return [(row[0], row[1], row[2], row[3]) for row in db.execute(stmt)]
 
     def get_override_child(self, db: Session, *, instance_id: int) -> PlanInstance | None:
         """このインスタンスを置き換えたオーバーライド（あれば）"""
@@ -453,6 +499,37 @@ class PlanOccurrenceCacheRepository:
                 PlanOccurrenceCache.period.op("&&")(func.tstzrange(start, end, "[)")),
             )
             .order_by(PlanOccurrenceCache.starts_at, BizMaster.business_code, PlanOccurrenceCache.instance_id)
+        )
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
+    def next_starts(self, db: Session, *, template_ids: Sequence[int], after: datetime) -> dict[int, datetime]:
+        """テンプレートごとの、after 以降に開始する最初の有効な予定の開始日時（無いテンプレートは含めない）"""
+        if not template_ids:
+            return {}
+        stmt = (
+            select(PlanOccurrenceCache.template_id, func.min(PlanOccurrenceCache.starts_at))
+            .where(PlanOccurrenceCache.template_id.in_(template_ids), PlanOccurrenceCache.starts_at >= after)
+            .group_by(PlanOccurrenceCache.template_id)
+        )
+        return {row[0]: row[1] for row in db.execute(stmt)}
+
+    def query_starting_in(
+        self, db: Session, *, start: datetime, end: datetime
+    ) -> list[tuple[PlanOccurrenceCache, PlanInstance, BizMaster]]:
+        """
+        全顧客の、範囲内に開始する予定を返します（発生枠の日付・算出元のためインスタンス、業務付き）。
+        論理削除された業務は全局scopeで除外されます。
+        """
+        stmt = (
+            select(PlanOccurrenceCache, PlanInstance, BizMaster)
+            .join(PlanInstance, PlanInstance.id == PlanOccurrenceCache.instance_id)
+            .join(BizMaster, BizMaster.id == PlanOccurrenceCache.biz_master_id)
+            .where(
+                PlanOccurrenceCache.period.op("&&")(func.tstzrange(start, end, "[)")),
+                PlanOccurrenceCache.starts_at >= start,
+                PlanOccurrenceCache.starts_at < end,
+            )
+            .order_by(PlanOccurrenceCache.starts_at, PlanOccurrenceCache.instance_id)
         )
         return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
 

@@ -12,3 +12,9 @@ COMMON_ERRORS = {
     409: {"model": ErrorResponse, "description": "Conflict (Record already exists etc.)"},
     500: {"model": ErrorResponse, "description": "Internal Server Error(サーバーエラー)"},
 }
+
+# 職員の確認・ロールの判定があるエンドポイント用（COMMON_ERRORS と合わせて指定する）
+AUTH_ERRORS = {
+    401: {"model": ErrorResponse, "description": "Unauthorized(操作する職員が指定されていない・存在しない)"},
+    403: {"model": ErrorResponse, "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)"},
+}

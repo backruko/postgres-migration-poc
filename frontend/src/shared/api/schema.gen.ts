@@ -292,6 +292,7 @@ export interface paths {
          * Add Holidays Endpoint
          * @description 休日を一括登録します（登録済みの日付は名前のみ更新）。
          *     このカレンダーを使う全テンプレートの未来の予定が、休日ポリシーに従って再計算されます。
+         *     今日より前（日本時間）の日付は追加も名前の変更もできません（400）。
          */
         post: operations["add_holidays_endpoint_plans_calendars__calendar_id__holidays_post"];
         delete?: never;
@@ -310,7 +311,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Holiday Endpoint */
+        /**
+         * Delete Holiday Endpoint
+         * @description 休日を削除します（その日は営業日に戻ります）。今日より前（日本時間）の休日は削除できません（400）。
+         */
         delete: operations["delete_holiday_endpoint_plans_calendars__calendar_id__holidays__holiday_date__delete"];
         options?: never;
         head?: never;
@@ -408,7 +412,8 @@ export interface paths {
          * Update Marker Endpoint
          * @description マーカーの説明・生成ルールを変更します。
          *     rule を指定するとルールから日付を再生成します（人が編集・追加・取消した日付は常に維持）。
-         *     rule に null を指定すると生成をやめ、現在の日付を通常の日付として残します。
+         *     rule に null を指定すると生成をやめ、今ある日付をそのまま残します（出どころ・取消の記録も残る）。
+         *     rule: null と同時に cancel_future_dates: true を指定すると、今日以降の日付をすべて取り消します（業務が終わった場合。過去は残る）。
          */
         patch: operations["update_marker_endpoint_plans_sheets__sheet_id__markers__marker__patch"];
         trace?: never;
@@ -771,6 +776,144 @@ export interface paths {
          */
         get: operations["get_cancelled_instances_endpoint_plans_clients__client_code__cancelled_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ops/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Daily Dashboard Endpoint
+         * @description 指定日に予定されている全顧客の予定を、顧客 → 業務の順にまとめて返します。
+         *     その日の年間計画シートの日付と、各営業日カレンダーでの休日かどうかも返します。
+         *     過去の日付では、無効化・取消された予定も理由付きで返します。
+         */
+        get: operations["get_daily_dashboard_endpoint_ops_daily_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Me Endpoint
+         * @description X-Staff-Id で指定した職員（利用開始前・利用停止中でも返します。画面で状態を表示するため）
+         */
+        get: operations["get_me_endpoint_staff_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Roles Endpoint */
+        get: operations["get_roles_endpoint_staff_roles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Staff List Endpoint */
+        get: operations["get_staff_list_endpoint_staff__get"];
+        put?: never;
+        /**
+         * Create Staff Endpoint
+         * @description 職員を登録します（利用開始前の状態で作られます。PUT /staff/{id}/status で有効化してください）。
+         */
+        post: operations["create_staff_endpoint_staff__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/{staff_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Staff Endpoint */
+        get: operations["get_staff_endpoint_staff__staff_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Staff Endpoint */
+        patch: operations["update_staff_endpoint_staff__staff_id__patch"];
+        trace?: never;
+    };
+    "/staff/{staff_id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Staff Roles Endpoint
+         * @description ロールを指定した集合に置き換えます（自分のシステム管理者ロールは外せません）。
+         */
+        put: operations["set_staff_roles_endpoint_staff__staff_id__roles_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/{staff_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Staff Status Endpoint
+         * @description 有効化・利用停止・再開（ロールはそのまま残ります。自分の状態は変えられません）。
+         */
+        put: operations["set_staff_status_endpoint_staff__staff_id__status_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1188,6 +1331,216 @@ export interface components {
              */
             name?: string | null;
         };
+        /** DailyBusiness */
+        DailyBusiness: {
+            /** Biz Master Id */
+            biz_master_id: number;
+            /** Biz Code */
+            biz_code: string;
+            /** Biz Name */
+            biz_name: string;
+            /**
+             * Occurrences
+             * @description live occurrences starting this day, by start time
+             */
+            occurrences: components["schemas"]["DailyOccurrence"][];
+            /**
+             * Voided
+             * @description occurrences voided or cancelled for this day, with reasons
+             */
+            voided: components["schemas"]["DailyVoidedItem"][];
+        };
+        /**
+         * DailyCalendarStatus
+         * @description その日が各営業日カレンダーで営業日かどうか
+         */
+        DailyCalendarStatus: {
+            /** Calendar Id */
+            calendar_id: number;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Is Business Day */
+            is_business_day: boolean;
+            /**
+             * Holiday Name
+             * @description holiday name when the day is a holiday in this calendar
+             */
+            holiday_name?: string | null;
+        };
+        /** DailyClient */
+        DailyClient: {
+            /** Client Code */
+            client_code: string;
+            /** Client Name */
+            client_name: string;
+            /**
+             * Milestones
+             * @description sheet dates of this client on this day
+             */
+            milestones: components["schemas"]["DailyMilestone"][];
+            /**
+             * Businesses
+             * @description businesses with something on this day, by business code
+             */
+            businesses: components["schemas"]["DailyBusiness"][];
+        };
+        /** DailyDashboardResponse */
+        DailyDashboardResponse: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Timezone */
+            timezone: string;
+            /**
+             * Start
+             * Format: date-time
+             * @description start of the day in the given timezone
+             */
+            start: string;
+            /**
+             * End
+             * Format: date-time
+             * @description start of the next day in the given timezone
+             */
+            end: string;
+            /**
+             * Total
+             * @description number of live occurrences on this day across all clients
+             */
+            total: number;
+            /**
+             * Calendars
+             * @description every business calendar, with the day's holiday status
+             */
+            calendars: components["schemas"]["DailyCalendarStatus"][];
+            /**
+             * Clients
+             * @description clients with something on this day, by client code
+             */
+            clients: components["schemas"]["DailyClient"][];
+        };
+        /**
+         * DailyMilestone
+         * @description 年間計画シート上のその日の日付（振込日・本締 など）
+         */
+        DailyMilestone: {
+            /** Event Id */
+            event_id: number;
+            /** Sheet Id */
+            sheet_id: number;
+            /** Sheet Name */
+            sheet_name: string;
+            /** Marker */
+            marker: string;
+            /** Marker Description */
+            marker_description: string | null;
+            /**
+             * Is Generated
+             * @description the marker is rule-generated (otherwise imported)
+             */
+            is_generated: boolean;
+            /**
+             * Rule Date
+             * @description the rule date this date came from
+             */
+            rule_date?: string | null;
+            /**
+             * Original Date
+             * @description the imported / rule date before a person moved or cancelled it
+             */
+            original_date?: string | null;
+            /**
+             * Is Manual
+             * @description edited, added or cancelled by a person
+             */
+            is_manual: boolean;
+            /**
+             * Is Cancelled
+             * @description cancelled by a person (kept as a record)
+             */
+            is_cancelled: boolean;
+        };
+        /**
+         * DailyOccurrence
+         * @description その日に開始する有効な予定
+         */
+        DailyOccurrence: {
+            /** Instance Id */
+            instance_id: number;
+            /** Template Id */
+            template_id: number;
+            /** Title */
+            title: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /**
+             * Occurrence Date
+             * Format: date
+             * @description slot date by the rule (differs from the start date when a holiday moved it)
+             */
+            occurrence_date: string;
+            origin: components["schemas"]["InstanceOrigin"];
+            /** Is Override */
+            is_override: boolean;
+            /**
+             * Source Sheet Event Id
+             * @description sheet date this occurrence was computed from
+             */
+            source_sheet_event_id?: number | null;
+            /**
+             * Ui Metadata
+             * @description effective styling (template merged with instance)
+             */
+            ui_metadata: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * DailyVoidedItem
+         * @description その日に予定されていたが、無効化・取消された予定（理由付き）
+         */
+        DailyVoidedItem: {
+            /** Instance Id */
+            instance_id: number;
+            /** Template Id */
+            template_id: number;
+            /** Title */
+            title: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            origin: components["schemas"]["InstanceOrigin"];
+            void_reason: components["schemas"]["VoidReason"];
+            /**
+             * Void Note
+             * @description reason a person gave when changing / cancelling it
+             */
+            void_note?: string | null;
+            /**
+             * Voided At
+             * Format: date-time
+             */
+            voided_at: string;
+        };
         /**
          * DayUnit
          * @enum {string}
@@ -1199,7 +1552,7 @@ export interface components {
          *     意味が直感的にわかるように、すべて大文字の文字列（スネークケース）で定義します。
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "DELETE_FAILED_RECORD_IN_USE" | "INTERNAL_SERVER_ERROR";
+        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "STAFF_NOT_ACTIVE" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "DELETE_FAILED_RECORD_IN_USE" | "INTERNAL_SERVER_ERROR";
         /** ErrorResponse */
         ErrorResponse: {
             /**
@@ -1521,6 +1874,11 @@ export interface components {
             materialized_until: string | null;
             /** Explicit Dates */
             explicit_dates: components["schemas"]["PlanExplicitDateResponse"][];
+            /**
+             * Next Occurrence At
+             * @description start of the next live occurrence (null: nothing upcoming within 2 years)
+             */
+            next_occurrence_at?: string | null;
         };
         /** PlanTemplateUpdate */
         PlanTemplateUpdate: {
@@ -1639,21 +1997,32 @@ export interface components {
             event_date: string;
             /**
              * Rule Date
-             * @description generated markers: the rule date this date came from
+             * @description the rule date this date came from (kept after a rule is stopped)
              */
             rule_date?: string | null;
             /**
+             * Original Date
+             * @description the imported / rule date before a person moved or cancelled it (null for dates a person added)
+             */
+            original_date?: string | null;
+            /**
              * Is Manual
-             * @description edited, added or cancelled by a person (kept on regeneration)
+             * @description edited, added or cancelled by a person (kept on regeneration and re-import)
              * @default false
              */
             is_manual: boolean;
             /**
              * Is Cancelled
-             * @description a generated date cancelled by a person
+             * @description cancelled by a person; kept as a record so it does not come back
              * @default false
              */
             is_cancelled: boolean;
+            /**
+             * Revertable
+             * @description the current rule can put this slot back on a free date from today on (see /revert)
+             * @default false
+             */
+            revertable: boolean;
         };
         /** ReferenceSheetEventUpdate */
         ReferenceSheetEventUpdate: {
@@ -1782,12 +2151,19 @@ export interface components {
         };
         /**
          * ReferenceSheetMarkerUpdate
-         * @description rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、現在の日付を通常の日付として残す
+         * @description rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、今ある日付をそのまま残す。
+         *     cancel_future_dates: 生成をやめる（rule: null）と同時に、今日以降の日付をすべて取り消す（業務が終わった場合）。
          */
         ReferenceSheetMarkerUpdate: {
             /** Description */
             description?: string | null;
             rule?: components["schemas"]["MarkerRule"] | null;
+            /**
+             * Cancel Future Dates
+             * @description with rule: null — also cancel every date from today on (kept as cancelled records; past dates untouched)
+             * @default false
+             */
+            cancel_future_dates: boolean;
         };
         /** ReferenceSheetResponse */
         ReferenceSheetResponse: {
@@ -1876,6 +2252,20 @@ export interface components {
             offset_minutes: number;
         };
         /**
+         * RoleCode
+         * @description ロールのコード（role テーブルの code と同じ。権限の判定はこのコードで行う）
+         * @enum {string}
+         */
+        RoleCode: "operator" | "checker" | "releaser" | "admin" | "viewer" | "auditor" | "system_admin";
+        /** RoleResponse */
+        RoleResponse: {
+            code: components["schemas"]["RoleCode"];
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+        };
+        /**
          * SOPStatus
          * @description SOPバージョンのライフサイクルステータス
          * @enum {string}
@@ -1947,6 +2337,76 @@ export interface components {
              * @description 予約発効日時(UTCまたはタイムゾーン付き)
              */
             effective_at: string;
+        };
+        /** StaffCreate */
+        StaffCreate: {
+            /**
+             * Login Id
+             * @description login id (employee number, email ...)
+             */
+            login_id: string;
+            /** Name */
+            name: string;
+            /** Email */
+            email?: string | null;
+            /**
+             * Roles
+             * @description roles to grant (the account starts as pending)
+             */
+            roles?: components["schemas"]["RoleCode"][];
+        };
+        /** StaffResponse */
+        StaffResponse: {
+            /** Id */
+            id: number;
+            /** Login Id */
+            login_id: string;
+            /** Name */
+            name: string;
+            /** Email */
+            email: string | null;
+            status: components["schemas"]["StaffStatus"];
+            /** Roles */
+            roles: components["schemas"]["RoleCode"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** StaffRolesUpdate */
+        StaffRolesUpdate: {
+            /**
+             * Roles
+             * @description the full set of roles (replaces the current set)
+             */
+            roles: components["schemas"]["RoleCode"][];
+        };
+        /**
+         * StaffStatus
+         * @description 職員アカウントの状態（ロールとは別）。active 以外の職員は、ロールを持っていても全ての操作を拒否されます。
+         *     停止してもロールは残るため、再開（active に戻す）すれば元の権限で使えます。
+         * @enum {string}
+         */
+        StaffStatus: "pending" | "active" | "suspended";
+        /** StaffStatusUpdate */
+        StaffStatusUpdate: {
+            status: components["schemas"]["StaffStatus"];
+        };
+        /**
+         * StaffUpdate
+         * @description 氏名・メールアドレスの変更（ログインID・状態・ロールは別のエンドポイント）
+         */
+        StaffUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Email */
+            email?: string | null;
         };
         /**
          * TemplateType
@@ -5563,6 +6023,788 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_daily_dashboard_endpoint_ops_daily_get: {
+        parameters: {
+            query?: {
+                /** @description 表示する日 (例: 2026-11-02)。省略時は timezone での今日 */
+                date?: string | null;
+                /** @description 日付の振り分けに使うタイムゾーン */
+                timezone?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DailyDashboardResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_me_endpoint_staff_me_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_roles_endpoint_staff_roles_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_staff_list_endpoint_staff__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_staff_endpoint_staff__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_staff_endpoint_staff__staff_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_staff_endpoint_staff__staff_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_staff_roles_endpoint_staff__staff_id__roles_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRolesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_staff_status_endpoint_staff__staff_id__status_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

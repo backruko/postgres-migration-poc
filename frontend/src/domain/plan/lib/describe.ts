@@ -1,4 +1,16 @@
-import type { CalendarTemplateInfo, HolidayPolicy, InstanceOrigin } from "../types";
+import type { CalendarTemplateInfo, HolidayPolicy, InstanceOrigin, TemplateType } from "../types";
+
+/** ルールの説明に必要な項目（CalendarTemplateInfo・PlanTemplate のどちらも満たす） */
+export type TemplateRuleFields = Pick<
+  CalendarTemplateInfo,
+  "template_type" | "rrule" | "reference_event_marker" | "offset_days" | "offset_day_unit"
+>;
+
+export const TEMPLATE_TYPE_LABEL: Record<TemplateType, string> = {
+  rrule: "繰り返しルール",
+  explicit_dates: "顧客指定日",
+  reference_sheet_based: "年間計画シート",
+};
 
 export const POLICY_LABEL: Record<HolidayPolicy, string> = {
   as_is: "休日も実施",
@@ -45,7 +57,7 @@ export function describeRrule(rrule: string): string {
 }
 
 /** テンプレートの生成ルールを日本語で説明する */
-export function describeTemplate(t: CalendarTemplateInfo): string {
+export function describeTemplate(t: TemplateRuleFields): string {
   if (t.template_type === "rrule" && t.rrule) return describeRrule(t.rrule);
   if (t.template_type === "explicit_dates") return "顧客指定日";
   if (t.template_type === "reference_sheet_based") {

@@ -80,11 +80,13 @@ def add_holidays_endpoint(calendar_id: int, holidays_in: HolidaysAdd, db: Sessio
     """
     休日を一括登録します（登録済みの日付は名前のみ更新）。
     このカレンダーを使う全テンプレートの未来の予定が、休日ポリシーに従って再計算されます。
+    今日より前（日本時間）の日付は追加も名前の変更もできません（400）。
     """
     return add_holidays(db=db, calendar_id=calendar_id, holidays_in=holidays_in)
 
 @router.delete("/calendars/{calendar_id}/holidays/{holiday_date}", response_model=CalendarChangeResult, responses={**COMMON_ERRORS})
 def delete_holiday_endpoint(calendar_id: int, holiday_date: date, db: Session = Depends(get_db)):
+    """休日を削除します（その日は営業日に戻ります）。今日より前（日本時間）の休日は削除できません（400）。"""
     return delete_holiday(db=db, calendar_id=calendar_id, holiday_date=holiday_date)
 
 # ==========================================
@@ -129,7 +131,8 @@ def update_marker_endpoint(sheet_id: int, marker: str, marker_in: ReferenceSheet
     """
     マーカーの説明・生成ルールを変更します。
     rule を指定するとルールから日付を再生成します（人が編集・追加・取消した日付は常に維持）。
-    rule に null を指定すると生成をやめ、現在の日付を通常の日付として残します。
+    rule に null を指定すると生成をやめ、今ある日付をそのまま残します（出どころ・取消の記録も残る）。
+    rule: null と同時に cancel_future_dates: true を指定すると、今日以降の日付をすべて取り消します（業務が終わった場合。過去は残る）。
     """
     return update_marker(db=db, sheet_id=sheet_id, marker=marker, marker_in=marker_in)
 

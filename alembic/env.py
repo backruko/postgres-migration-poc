@@ -22,6 +22,7 @@ from src.infrastructure.database import Base
 import src.domain_biz.models 
 import src.domain_client.models 
 import src.domain_plan.models
+import src.domain_staff.models
 # import src.domain_schedule.models 
 # -------------------------
 

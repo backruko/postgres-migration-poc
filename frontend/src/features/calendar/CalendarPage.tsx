@@ -5,6 +5,7 @@ import { useClients } from "../../domain/client/hooks/useClients";
 import { instanceApi } from "../../domain/plan/api";
 import { useCancelledInstances } from "../../domain/plan/hooks/useCancelledInstances";
 import { useBusinessCalendars, useClientCalendar } from "../../domain/plan/hooks/useClientCalendar";
+import { categoryOf } from "../../domain/plan/lib/category";
 import type { ClientCalendar, ClientOccurrence } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
 import { DEFAULT_CLIENT, DEFAULT_HOLIDAY_CALENDAR, TIMEZONE } from "../../shared/config";
@@ -20,6 +21,7 @@ import { Legend } from "./components/Legend";
 import { MonthGrid } from "./components/MonthGrid";
 import type { OccurrenceActions } from "./components/OccurrenceList";
 import { Toolbar } from "./components/Toolbar";
+import { useHiddenCategories } from "./hooks/useHiddenCategories";
 import { useHiddenTemplates } from "./hooks/useHiddenTemplates";
 import { useUrlState } from "./hooks/useUrlState";
 
@@ -51,6 +53,7 @@ export function CalendarPage() {
     reloadCancelled();
   }, [reloadCalendar, reloadCancelled]);
   const { hidden, toggle, showAll } = useHiddenTemplates();
+  const hiddenCategories = useHiddenCategories();
 
   const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => {
@@ -81,7 +84,13 @@ export function CalendarPage() {
 
   // ---- 表示用の集計 ----
   const templates = useMemo(() => new Map((data?.templates ?? []).map((t) => [t.template_id, t])), [data]);
-  const visible = useCallback((occ: ClientOccurrence) => !hidden.has(occ.template_id), [hidden]);
+  // 表示するのは、分類も業務も非表示にしていないテンプレートの予定（分類は予定ではなくテンプレートの設定で決まる）
+  const templateVisible = useCallback(
+    (templateId: number) =>
+      !hidden.has(templateId) && !hiddenCategories.hidden.has(categoryOf(templates.get(templateId)?.ui_metadata)),
+    [hidden, hiddenCategories.hidden, templates],
+  );
+  const visible = useCallback((occ: ClientOccurrence) => templateVisible(occ.template_id), [templateVisible]);
   const counts = useMemo(() => {
     const map = new Map<number, number>();
     for (const day of data?.days ?? []) {
@@ -107,7 +116,7 @@ export function CalendarPage() {
             <span>予定 <b>{visibleTotal}</b> 件</span>
             <span>予定のある日 <b>{visibleDays.filter((n) => n > 0).length}</b> / {data.days.length} 日</span>
             <span>
-              業務 <b>{data.templates.filter((t) => !hidden.has(t.template_id)).length}</b> / {data.templates.length}
+              業務 <b>{data.templates.filter((t) => templateVisible(t.template_id)).length}</b> / {data.templates.length}
             </span>
           </div>
         )}
@@ -149,7 +158,15 @@ export function CalendarPage() {
           {data.templates.length === 0 ? (
             <Empty description="この顧客にはまだ予定テンプレートがありません" />
           ) : (
-            <Legend templates={data.templates} counts={counts} hidden={hidden} onToggle={toggle} onShowAll={showAll} />
+            <Legend
+              templates={data.templates}
+              counts={counts}
+              hidden={hidden}
+              onToggle={toggle}
+              onShowAll={showAll}
+              hiddenCategories={hiddenCategories.hidden}
+              onToggleCategory={hiddenCategories.toggle}
+            />
           )}
 
           <div className={`main${loading ? " is-loading" : ""}`}>

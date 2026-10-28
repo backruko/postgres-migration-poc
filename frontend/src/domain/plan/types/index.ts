@@ -16,10 +16,34 @@ export type CalendarDay = Schemas["CalendarDay"];
 export type CalendarTemplateInfo = Schemas["CalendarTemplateInfo"];
 export type ClientOccurrence = Schemas["ClientOccurrenceResponse"];
 export type BusinessCalendar = Schemas["BusinessCalendarResponse"];
+export type Holiday = Schemas["HolidayResponse"];
+export type HolidayInput = Schemas["HolidayIn"];
+/** 休日の追加・削除の結果（作り直したテンプレートの数を含む） */
+export type CalendarChangeResult = Schemas["CalendarChangeResult"];
 
 /** カレンダー表示用スタイル（レスポンスの ui_metadata はキー自由の辞書） */
 export type UIMetadataInput = Schemas["UIMetadata"];
 export type UIMetadataValue = ClientOccurrence["ui_metadata"];
+
+// ---- テンプレート（事前設定） ----
+export type PlanTemplate = Schemas["PlanTemplateResponse"];
+/** テンプレート作成の入力（template_type で形が変わる判別共用体） */
+export type CreatePlanTemplateInput =
+  | Schemas["RRuleTemplateCreate"]
+  | Schemas["ExplicitDatesTemplateCreate"]
+  | Schemas["ReferenceSheetTemplateCreate"];
+/** テンプレート更新の入力（部分更新。種類と業務は変更不可、種類に合わない項目は送れない） */
+export type UpdatePlanTemplateInput = Schemas["PlanTemplateUpdate"];
+
+// ---- 年間計画シート ----
+export type ReferenceSheet = Schemas["ReferenceSheetResponse"];
+export type ReferenceSheetMarker = Schemas["ReferenceSheetMarkerResponse"];
+export type ReferenceSheetEvent = Schemas["ReferenceSheetEventResponse"];
+/** 生成マーカーのルール（例: 毎月27日、休日なら翌営業日） */
+export type MarkerRule = Schemas["MarkerRule"];
+export type CreateMarkerInput = Schemas["ReferenceSheetMarkerCreate"];
+/** rule: 指定で置き換えて再生成、null で生成をやめる、省略で変更しない */
+export type UpdateMarkerInput = Schemas["ReferenceSheetMarkerUpdate"];
 
 // ---- インスタンスの手動操作 ----
 export type PlanInstance = Schemas["PlanInstanceResponse"];

@@ -1,5 +1,6 @@
 import { ColorPicker, DatePicker, Form, Space, TimePicker } from "antd";
 import { dayjs, todayIn, zonedISO, type Dayjs } from "../../shared/lib/datetime";
+import { COLOR_PRESETS, hexFromColorPicker } from "../../shared/ui/color";
 
 /** 変更・臨時追加のフォームで共通の入力値 */
 export interface ScheduleFormValues {
@@ -8,10 +9,6 @@ export interface ScheduleFormValues {
   end: Dayjs;
   bg_color?: string;
 }
-
-const COLOR_PRESETS = [
-  { label: "よく使う色", colors: ["#1f6f5c", "#52aecd", "#2a5db0", "#7b5ea7", "#d9822b", "#c8342a", "#FF0000", "#7a8781"] },
-];
 
 /**
  * 日付・開始・終了・表示色の入力欄（同じ日の中での時間帯を入力する）。
@@ -78,11 +75,7 @@ export function ScheduleFields({ colorHelp, timezone }: { colorHelp: string; tim
         name="bg_color"
         label="表示色"
         help={colorHelp}
-        // onChange の第2引数は CSS 文字列（"rgb(82,174,205)"）のため使わず、色オブジェクトから "#rrggbb" を取り出す
-        // （バックエンドの UIMetadata.bg_color は #RGB / #RRGGBB / #RRGGBBAA のみ受け付ける）
-        getValueFromEvent={(color: { toHexString(): string; cleared: boolean }) =>
-          color.cleared ? undefined : color.toHexString()
-        }
+        getValueFromEvent={hexFromColorPicker}
       >
         <ColorPicker format="hex" disabledAlpha presets={COLOR_PRESETS} showText />
       </Form.Item>

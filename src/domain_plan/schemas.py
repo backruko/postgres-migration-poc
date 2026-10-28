@@ -171,11 +171,24 @@ class ReferenceSheetMarkerCreate(BaseModel):
 
 
 class ReferenceSheetMarkerUpdate(BaseModel):
-    """rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、現在の日付を通常の日付として残す"""
+    """
+    rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、今ある日付をそのまま残す。
+    cancel_future_dates: 生成をやめる（rule: null）と同時に、今日以降の日付をすべて取り消す（業務が終わった場合）。
+    """
     model_config = ConfigDict(str_strip_whitespace=True)
 
     description: str | None = Field(default=None, max_length=200)
     rule: MarkerRule | None = None
+    cancel_future_dates: bool = Field(
+        default=False,
+        description="with rule: null — also cancel every date from today on (kept as cancelled records; past dates untouched)",
+    )
+
+    @model_validator(mode="after")
+    def check_cancel_future_dates(self):
+        if self.cancel_future_dates and not ("rule" in self.model_fields_set and self.rule is None):
+            raise ValueError("cancel_future_dates can only be used together with rule: null (stop generating)")
+        return self
 
 
 class ReferenceSheetEventsCreate(BaseModel):
@@ -189,9 +202,15 @@ class ReferenceSheetEventUpdate(BaseModel):
 class ReferenceSheetEventResponse(BaseModel):
     id: int
     event_date: date
-    rule_date: date | None = Field(default=None, description="generated markers: the rule date this date came from")
-    is_manual: bool = Field(default=False, description="edited, added or cancelled by a person (kept on regeneration)")
-    is_cancelled: bool = Field(default=False, description="a generated date cancelled by a person")
+    rule_date: date | None = Field(default=None, description="the rule date this date came from (kept after a rule is stopped)")
+    original_date: date | None = Field(
+        default=None, description="the imported / rule date before a person moved or cancelled it (null for dates a person added)"
+    )
+    is_manual: bool = Field(default=False, description="edited, added or cancelled by a person (kept on regeneration and re-import)")
+    is_cancelled: bool = Field(default=False, description="cancelled by a person; kept as a record so it does not come back")
+    revertable: bool = Field(
+        default=False, description="the current rule can put this slot back on a free date from today on (see /revert)"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -530,6 +549,9 @@ class PlanTemplateResponse(BaseModel):
     revision: int
     materialized_until: datetime | None
     explicit_dates: list[PlanExplicitDateResponse]
+    next_occurrence_at: datetime | None = Field(
+        default=None, description="start of the next live occurrence (null: nothing upcoming within 2 years)"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -578,6 +600,13 @@ class PlanRevertResponse(BaseModel):
 class CacheRebuildResponse(BaseModel):
     template_id: int
     occurrences: int
+
+
+class TemplateExtensionResult(BaseModel):
+    """日次の生成ジョブ（scripts/extend_plans.py）の結果"""
+    templates_checked: int
+    templates_extended: int = Field(description="templates whose materialized range was extended")
+    without_upcoming: list[int] = Field(description="ids of templates with no upcoming occurrence within 2 years")
 
 
 class PlanOccurrenceResponse(BaseModel):
