@@ -1,27 +1,39 @@
 # MEMORY.md — Session handoff
 
 Handoff for the next working session. Read this first, then the design doc (§2), `frontend/README.md` (frontend
-details) and `src/domain_plan/` (backend). Last updated: 2026-10-28.
+details), `src/domain_plan/` and `src/coordination/` (backend). Last updated: 2026-10-28.
 
 ## 1. Current status
 
-- **Branch:** `feature/plan-holiday-calendar` (not merged to `main`, nothing pushed). Working tree clean.
-- **Where we are:** the Plan domain MVP is done (calendar, template CRUD, sheets with rule markers and per-date editing,
-  holiday maintenance). The cross-domain design for operations is drafted (§2) and awaits team review.
-  **Next step: Phase 1, the cross-client daily dashboard** (read-only, no new domain).
-- **DB:** latest Alembic head is `5c1f7d2a9e04` (sheet event audit trail). Migrations: `ceee1634d6a7` (squashed init) →
-  `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04`.
+- **Branch:** `feature/plan-holiday-calendar` (not merged to `main`). **Pushed to `origin`** (the user pushes; I never do).
+- **Where we are:** Plan domain MVP done. Operations design (§2): **Phase 1 (daily dashboard) and Phase 2 (generation
+  job + next-occurrence guarantee) are done.** **Next step: Phase 3, staff (users, roles)** — has open design questions
+  (no auth exists yet); present options before building.
+- **DB:** latest Alembic head is `5c1f7d2a9e04` (sheet event audit trail); Phases 1–2 added no migration. Migrations:
+  `ceee1634d6a7` (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04`.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py` → 47 passed (runs against `test_db` via `tests/conftest.py`, `create_all`, no migrations).
+- **Tests:** `pytest tests/test_plan.py tests/test_ops.py` → 53 passed (runs against `test_db` via `tests/conftest.py`,
+  `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
+  then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"` to stay out of that space.
+  The user hasn't asked for the fix yet (retry or counter in the fixture).
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
   Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `alembic check` → no drift.
   Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes.
+- **Scheduled job (user's machine):** Task Scheduler `\postgres-migration-poc\PlanExtendJob`, daily 00:05, runs
+  `scripts/extend_plans.py` in the repo root (so `.env` → dev DB) as the user (interactive logon, runs on next logon if
+  missed), output appended to `extend_plans.log` (git-ignored). First run 2026-10-28: exit 0, 7 templates, 1 extended.
 - **Browser check:** the user clicked through the 年間計画シート and 休日カレンダー screens (2026-10-28): no issues found.
+  Not yet clicked through: 日次ダッシュボード (`/daily`) and the 「次の予定」 column on the template settings page.
 
 ### Recent commits (newest first)
 | Commit | Content |
 |---|---|
+| `fcff659` | Phase 2: `extend_all_templates` + `scripts/extend_plans.py`, next-occurrence guarantee, `next_occurrence_at`, 「次の予定」 column |
+| `eb4e6b5` | Phase 1 frontend: 日次ダッシュボード page `/daily` (committed by the user as "dashboard") |
+| `17f9bcc` | Phase 1 service: `GET /ops/daily` implementation + `tests/test_ops.py` (committed by the user as "fix") |
+| `9306e23` | Phase 1: coordination package, dashboard schemas + router skeleton |
+| `165866d` / `b410e5c` | MEMORY.md rewrite around the operations design |
 | `ae9ac2e` | MEMORY.md update |
 | `fa52e42` | Past holidays read-only in the backend; 「日本の祝日を取り込む」 (calculated, 2022–2099) |
 | `1fc8606` | MEMORY.md update |
@@ -51,7 +63,7 @@ Before building any phase, re-read the doc: the team may have edited or commente
 | **plan** | When it is due: templates, sheets, holidays, occurrences. Recomputable; regenerated freely, future only; knows nothing about ope | Exists (this branch) |
 | **ope** | What happened: orders, steps, append-only status events, signals. Facts, never recomputed | Planned |
 | **staff** | Who: users and roles (operator, checker, releaser, admin) | Planned |
-| **Coordination layer** | Cross-domain use cases (reschedule, release) in one DB transaction + read models (daily dashboard) | Planned |
+| **Coordination layer** | Cross-domain use cases (reschedule, release) in one DB transaction + read models (daily dashboard) | Daily dashboard built (`src/coordination/`); use cases planned |
 
 Dependency direction: ope → plan (reads slots), ope → biz (pins SOP version), ope → staff (actor), plan → biz
 (template's business). plan never imports ope.
@@ -61,12 +73,17 @@ Dependency direction: ope → plan (reads slots), ope → biz (pins SOP version)
 - **One order per slot `(template_id, occurrence_date)`**; plan voids and recreates instances, the order survives.
 - **Eager creation:** every generated occurrence gets a `pending` order immediately; pending/ready orders follow plan changes.
 
-### Visibility beyond 90 days (to build in Phase 2)
-- Today: per-template high-water mark `materialized_until` (now + 90 days at creation); **no background job**; it only
-  extends when a read reaches further (`_materialize_templates`, cap now + 2 years, `MAX_LOOKAHEAD`).
-- Proposal: a daily job extends each active template to max(now + 90 days, its **next occurrence**), cap 2 years;
-  orders are created for the same set (annual work visible all year). Templates with no future occurrence get a
-  "no upcoming occurrence" warning on the settings page.
+### Visibility beyond 90 days (built in Phase 2)
+- Per-template high-water mark `materialized_until`; reads still extend it on demand (`_materialize_templates`, cap
+  now + 2 years, `MAX_LOOKAHEAD`).
+- `_ensure_next_occurrence` extends to max(now + 90 days rounded up to the next UTC midnight, the **next occurrence**),
+  cap 2 years; skips manually cancelled slots and keeps looking. Runs on template create / restore, at the end of every
+  `_regenerate` (edits, explicit dates, holiday / sheet cascades) and in the daily job `extend_all_templates`
+  (`scripts/extend_plans.py`, commits per template, idempotent within a day).
+- Templates with nothing upcoming within 2 years: `next_occurrence_at = null` → warning on the settings page.
+- Phase 4 still to do: orders created for the same set.
+- Known edge (pre-existing): a template whose mark is in the past gets the gap filled from the old mark (past dates
+  included) on its next extension. The daily job prevents new gaps.
 
 ### Order lifecycle
 - Statuses: `pending → ready → in_progress → finished`; `on_hold` (保留, no date; resume returns to the previous status);
@@ -126,11 +143,10 @@ Mechanism: reconcile returns its change set per slot; the coordination layer app
 - plan: tables unchanged; + the daily generation job; reconcile returns a per-slot change set.
 
 ### Delivery phases
-1. **Cross-client daily dashboard** (read-only: occurrences + sheet milestones + holidays per calendar), e.g.
-   `GET /ops/daily?date=&timezone=Asia/Tokyo` grouped by client → business; reads through on-demand generation (up
-   to 2 years ahead); past dates show voided/canceled items with reasons. ← **next**
-2. Plan generation job + next-occurrence guarantee + "no upcoming occurrence" warning.
-3. staff (users, roles).
+1. ~~Cross-client daily dashboard~~ **done** (§4 Coordination, §5 `/daily`).
+2. ~~Plan generation job + next-occurrence guarantee + "no upcoming occurrence" warning~~ **done** (user chose: CLI
+   script + OS scheduler; warning from a template field).
+3. staff (users, roles). ← **next**
 4. ope orders: eager creation, propagation, statuses, release modes, SOP resolution / pinning, conflict flags.
 5. Steps: conditions, maker-checker, `is_blocking`.
 6. Dependencies (hard + override, informational).
@@ -146,7 +162,9 @@ dependencies (proposed no) · signal transport and matching key · which roles r
 - **Baby steps.** The user defines one step at a time with strict limits. Do exactly that step; do not pre-build later
   steps. When a step turns up a real design question, stop and present options with a recommendation; they decide.
 - **Commits.** Leave each step uncommitted for review unless asked. When they ask (or approve a finished step with
-  "excellent" / "go"), I commit on the feature branch (conventional-commit style, `Co-Authored-By` line). Never push.
+  "excellent" / "go" / "go ahead"), I commit on the feature branch (conventional-commit style, `Co-Authored-By` line).
+  Never push. The user sometimes commits and pushes a step themselves (short messages like "fix") — check `git log`
+  before committing, and never amend or rewrite their pushed commits.
   Before starting a step, check `git status`; if the previous step is uncommitted, say so.
 - **Don't touch the user's dev DB or their running uvicorn (port 8000).** Read-only GETs against 8000 are fine (useful for
   diagnosing their test data; `app.log` in the repo root logs SQL for both servers). For end-to-end checks use the
@@ -229,6 +247,25 @@ cascades to all templates referencing the marker (`_propagate_sheet_change`).
 - **`revertable`** on each event (computed, not stored; `_annotate_revertable`): true only if the current rule produces
   that slot on a free date ≥ today. Same conditions as `POST /plans/sheets/events/{id}/revert`.
 
+### Coordination layer (`src/coordination/`) as built
+Not a domain: a flat package (`schemas.py` / `services.py` / `router.py`, prefix `/ops`) that reads plan / biz / client.
+It calls only public plan functions (`plan_services.materialize_all_templates`), never plan's private helpers.
+- **`GET /ops/daily?date=&timezone=Asia/Tokyo`** (`date` optional → today in `timezone`; alias of `target_date`):
+  live occurrences **starting** that day (same day split as the calendar), grouped client → business (both by code);
+  sheet dates (`DailyMilestone`, with provenance) under the client; `calendars[]` = every business calendar with
+  `is_business_day` / `holiday_name`. **Past dates only:** `voided[]` per business (reason, note, voided_at; includes
+  deleted templates via `include_deleted`, excludes deleted businesses) and cancelled sheet dates.
+  Clients with only sheet dates appear with `businesses: []`. Reads through generation up to 2 years.
+- Repos added for it: `plan_cache_repo.query_starting_in`, `plan_instance_repo.get_voided_starting_in`,
+  `reference_sheet_repo.get_events_on`, `plan_template_repo.get_all`, `client_repo.get_by_codes`.
+- Its own `_now()` (tests monkeypatch `ops_services._now` to view a day as past).
+
+### Plan generation job (Phase 2)
+`plan_services.extend_all_templates(db) -> TemplateExtensionResult {templates_checked, templates_extended,
+without_upcoming}`; script `scripts/extend_plans.py` (sets `engine.echo = False` for itself, one log line, exit 1 on
+failure). `PlanTemplateResponse.next_occurrence_at` (computed per response by `_with_next_occurrence` from the cache via
+`plan_cache_repo.next_starts`; null on delete responses).
+
 ### Biz domain (`src/domain_biz/`) as built
 `biz_master` (client_code, business_seq → business_code, name, …) → `sop_version` (version_number, version_tag,
 status, `effective_at`, `expired_at`; clone / approve / cancel endpoints) → `sop_step_template` (step_num, title,
@@ -263,7 +300,7 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
   `npm run gen:api` → `src/shared/api/schema.gen.ts` (never edit by hand; regenerate after backend schema changes).
   Typed client: `openapi-fetch` (`src/shared/api/http.ts`, `unwrap()` → `ApiError{status, code, message}`).
 - **Layering (one direction): `features → domain → shared`.** UI never calls HTTP directly.
-  - `domain/{plan,biz,client}/{types,api,hooks,lib}` — types are aliases of generated schemas only.
+  - `domain/{plan,biz,client,ops}/{types,api,hooks,lib}` — types are aliases of generated schemas only.
     `domain/plan/lib/category.ts`: template category stored in `ui_metadata.category` (missing → 定例; display-only —
     "who acts" for client events must be a real biz field, not this).
     `domain/plan/lib/jpHolidays.ts`: Japanese national holidays calculated from the current law (equinox formula,
@@ -271,8 +308,15 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
   - `shared/` — http client, `useApiQuery`, `datetime.ts`, `useNow`, `ui/color.ts`, `config.ts` (`TIMEZONE`).
   - `features/calendar`, `features/schedule-actions`, `features/plan-settings`.
     Pure logic lives in `templateForm.ts` / `markerForm.ts` / `holidayForm.ts` (testable in node); modals are UI only.
-- **Routes / nav:** `/` calendar (`?client=&month=&holidays=`) · `/settings/templates?biz=` · `/settings/sheets?client=` ·
-  `/settings/holidays?calendar=<id>&year=`. The layout remembers each page's last query string, so switching pages keeps
+- **Routes / nav:** `/` calendar (`?client=&month=&holidays=`) · `/daily?date=` 日次ダッシュボード ·
+  `/settings/templates?biz=` · `/settings/sheets?client=` · `/settings/holidays?calendar=<id>&year=`.
+- **日次ダッシュボード** (`features/daily-dashboard`, data via `domain/ops/{types,api,hooks}`): prev / next day, date
+  picker, 今日; calendar tags (営業日 / 休日（name） / 休業日（週末）); one card per client (code links to its calendar
+  month), sheet-date tags with provenance labels, occurrences per business (time, chipStyle swatch + Icon, 人が変更 /
+  臨時 tags, 元の日付 when the slot date differs); past days add struck-through voided rows with the reason
+  (`VOID_REASON_LABEL`) and note. Pure logic in `dailyDashboard.ts`.
+- **Template settings page:** 「次の予定」 column (template timezone) and a warning tag + banner for templates with no
+  upcoming occurrence. The layout remembers each page's last query string, so switching pages keeps
   selections. The calendar's `useUrlState` goes through react-router (`useSearchParams`), not `history.replaceState`.
 - **Calendar:** category chips (定例 hidden by default, stored in localStorage) + per-template legend toggles; sticky nav
   (`--nav-h: 44px`) and sticky weekday row (`.month` uses `overflow: clip` so sticky works).
