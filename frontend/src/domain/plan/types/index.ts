@@ -33,6 +33,13 @@ export type UpdatePlanTemplateInput = Schemas["PlanTemplateUpdate"];
 
 // ---- 年間計画シート ----
 export type ReferenceSheet = Schemas["ReferenceSheetResponse"];
+export type ReferenceSheetMarker = Schemas["ReferenceSheetMarkerResponse"];
+export type ReferenceSheetEvent = Schemas["ReferenceSheetEventResponse"];
+/** 生成マーカーのルール（例: 毎月27日、休日なら翌営業日） */
+export type MarkerRule = Schemas["MarkerRule"];
+export type CreateMarkerInput = Schemas["ReferenceSheetMarkerCreate"];
+/** rule: 指定で置き換えて再生成、null で生成をやめる、省略で変更しない */
+export type UpdateMarkerInput = Schemas["ReferenceSheetMarkerUpdate"];
 
 // ---- インスタンスの手動操作 ----
 export type PlanInstance = Schemas["PlanInstanceResponse"];

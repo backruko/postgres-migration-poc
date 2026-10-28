@@ -73,6 +73,7 @@ button, input, select { font: inherit; color: inherit; }
 .template-name { display: inline-flex; align-items: center; gap: 8px; }
 .table-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
 .icon-option { display: inline-flex; align-items: center; gap: 6px; }
+.sheet-block { display: grid; gap: 10px; }
 .template-name .swatch { width: 12px; height: 12px; }
 
 /* ---------------- header ---------------- */

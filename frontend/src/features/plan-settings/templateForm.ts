@@ -48,6 +48,14 @@ export const RRULE_PRESETS = [
   "FREQ=MONTHLY;BYMONTHDAY=-1",
 ];
 
+/** Form.Item の rules 用: FREQ= で始まり、DTSTART を含まない RRULE か（起点日は別の項目で指定する） */
+export const rruleRule = {
+  validator: (_: unknown, value?: string) =>
+    !value || (/^FREQ=/i.test(value.trim()) && !/DTSTART/i.test(value))
+      ? Promise.resolve()
+      : Promise.reject(new Error("FREQ= で始まる RRULE を入力してください（DTSTART は起点日で指定）")),
+};
+
 /** 新規作成の初期値 */
 export function initialValues(): Partial<FormValues> {
   return {

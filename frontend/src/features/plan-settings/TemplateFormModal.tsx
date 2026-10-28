@@ -32,6 +32,7 @@ import {
   fromTemplate,
   initialValues,
   RRULE_PRESETS,
+  rruleRule,
   toCreateInput,
   toUpdateInput,
   type FormValues,
@@ -217,12 +218,7 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
               extra={rrule ? `→ ${describeRrule(rrule)}` : "例: FREQ=WEEKLY;BYDAY=MO,WE,FR"}
               rules={[
                 { required: true, whitespace: true, message: "RRULE を入力してください" },
-                {
-                  validator: (_, value?: string) =>
-                    !value || (/^FREQ=/i.test(value.trim()) && !/DTSTART/i.test(value))
-                      ? Promise.resolve()
-                      : Promise.reject(new Error("FREQ= で始まる RRULE を入力してください（DTSTART は起点日で指定）")),
-                },
+                rruleRule,
               ]}
             >
               <AutoComplete
