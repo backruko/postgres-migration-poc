@@ -77,6 +77,10 @@ button, input, select { font: inherit; color: inherit; }
 .marker-dates { display: grid; gap: 8px; padding: 4px 0; }
 .inline-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
 .clickable-tag { cursor: pointer; }
+/* 休日カレンダー */
+.year-label { min-width: 64px; text-align: center; }
+.holiday-row { display: flex; margin-bottom: 0; }
+.holiday-paste { margin-top: 16px; margin-bottom: 8px; }
 .clickable-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* 今日より前の日付（実績・変更不可） */
 .is-past-row > td { color: var(--muted); background: var(--past-bg); }

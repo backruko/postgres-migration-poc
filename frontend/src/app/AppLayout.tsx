@@ -5,6 +5,7 @@ const PAGES = [
   { path: "/", label: "カレンダー", end: true },
   { path: "/settings/templates", label: "予定テンプレート設定", end: false },
   { path: "/settings/sheets", label: "年間計画シート", end: false },
+  { path: "/settings/holidays", label: "休日カレンダー", end: false },
 ];
 
 /** 全画面共通のレイアウト（上部のナビゲーション + 各画面） */

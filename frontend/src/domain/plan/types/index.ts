@@ -16,6 +16,10 @@ export type CalendarDay = Schemas["CalendarDay"];
 export type CalendarTemplateInfo = Schemas["CalendarTemplateInfo"];
 export type ClientOccurrence = Schemas["ClientOccurrenceResponse"];
 export type BusinessCalendar = Schemas["BusinessCalendarResponse"];
+export type Holiday = Schemas["HolidayResponse"];
+export type HolidayInput = Schemas["HolidayIn"];
+/** 休日の追加・削除の結果（作り直したテンプレートの数を含む） */
+export type CalendarChangeResult = Schemas["CalendarChangeResult"];
 
 /** カレンダー表示用スタイル（レスポンスの ui_metadata はキー自由の辞書） */
 export type UIMetadataInput = Schemas["UIMetadata"];
