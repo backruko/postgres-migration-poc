@@ -6,14 +6,17 @@ details), `src/domain_plan/` and `src/coordination/` (backend). Last updated: 20
 ## 1. Current status
 
 - **Branch:** `feature/plan-holiday-calendar` (not merged to `main`). **Pushed to `origin`** (the user pushes; I never do).
-- **Where we are:** Plan domain MVP done. Operations design (§2): **Phase 1 (daily dashboard) and Phase 2 (generation
-  job + next-occurrence guarantee) are done.** **Next step: Phase 3, staff (users, roles)** — has open design questions
-  (no auth exists yet); present options before building.
-- **DB:** latest Alembic head is `5c1f7d2a9e04` (sheet event audit trail); Phases 1–2 added no migration. Migrations:
-  `ceee1634d6a7` (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04`.
+- **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
+  next-occurrence guarantee) and 3 (staff: backend + screen) are done.** **Next step: Phase 4, ope orders** — big; it
+  has open questions in the doc (which roles release / pin / force-start / resolve, release lead time …). Re-read the
+  doc and present options before building.
+- **DB:** latest Alembic head is `568c3287c359` (staff users and roles; the user upgraded their dev DB 2026-10-28 and
+  registered staff id 1, login `system`, system_admin). Migrations: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
+  `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`.
+  `plan_check` is migrated too and has staff 1 `check-admin` (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py tests/test_ops.py` → 53 passed (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py` → 61 passed (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"` to stay out of that space.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -24,11 +27,14 @@ details), `src/domain_plan/` and `src/coordination/` (backend). Last updated: 20
   `scripts/extend_plans.py` in the repo root (so `.env` → dev DB) as the user (interactive logon, runs on next logon if
   missed), output appended to `extend_plans.log` (git-ignored). First run 2026-10-28: exit 0, 7 templates, 1 extended.
 - **Browser check:** the user clicked through the 年間計画シート and 休日カレンダー screens (2026-10-28): no issues found.
-  Not yet clicked through: 日次ダッシュボード (`/daily`) and the 「次の予定」 column on the template settings page.
+  Not yet clicked through: 日次ダッシュボード (`/daily`), the 「次の予定」 column on the template settings page, and the
+  職員 screen (`/settings/staff`) + nav picker 「操作する職員」.
 
 ### Recent commits (newest first)
 | Commit | Content |
 |---|---|
+| `702ebbb` | Phase 3 frontend: 職員 screen `/settings/staff`, nav picker 「操作する職員」 (X-Staff-Id middleware) |
+| `bfe3deb` | Phase 3 backend: staff domain, migration `568c3287c359`, `require_roles`, `/staff` API, `scripts/create_staff.py` |
 | `fcff659` | Phase 2: `extend_all_templates` + `scripts/extend_plans.py`, next-occurrence guarantee, `next_occurrence_at`, 「次の予定」 column |
 | `eb4e6b5` | Phase 1 frontend: 日次ダッシュボード page `/daily` (committed by the user as "dashboard") |
 | `17f9bcc` | Phase 1 service: `GET /ops/daily` implementation + `tests/test_ops.py` (committed by the user as "fix") |
@@ -146,8 +152,9 @@ Mechanism: reconcile returns its change set per slot; the coordination layer app
 1. ~~Cross-client daily dashboard~~ **done** (§4 Coordination, §5 `/daily`).
 2. ~~Plan generation job + next-occurrence guarantee + "no upcoming occurrence" warning~~ **done** (user chose: CLI
    script + OS scheduler; warning from a template field).
-3. staff (users, roles). ← **next**
-4. ope orders: eager creation, propagation, statuses, release modes, SOP resolution / pinning, conflict flags.
+3. ~~staff (users, roles)~~ **done** (§4 Staff, §5 職員). User decisions: no login yet (trusted `X-Staff-Id` header);
+   fixed global roles; backend first, screen second.
+4. ope orders: eager creation, propagation, statuses, release modes, SOP resolution / pinning, conflict flags. ← **next**
 5. Steps: conditions, maker-checker, `is_blocking`.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
@@ -266,6 +273,26 @@ without_upcoming}`; script `scripts/extend_plans.py` (sets `engine.echo = False`
 failure). `PlanTemplateResponse.next_occurrence_at` (computed per response by `_with_next_occurrence` from the cache via
 `plan_cache_repo.next_starts`; null on delete responses).
 
+### Staff domain (`src/domain_staff/`) as built (Phase 3)
+- Tables `staff_user` (login_id unique, name, email, `status`), `role` (id, code unique, name, description; seeded by
+  the migration and, for `create_all` in tests, by an `after_create` DDL in models.py), `staff_role` (composite PK,
+  `granted_at`, `granted_by_id`). Staff are never deleted (future order / step events reference them); suspend instead.
+- **Roles (user's list):** operator, checker, releaser, admin (business), viewer, auditor, system_admin (account admin,
+  not business work). Global, a user can hold several. `RoleCode` enum in models.py.
+- **Status, not roles (my call, user didn't object):** `pending → active ⇄ suspended`; no way back to pending. Only
+  `active` staff can act; suspended keep their roles.
+- **Guards (user asked for decorators):** `@require_roles(["checker", "releaser"])` / `@require_active()` in
+  `domain_staff/auth.py`, placed **under** `@router.<method>`. They add a hidden keyword-only param
+  (`_require_roles_current_staff = Depends(get_current_staff)`) to the signature and pop it in the wrapper; sync and
+  async; role typos fail at import. Errors: 401 `UNAUTHORIZED` (no / unknown header), 403 `STAFF_NOT_ACTIVE`,
+  403 `FORBIDDEN` (missing role). `ForbiddenError` in core/exceptions; `AUTH_ERRORS` in core/schemas/error.py.
+- `get_current_staff` reads the trusted `X-Staff-Id` header — the one place to replace when real login comes.
+  Endpoints that need the actor also declare `current_staff: StaffUser = Depends(get_current_staff)` (cached per request).
+- `/staff`: `GET /me` (any status) · `GET /roles` (active) · `GET /`, `GET /{id}` (system_admin, admin, auditor) ·
+  `POST /`, `PATCH /{id}`, `PUT /{id}/roles`, `PUT /{id}/status` (system_admin). Lockout guards: can't change own
+  status, can't remove own system_admin. Plan / ops endpoints are **not** guarded yet.
+- `scripts/create_staff.py <login_id> <name> --roles system_admin [--email]` creates an **active** user (bootstrap).
+
 ### Biz domain (`src/domain_biz/`) as built
 `biz_master` (client_code, business_seq → business_code, name, …) → `sop_version` (version_number, version_tag,
 status, `effective_at`, `expired_at`; clone / approve / cancel endpoints) → `sop_step_template` (step_num, title,
@@ -300,7 +327,7 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
   `npm run gen:api` → `src/shared/api/schema.gen.ts` (never edit by hand; regenerate after backend schema changes).
   Typed client: `openapi-fetch` (`src/shared/api/http.ts`, `unwrap()` → `ApiError{status, code, message}`).
 - **Layering (one direction): `features → domain → shared`.** UI never calls HTTP directly.
-  - `domain/{plan,biz,client,ops}/{types,api,hooks,lib}` — types are aliases of generated schemas only.
+  - `domain/{plan,biz,client,ops,staff}/{types,api,hooks,lib}` — types are aliases of generated schemas only.
     `domain/plan/lib/category.ts`: template category stored in `ui_metadata.category` (missing → 定例; display-only —
     "who acts" for client events must be a real biz field, not this).
     `domain/plan/lib/jpHolidays.ts`: Japanese national holidays calculated from the current law (equinox formula,
@@ -308,13 +335,19 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
   - `shared/` — http client, `useApiQuery`, `datetime.ts`, `useNow`, `ui/color.ts`, `config.ts` (`TIMEZONE`).
   - `features/calendar`, `features/schedule-actions`, `features/plan-settings`.
     Pure logic lives in `templateForm.ts` / `markerForm.ts` / `holidayForm.ts` (testable in node); modals are UI only.
-- **Routes / nav:** `/` calendar (`?client=&month=&holidays=`) · `/daily?date=` 日次ダッシュボード ·
+- **Routes / nav:** `/` calendar (`?client=&month=&holidays=`) · `/daily?date=` 日次ダッシュボード · `/settings/staff` 職員 ·
   `/settings/templates?biz=` · `/settings/sheets?client=` · `/settings/holidays?calendar=<id>&year=`.
 - **日次ダッシュボード** (`features/daily-dashboard`, data via `domain/ops/{types,api,hooks}`): prev / next day, date
   picker, 今日; calendar tags (営業日 / 休日（name） / 休業日（週末）); one card per client (code links to its calendar
   month), sheet-date tags with provenance labels, occurrences per business (time, chipStyle swatch + Icon, 人が変更 /
   臨時 tags, 元の日付 when the slot date differs); past days add struck-through voided rows with the reason
   (`VOID_REASON_LABEL`) and note. Pure logic in `dailyDashboard.ts`.
+- **Acting staff (until login):** `shared/api/actingStaff.ts` keeps the id (localStorage, else `VITE_DEFAULT_STAFF_ID`);
+  an openapi-fetch middleware in `http.ts` sends it as `X-Staff-Id` on every request; `useActingStaffId`
+  (useSyncExternalStore). Nav picker `app/ActingStaffPicker.tsx` (enter id, shows name / status / roles).
+- **職員** (`/settings/staff`, `features/staff-settings`): list, 職員を登録, 編集 (name, email, role checkboxes; own
+  system_admin locked), 有効化 / 利用停止 / 再開 (confirm; own row disabled), 「この職員として操作」. UI permissions in
+  `domain/staff/lib/permissions.ts` mirror the backend (display only).
 - **Template settings page:** 「次の予定」 column (template timezone) and a warning tag + banner for templates with no
   upcoming occurrence. The layout remembers each page's last query string, so switching pages keeps
   selections. The calendar's `useUrlState` goes through react-router (`useSearchParams`), not `history.replaceState`.
