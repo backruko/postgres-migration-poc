@@ -94,9 +94,13 @@ Dependency direction: ope → plan (reads slots), ope → biz (pins SOP version)
 ### Order lifecycle
 - Statuses: `pending → ready → in_progress → finished`; `on_hold` (保留, no date; resume returns to the previous status);
   `canceled`. `finished` / `canceled` are final.
-- **Release** (pending → ready), per business `release_mode`: `MANUAL_APPROVAL` (releaser role) or `AUTOMATIC`
+- **Who may do what (decided 2026-10-28):** **releaser and admin** release, pin a version, force-start and resolve
+  conflicts → `@require_roles(["releaser", "admin"])`.
+- **Release** (pending → ready), per business `release_mode`: `MANUAL_APPROVAL` (releaser or admin) or `AUTOMATIC`
   (at `release_lead`, proposed default 00:00 JST on the scheduled day). Release freezes SOP version + steps.
-- **Start** (ready → in_progress): operator; hard dependencies must be met, or a force-start with reason.
+- **Start** (ready → in_progress): operator, **on or after the scheduled day (JST) only** (decided 2026-10-28);
+  earlier needs a **releaser's approval** (an order event). Hard dependencies must be met, or a releaser / admin
+  force-starts with reason.
 - **Reschedule** (延期) is not a status: it is a plan reschedule; the order follows while pending / ready / on hold.
   A person cannot reschedule an order in progress.
 - Cancel: a person with reason; the system only when a pending/ready order's slot disappears.
@@ -105,7 +109,7 @@ Dependency direction: ope → plan (reads slots), ope → biz (pins SOP version)
 ### SOP version resolution
 - `resolved = pinned ?? version effective on the scheduled date` (biz `effective_at` ≤ date < `expired_at`).
 - The SOP approval screen shows the impact list ("upcoming orders that will run v4").
-- An authorized user can pin a pending order to any approved version, and unpin; recorded as events.
+- A releaser or admin can pin a pending order to any approved version, and unpin; recorded as events.
 - Frozen at release (decided).
 
 ### Steps
@@ -160,9 +164,10 @@ Mechanism: reconcile returns its change set per slot; the coordination layer app
 7. Client events with automatic completion (signals).
 
 ### Open questions (in the doc)
-Client event scope (per business or per client) · automatic release lead time · may operators start before the
-scheduled day · reset later steps on rejection (proposed no) · "latest before due" matching · cross-client
-dependencies (proposed no) · signal transport and matching key · which roles release / pin / force-start / resolve.
+Client event scope (per business or per client) · automatic release lead time · reset later steps on rejection
+(proposed no) · "latest before due" matching · cross-client dependencies (proposed no) · signal transport and matching
+key. Decided 2026-10-28 (ticked in the doc, rev 23): early start only with a releaser's approval; releaser + admin
+release / pin / force-start / resolve conflicts.
 
 ## 3. Working agreement with the user
 
