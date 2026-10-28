@@ -17,8 +17,7 @@ details) and `src/domain_plan/` (backend). Last updated: 2026-10-28.
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
   Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `alembic check` → no drift.
   Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes.
-- **Not verified yet:** in-browser click-through of the 年間計画シート screen (rule markers, per-date editing, the
-  生成をやめる choice) and of the 休日カレンダー screen (including 日本の祝日を取り込む). The user is testing them.
+- **Browser check:** the user clicked through the 年間計画シート and 休日カレンダー screens (2026-10-28): no issues found.
 
 ### Recent commits (newest first)
 | Commit | Content |
@@ -42,7 +41,7 @@ details) and `src/domain_plan/` (backend). Last updated: 2026-10-28.
 ## 2. Target architecture — "Operations Orchestration Design" (draft for team review)
 
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
-An open comment on it asks whether SOP version + steps freeze at **release** (proposed) or at **start**.
+Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
 
 ### Domains (decided: plan and ope stay separate, no merge)
@@ -84,7 +83,7 @@ Dependency direction: ope → plan (reads slots), ope → biz (pins SOP version)
 - `resolved = pinned ?? version effective on the scheduled date` (biz `effective_at` ≤ date < `expired_at`).
 - The SOP approval screen shows the impact list ("upcoming orders that will run v4").
 - An authorized user can pin a pending order to any approved version, and unpin; recorded as events.
-- Frozen at release (open question in the doc: release vs start).
+- Frozen at release (decided).
 
 ### Steps
 - Built at release from the frozen version; step template `condition`: `always` | `month_in` | `first_in_week`
@@ -160,7 +159,8 @@ dependencies (proposed no) · signal transport and matching key · which roles r
 - **Verify before claiming.** Build + type check every change; backend changes need pytest + pyright (+ `alembic check`
   for migrations). For API-facing frontend work, bundle the real domain/feature modules with esbuild
   (`--define:import.meta.env='{"VITE_API_BASE_URL":"http://localhost:5174/api","VITE_TIMEZONE":"Asia/Tokyo"}'`) and run
-  them in node against the throwaway backend. Say plainly what was *not* checked (in-browser clicking so far).
+  them in node against the throwaway backend. Say plainly what was *not* checked (I can't click through the browser; the
+  user does that).
 - **Design work** (cross-domain, for the team) goes into a Claude Docs document, not chat.
 - Code comments in the repo are Japanese; UI text is Japanese; replies to the user in English.
 - Windows line endings: frontend files are CRLF in the working tree; backend Python files, migrations and MEMORY.md are
