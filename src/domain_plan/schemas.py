@@ -171,11 +171,24 @@ class ReferenceSheetMarkerCreate(BaseModel):
 
 
 class ReferenceSheetMarkerUpdate(BaseModel):
-    """rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、現在の日付を通常の日付として残す"""
+    """
+    rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、今ある日付をそのまま残す。
+    cancel_future_dates: 生成をやめる（rule: null）と同時に、今日以降の日付をすべて取り消す（業務が終わった場合）。
+    """
     model_config = ConfigDict(str_strip_whitespace=True)
 
     description: str | None = Field(default=None, max_length=200)
     rule: MarkerRule | None = None
+    cancel_future_dates: bool = Field(
+        default=False,
+        description="with rule: null — also cancel every date from today on (kept as cancelled records; past dates untouched)",
+    )
+
+    @model_validator(mode="after")
+    def check_cancel_future_dates(self):
+        if self.cancel_future_dates and not ("rule" in self.model_fields_set and self.rule is None):
+            raise ValueError("cancel_future_dates can only be used together with rule: null (stop generating)")
+        return self
 
 
 class ReferenceSheetEventsCreate(BaseModel):

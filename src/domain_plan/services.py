@@ -568,9 +568,15 @@ def update_marker(db: Session, sheet_id: int, marker: str, marker_in: ReferenceS
     changed = False
     if "rule" in marker_in.model_fields_set:
         if marker_in.rule is None:
-            # 生成をやめる: 日付はそのまま残し、以後ルールで作り直さない。
+            # 生成をやめる: 以後ルールで作り直さない。
             # 出どころ（rule_date）・人の判断（is_manual）・取消の記録は監査のため消さない
             _apply_marker_rule(db, marker_obj, None)
+            if marker_in.cancel_future_dates:
+                # 業務が終わった場合: 今日以降の日付をすべて取り消す（過去は実績のため残す）。1トランザクションで反映する
+                today = _sheet_today()
+                for event in [e for e in marker_obj.events if e.event_date >= today and not e.is_cancelled]:
+                    _cancel_sheet_event(db, marker_obj, event)
+                    changed = True
         else:
             _apply_marker_rule(db, marker_obj, marker_in.rule)
             db.flush()
@@ -778,6 +784,24 @@ def update_sheet_event(db: Session, event_id: int, event_in: ReferenceSheetEvent
     return event
 
 
+def _cancel_sheet_event(db: Session, marker_obj: ReferenceSheetMarker, event: ReferenceSheetEvent) -> bool:
+    """
+    日付を取り消します（flush 済み）。物理削除した場合は True を返します。
+    - ルール・取り込み由来の日付: 出どころを残して「取消」として記録する（再生成・再取り込みでも復活しない）
+    - 人が追加した日付: 出どころが無いため削除する（記録を残すと、その日にルールの日付を置けなくなる）
+    """
+    if event.rule_date is None and event.original_date is None and event.is_manual:
+        marker_obj.events.remove(event)  # delete-orphan により削除
+        db.flush()
+        return True
+    if event.original_date is None:
+        event.original_date = event.event_date
+    event.is_cancelled = True
+    event.is_manual = True
+    db.flush()
+    return False
+
+
 def delete_sheet_event(db: Session, event_id: int) -> ReferenceSheetEventResponse:
     event = reference_sheet_repo.get_event(db, event_id=event_id)
     if not event:
@@ -788,21 +812,11 @@ def delete_sheet_event(db: Session, event_id: int) -> ReferenceSheetEventRespons
         raise BadRequestError(f"ReferenceSheetEvent(id={event_id}) is already cancelled.")
     _check_not_past([event.event_date], "delete")
 
-    added_by_person = event.rule_date is None and event.original_date is None and event.is_manual
-    if not added_by_person:
-        # ルール・取り込み由来の日付は、出どころを残して「取消」として記録する（再生成・再取り込みでも復活しない）
-        if event.original_date is None:
-            event.original_date = event.event_date
-        event.is_cancelled = True
-        event.is_manual = True
-        db.flush()
+    before = ReferenceSheetEventResponse.model_validate(event)
+    removed = _cancel_sheet_event(db, marker_obj, event)
+    if not removed:
         _annotate_revertable(db, marker_obj)
-        result = ReferenceSheetEventResponse.model_validate(event)
-    else:
-        # 人が追加した日付は出どころが無いため削除する（記録を残すと、その日にルールの日付を置けなくなる）
-        result = ReferenceSheetEventResponse.model_validate(event)
-        db.delete(event)
-        db.flush()
+    result = before if removed else ReferenceSheetEventResponse.model_validate(event)
     _propagate_sheet_change(db, sheet_id, marker)
     db.commit()
     return result

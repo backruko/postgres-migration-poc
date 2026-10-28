@@ -408,7 +408,8 @@ export interface paths {
          * Update Marker Endpoint
          * @description マーカーの説明・生成ルールを変更します。
          *     rule を指定するとルールから日付を再生成します（人が編集・追加・取消した日付は常に維持）。
-         *     rule に null を指定すると生成をやめ、現在の日付を通常の日付として残します。
+         *     rule に null を指定すると生成をやめ、今ある日付をそのまま残します（出どころ・取消の記録も残る）。
+         *     rule: null と同時に cancel_future_dates: true を指定すると、今日以降の日付をすべて取り消します（業務が終わった場合。過去は残る）。
          */
         patch: operations["update_marker_endpoint_plans_sheets__sheet_id__markers__marker__patch"];
         trace?: never;
@@ -1793,12 +1794,19 @@ export interface components {
         };
         /**
          * ReferenceSheetMarkerUpdate
-         * @description rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、現在の日付を通常の日付として残す
+         * @description rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、今ある日付をそのまま残す。
+         *     cancel_future_dates: 生成をやめる（rule: null）と同時に、今日以降の日付をすべて取り消す（業務が終わった場合）。
          */
         ReferenceSheetMarkerUpdate: {
             /** Description */
             description?: string | null;
             rule?: components["schemas"]["MarkerRule"] | null;
+            /**
+             * Cancel Future Dates
+             * @description with rule: null — also cancel every date from today on (kept as cancelled records; past dates untouched)
+             * @default false
+             */
+            cancel_future_dates: boolean;
         };
         /** ReferenceSheetResponse */
         ReferenceSheetResponse: {

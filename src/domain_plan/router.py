@@ -129,7 +129,8 @@ def update_marker_endpoint(sheet_id: int, marker: str, marker_in: ReferenceSheet
     """
     マーカーの説明・生成ルールを変更します。
     rule を指定するとルールから日付を再生成します（人が編集・追加・取消した日付は常に維持）。
-    rule に null を指定すると生成をやめ、現在の日付を通常の日付として残します。
+    rule に null を指定すると生成をやめ、今ある日付をそのまま残します（出どころ・取消の記録も残る）。
+    rule: null と同時に cancel_future_dates: true を指定すると、今日以降の日付をすべて取り消します（業務が終わった場合。過去は残る）。
     """
     return update_marker(db=db, sheet_id=sheet_id, marker=marker, marker_in=marker_in)
 

@@ -1097,3 +1097,43 @@ def test_cancelled_list_and_restore(db, biz_id, monkeypatch):
     assert not entry.restorable and entry.not_restorable_reason == "past"
     with pytest.raises(BadRequestError, match="passed"):
         services.restore_cancelled_instance(db, target.id)
+
+
+def test_stop_generating_can_cancel_future_dates_when_the_routine_ends(db, biz_id):
+    calendar, sheet, marker = _trading_day_setup(db, biz_id)
+    today = date.today()
+    job = services.create_template(db, ReferenceSheetTemplateCreate(
+        biz_master_id=biz_id, name="取引日の前日", template_type=TemplateType.REFERENCE_SHEET_BASED, start_time=time(9, 0),
+        duration_minutes=60, reference_sheet_id=sheet.id, reference_event_marker="取引日",
+        offset_days=-1, offset_day_unit=engine.DayUnit.BUSINESS, business_calendar_id=calendar.id,
+    ))
+    assert live(db, job.id)
+
+    future = [e for e in active_events(db, sheet.id) if e.event_date > today + timedelta(days=1)]
+    moved_id, moved_from = future[0].id, future[0].event_date
+    services.update_sheet_event(db, moved_id, ReferenceSheetEventUpdate(event_date=moved_from + timedelta(days=1)))
+    added = future[1].event_date + timedelta(days=3)
+    services.add_sheet_events(db, sheet.id, "取引日", ReferenceSheetEventsCreate(dates=[added]))
+    past_before = {e.id: (e.event_date, e.is_manual, e.is_cancelled) for e in active_events(db, sheet.id) if e.event_date < today}
+    assert past_before
+
+    # cancel_future_dates は生成をやめるときだけ指定できる
+    with pytest.raises(ValidationError):
+        ReferenceSheetMarkerUpdate(cancel_future_dates=True)
+    with pytest.raises(ValidationError):
+        ReferenceSheetMarkerUpdate(rule=MarkerRule(rrule="FREQ=MONTHLY;BYMONTHDAY=27", anchor_date=date(2026, 1, 1)),
+                                   cancel_future_dates=True)
+
+    m = services.update_marker(db, sheet.id, "取引日", ReferenceSheetMarkerUpdate(rule=None, cancel_future_dates=True))
+    assert not m.is_generated
+    events = {e.id: e for e in m.events}
+    # 過去（実績）はそのまま
+    assert {i: (events[i].event_date, events[i].is_manual, events[i].is_cancelled) for i in past_before} == past_before
+    # 今日以降: ルール・人が変更した日付は出どころを残して取消、人が追加した日付は消える
+    upcoming = [e for e in m.events if e.event_date >= today]
+    assert upcoming and all(e.is_cancelled and e.is_manual for e in upcoming)
+    assert all(e.rule_date is not None and e.original_date is not None for e in upcoming)
+    assert events[moved_id].original_date == moved_from
+    assert not any(e.event_date == added for e in m.events)
+    # 参照しているジョブの未来の予定も無くなる（1回の再照合で）
+    assert not [i for i in live(db, job.id) if i.scheduled_start >= datetime.now(timezone.utc)]

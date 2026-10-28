@@ -80,7 +80,10 @@ export function toCreateMarkerInput(v: MarkerFormValues): CreateMarkerInput {
  * 取り込んだマーカーは説明だけを送る（ルールを付けると取り込んだ日付と生成した日付が混ざるため、ここでは扱わない）。
  */
 export function toUpdateMarkerInput(v: MarkerFormValues, current: ReferenceSheetMarker): UpdateMarkerInput {
-  return current.is_generated ? { description: toDescription(v), rule: toRule(v) } : { description: toDescription(v) };
+  // cancel_future_dates は生成をやめるとき（SheetSettingsPage）だけ true にする
+  return current.is_generated
+    ? { description: toDescription(v), rule: toRule(v), cancel_future_dates: false }
+    : { description: toDescription(v), cancel_future_dates: false };
 }
 
 /** 取消されていない日付（昇順） */

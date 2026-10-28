@@ -1,5 +1,5 @@
 import { EditOutlined, PlusOutlined, StopOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Select, Space, Table, Tag, Typography } from "antd";
+import { Alert, App, Button, Empty, Radio, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -47,25 +47,50 @@ export function SheetSettingsPage() {
   const [expanded, setExpanded] = useState<number[]>([]);
   const expand = (markerId: number) => setExpanded((ids) => (ids.includes(markerId) ? ids : [...ids, markerId]));
 
-  const confirmStop = (sheet: ReferenceSheet, m: ReferenceSheetMarker) =>
+  // 生成をやめる: 日付を残す（以後は手で管理する）か、今日以降の日付も取り消す（業務が終わった）かを選ぶ。既定は残す
+  const confirmStop = (sheet: ReferenceSheet, m: ReferenceSheetMarker) => {
+    const upcoming = activeDates(m).filter((d) => d >= today).length;
+    let cancelFuture = false;
     modal.confirm({
       title: `「${m.marker}」のルールでの生成をやめますか？`,
-      content: `今ある日付 ${activeDates(m).length} 件はそのまま残り、以後はルールで作られなくなります（予定は変わりません）。日付の出どころ（ルール・人の変更・取消）の記録も残ります。`,
+      width: 520,
+      content: (
+        <Space direction="vertical" size={8}>
+          <span>以後はルールで日付が作られなくなります。過去の日付（実績）と、日付の出どころの記録はそのまま残ります。</span>
+          <Radio.Group defaultValue={false} onChange={(e) => (cancelFuture = e.target.value as boolean)}>
+            <Space direction="vertical" size={4}>
+              <Radio value={false}>
+                日付を残す（以後は手で管理する）<br />
+                <span className="muted">今日以降の {upcoming} 件と、参照しているテンプレートの予定はそのまま</span>
+              </Radio>
+              <Radio value={true}>
+                今日以降の日付も取り消す（この業務は終わり）<br />
+                <span className="muted">
+                  今日以降の {upcoming} 件を「取消」として記録し、参照しているテンプレートの今日以降の予定も無くなります
+                </span>
+              </Radio>
+            </Space>
+          </Radio.Group>
+        </Space>
+      ),
       okText: "生成をやめる",
       okButtonProps: { danger: true },
       cancelText: "キャンセル",
       onOk: async () => {
         try {
-          await sheetApi.updateMarker(sheet.id, m.marker, { rule: null });
-          message.success(`「${m.marker}」のルールでの生成をやめました`);
+          await sheetApi.updateMarker(sheet.id, m.marker, { rule: null, cancel_future_dates: cancelFuture });
+          message.success(
+            `「${m.marker}」のルールでの生成をやめました${cancelFuture ? `（今日以降の ${upcoming} 件を取り消しました）` : ""}`,
+          );
         } catch (e) {
           message.error(`変更できませんでした: ${e instanceof ApiError ? e.message : "通信に失敗しました。"}`);
         }
         sheets.reload();
       },
     });
+  };
 
-  const columns = (sheet: ReferenceSheet): ColumnsType<ReferenceSheetMarker> => [
+  const columns =(sheet: ReferenceSheet): ColumnsType<ReferenceSheetMarker> => [
     { title: "マーカー", dataIndex: "marker", render: (v: string) => <b>{v}</b> },
     { title: "説明", dataIndex: "description", render: (v: string | null) => v ?? <span className="muted">—</span> },
     {
