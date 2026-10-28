@@ -10,16 +10,18 @@ Handoff for the next working session. Read this first, then `frontend/README.md`
   `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04`.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py` → 46 passed (runs against `test_db` via `tests/conftest.py`, `create_all`, no migrations).
+- **Tests:** `pytest tests/test_plan.py` → 47 passed (runs against `test_db` via `tests/conftest.py`, `create_all`, no migrations).
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
   Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `alembic check` → no drift.
   Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes.
 - **Not verified yet:** in-browser click-through of the 年間計画シート screen (rule markers, per-date editing, the
-  生成をやめる choice) and of the 休日カレンダー screen. The user is testing them.
+  生成をやめる choice) and of the 休日カレンダー screen (including 日本の祝日を取り込む). The user is testing them.
 
 ### Recent commits (newest first)
 | Commit | Content |
 |---|---|
+| `fa52e42` | Past holidays read-only in the backend; 「日本の祝日を取り込む」 (calculated, 2022–2099) |
+| `1fc8606` | MEMORY.md update |
 | `10d7ec0` | 休日カレンダー screen (`/settings/holidays`): list / add (rows or pasted lines) / rename / delete, past read-only in UI |
 | `354f613` | 生成をやめる: choose 「日付を残す」 or 「今日以降の日付も取り消す」 (`cancel_future_dates`) |
 | `6920a49` | MEMORY.md update (user) |
@@ -87,7 +89,10 @@ use `.execution_options(include_deleted=True)` to bypass.
   (`POST /plans/instances/{id}/restore`, used by the 取消済みの予定 drawer; not the same as template restore).
 - **Occurrence cache** (`plan_occurrence_cache`): denormalized, GiST `tstzrange` index, effective `ui_metadata`.
 - **Business calendars:** `business_calendar` (weekend days) + `business_calendar_holiday`; changes cascade to templates
-  and generated markers.
+  and generated markers. **Past holidays are read-only (backend-enforced):** add / rename / delete of a holiday before
+  today → 400, and a request containing any past date is rejected as a whole.
+- **"Today"** for sheet dates and holidays is JST: `LOCAL_TIMEZONE`, `_local_today()` in services (renamed from
+  `SHEET_TIMEZONE` / `_sheet_today`); `_check_not_past(dates, action)` raises the 400.
 
 ### Reference sheets (client annual plans) — audit rules, decided with the user
 `reference_sheet` → `reference_sheet_marker` → `reference_sheet_event`. Real workflow: one baseline marker per client
@@ -107,8 +112,8 @@ cascades to all templates referencing the marker (`_propagate_sheet_change`).
   does not auto-delete it, the UI warns (edit form, after save, orange 「今後: …」 tag) and the user cleans up.
 - **Deleting:** rule/imported dates become 取消 records; hand-added dates (no rule/original date) are hard-deleted
   (a record would block that day for future rule dates via the unique `(marker_id, event_date)` constraint).
-- **Past is read-only (backend-enforced):** add / move / delete / revert of dates before today → 400. "Today" is JST
-  (`SHEET_TIMEZONE`, `_sheet_today()` in services). Rule and holiday changes don't rewrite past dates; only a new
+- **Past is read-only (backend-enforced):** add / move / delete / revert of dates before today → 400 ("today" = JST,
+  see above). Rule and holiday changes don't rewrite past dates; only a new
   marker's first generation fills the past. Import is still allowed to add past dates (initial loads need it), and
   `replace_events` can still delete past imported dates that nobody edited.
 - **`revertable`** on each event (computed, not stored; `_annotate_revertable`): true only if the current rule produces
@@ -124,7 +129,7 @@ cascades to all templates referencing the marker (`_propagate_sheet_change`).
 | Templates | `GET /plans/templates?biz_id=`, `POST /plans/templates`, `PATCH` / `DELETE /plans/templates/{id}`, `POST` / `DELETE …/dates` |
 | Sheets / markers | `GET /plans/sheets?client_code=`, `POST /plans/sheets/{id}/markers`, `PATCH /plans/sheets/{id}/markers/{marker}` |
 | Sheet dates | `POST …/markers/{marker}/events`, `PATCH` / `DELETE /plans/sheets/events/{id}`, `POST …/events/{id}/revert` |
-| Holidays | `GET /plans/calendars/{id}/holidays` (all years; the page filters by year), `POST …/holidays` (re-posting a date only renames it, no regeneration), `DELETE …/holidays/{date}` |
+| Holidays | `GET /plans/calendars/{id}/holidays` (all years; the page filters by year), `POST …/holidays` (re-posting a date only renames it, no regeneration), `DELETE …/holidays/{date}`; past dates → 400 |
 | Lookups | `GET /clients/`, `GET /biz/` (limit 1000 requested), `GET /plans/calendars` |
 
 Optional CORS via `CORS_ORIGINS` in `.env` (dev uses the Vite proxy instead).
@@ -140,6 +145,9 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
 - **Layering (one direction): `features → domain → shared`.** UI never calls HTTP directly.
   - `domain/{plan,biz,client}/{types,api,hooks,lib}` — types are aliases of generated schemas only.
     `domain/plan/lib/category.ts`: template category stored in `ui_metadata.category` (missing → 定例).
+    `domain/plan/lib/jpHolidays.ts`: Japanese national holidays calculated from the current law (equinox formula,
+    happy Mondays, 振替休日, 国民の休日), 2022–2099 only (2020–21 Olympic shifts excluded); matches the official lists
+    for 2024–2027. Used by 「日本の祝日を取り込む」, which skips past and already registered dates (names kept).
   - `shared/` — http client, `useApiQuery`, `datetime.ts`, `useNow`, `ui/color.ts`, `config.ts` (`TIMEZONE`).
   - `features/calendar`, `features/schedule-actions`, `features/plan-settings`.
     Pure form logic lives in `templateForm.ts` / `markerForm.ts` / `holidayForm.ts` (testable in node); modals are UI only.
@@ -157,14 +165,12 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
   request bodies send those fields explicitly (e.g. `cancel_future_dates: false`, `offset_days`).
 
 ## 5. Plan endpoint audit (2026-10-28) — what is still unused, and the agreed MVP
-Done since the audit: rule-marker create/edit, per-date editing, stop-rule choice, holiday maintenance screen.
+Done since the audit: rule-marker create/edit, per-date editing, stop-rule choice, holiday maintenance screen
+(with JP holiday import and backend-enforced past read-only).
 Remaining MVP candidates (recommended, not started):
 1. **Sheet import UI** (`POST /plans/sheets/import`) + read-only sheet view. Open question for the user: clients may send
    Excel, not this JSON format.
 2. A way to create a sheet for a client with none (`POST /plans/sheets`) — without it, rule markers have no sheet.
-
-Open decision offered to the user: enforce "past holidays are read-only" in the backend too (today UI-only; harmless
-for history because past occurrences and past sheet dates no longer change, only past calendar labels would).
 
 Later / not planned: template audit history (`GET /plans/templates/{id}/instances`, the only way to see a deleted
 template's voided occurrences), calendar create / weekend change, flat occurrence lists, cache rebuild (backend-only),
