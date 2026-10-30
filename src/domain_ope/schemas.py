@@ -80,5 +80,11 @@ class OrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AutoReleaseResult(BaseModel):
+    """自動リリースのジョブ（scripts/release_orders.py）の結果"""
+    checked: int = Field(description="pending orders of AUTOMATIC businesses looked at")
+    released: list[int] = Field(description="ids of the orders released by this run")
+
+
 class OrderDetailResponse(OrderResponse):
     events: list[OrderEventResponse] = Field(description="the order's events, oldest first")

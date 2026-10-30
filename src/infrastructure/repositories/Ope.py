@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.domain_biz.models import BizMaster, ReleaseMode
 from src.domain_ope.models import EventSource, OpeOrder, OpeOrderEvent, OrderEventType, OrderStatus
 
 
@@ -40,6 +41,25 @@ class OpeOrderRepository:
     def get_locked(self, db: Session, *, id: int) -> OpeOrder | None:
         """状態を変えるときは行ロックしてから読む（同時に操作されても状態の遷移が食い違わないよう）"""
         return db.scalars(select(OpeOrder).where(OpeOrder.id == id).with_for_update()).first()
+
+    def get_pending_automatic(self, db: Session, *, starting_before: datetime) -> list[tuple[OpeOrder, BizMaster]]:
+        """
+        自動リリースの業務の、矛盾の無い pending オーダー（starting_before より前に開始するもの）を業務付きで返します。
+        行ロックを取り、他の処理（手動リリース・別の実行）がロック中の行は飛ばします（SKIP LOCKED）。
+        """
+        stmt = (
+            select(OpeOrder, BizMaster)
+            .join(BizMaster, BizMaster.id == OpeOrder.biz_master_id)
+            .where(
+                BizMaster.release_mode == ReleaseMode.AUTOMATIC,
+                OpeOrder.status == OrderStatus.PENDING,
+                OpeOrder.conflict.is_(False),
+                OpeOrder.scheduled_start < starting_before,
+            )
+            .order_by(OpeOrder.scheduled_start, OpeOrder.id)
+            .with_for_update(of=OpeOrder, skip_locked=True)
+        )
+        return [(row[0], row[1]) for row in db.execute(stmt)]
 
     def has_event(self, db: Session, *, order_id: int, event_type: OrderEventType) -> bool:
         stmt = select(OpeOrderEvent.id).where(OpeOrderEvent.order_id == order_id, OpeOrderEvent.event_type == event_type)

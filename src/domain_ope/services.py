@@ -10,15 +10,18 @@
 - 矛盾フラグのあるオーダーは、解決（resolve_conflict）するまでリリース・開始できない。
 - 誰が操作できるかはルーターの @require_roles で決める（ここでは判定しない）。
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
+from src.domain_biz.models import BizMaster
 from src.domain_ope.models import EventSource, OpeOrder, OrderEventType, OrderStatus
-from src.domain_ope.schemas import ConflictAction, ConflictResolveIn, OrderDetailResponse, OrderEventResponse
+from src.domain_ope.schemas import (
+    AutoReleaseResult, ConflictAction, ConflictResolveIn, OrderDetailResponse, OrderEventResponse,
+)
 from src.domain_plan import services as plan_services
 from src.domain_plan.schemas import PlanInstanceCancel
 from src.domain_plan.slot_events import SlotKey, live_instance_for_slot
@@ -106,14 +109,57 @@ def _finish(db: Session, order: OpeOrder) -> OrderDetailResponse:
     return _detail(db, order)
 
 
+def _release(
+    db: Session, order: OpeOrder, source: EventSource, actor_staff_id: int | None, reason: str | None,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    """pending → ready。手動・自動のリリースで共通（4.6 で SOP バージョンの固定もここで行う）"""
+    order.released_at = _now()
+    order.status = OrderStatus.READY
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.STATUS_CHANGED, from_status=OrderStatus.PENDING,
+        to_status=OrderStatus.READY, source=source, actor_staff_id=actor_staff_id, reason=reason, detail=detail,
+    )
+
+
 def release_order(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
     """pending → ready（リリース担当・業務管理者。自動リリースの業務でも手動でリリースできる）"""
     order = _get_locked(db, order_id)
     _require_status(order, (OrderStatus.PENDING,), "release")
     _require_no_conflict(order, "release")
-    order.released_at = _now()
-    _transition(db, order, OrderStatus.READY, actor_staff_id, comment)
+    _release(db, order, EventSource.HUMAN, actor_staff_id, comment)
     return _finish(db, order)
+
+
+# ==========================================
+# 自動リリース（scripts/release_orders.py から15分ごとに実行）
+# ==========================================
+# 対象の絞り込み: リリースは最大で予定日の30日前（release_days_before の上限）
+MAX_RELEASE_LEAD = timedelta(days=31)
+
+
+def release_moment(order: OpeOrder, biz: BizMaster) -> datetime:
+    """自動リリースの日時 = 予定日（日本時間）の release_days_before 日前の release_time（日本時間）"""
+    day = _scheduled_day(order) - timedelta(days=biz.release_days_before)
+    return datetime.combine(day, biz.release_time, tzinfo=LOCAL_TIMEZONE)
+
+
+def release_due_orders(db: Session) -> AutoReleaseResult:
+    """
+    自動リリースの業務の pending オーダーのうち、リリース日時を過ぎたものを ready にします（システムの記録）。
+    矛盾のあるオーダーは飛ばします（人が解決してから）。止まっていた間の分もまとめてリリースします。
+    何度実行しても同じ結果になります（手動でリリース済み・取消済みのものは対象外）。
+    """
+    now = _now()
+    candidates = ope_order_repo.get_pending_automatic(db, starting_before=now + MAX_RELEASE_LEAD)
+    released = []
+    for order, biz in candidates:
+        moment = release_moment(order, biz)
+        if moment <= now:
+            _release(db, order, EventSource.SYSTEM, None, None, {"cause": "automatic release", "release_at": moment.isoformat()})
+            released.append(order.id)
+    db.commit()
+    return AutoReleaseResult(checked=len(candidates), released=released)
 
 
 def approve_early_start(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:

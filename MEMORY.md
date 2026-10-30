@@ -9,8 +9,10 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   **Current work: `feature/ope-orders`** (from `main`), Phase 4. The user pushes; I never do.
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
   next-occurrence guarantee) and 3 (staff: backend + screen) are done. Phase 4 (ope orders): step 4.1 (release
-  settings on businesses), 4.2 (ope tables, `0552e9f`, pushed) and 4.3 (order sync, `7d94be7`, not pushed)
-  committed; step 4.4 (order status API) built 2026-10-30, awaiting review. Next: 4.5, the automatic release job**
+  settings on businesses), 4.2 (ope tables, `0552e9f`, pushed), 4.3 (order sync, `7d94be7`) and 4.4 (status API,
+  `0389de2`) committed (4.3 / 4.4 not pushed); step 4.5 (automatic release job) built 2026-10-30, awaiting review —
+  **its Task Scheduler entry was not created** (the permission check refused it; the user was given the command).
+  Next: 4.6, SOP version resolution / pinning / freeze at release**
   (plan in §2 "Phase 4 step plan"). The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders,
   2026-10-30); orders have no screen until 4.7 (the user knows and chose to keep the original step order).
 - **DB:** latest Alembic head is `5eede5808433` (slot uniqueness ignores canceled). Migrations: `ceee1634d6a7`
@@ -22,7 +24,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py tests/test_ope.py tests/test_order_sync.py tests/test_order_actions.py` → 86 passed, ~60 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py tests/test_ope.py tests/test_order_sync.py tests/test_order_actions.py tests/test_release_job.py` → 89 passed, ~80 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -32,6 +34,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 - **Scheduled job (user's machine):** Task Scheduler `\postgres-migration-poc\PlanExtendJob`, daily 00:05, runs
   `scripts/extend_plans.py` in the repo root (so `.env` → dev DB) as the user (interactive logon, runs on next logon if
   missed), output appended to `extend_plans.log` (git-ignored). First run 2026-10-28: exit 0, 7 templates, 1 extended.
+  Planned second task `\postgres-migration-poc\OrderReleaseJob` (every 15 min, `scripts/release_orders.py` →
+  `release_orders.log`): **not registered yet** — creating it was refused by the permission check on 2026-10-30; the
+  user got the PowerShell command to run themselves. Check `Get-ScheduledTask -TaskPath '\postgres-migration-poc\'`.
 - **Browser check:** the user clicked through the 年間計画シート and 休日カレンダー screens (2026-10-28): no issues found.
   Not yet clicked through: 日次ダッシュボード (`/daily`), the 「次の予定」 column on the template settings page, and the
   職員 screen (`/settings/staff`) + nav picker 「操作する職員」.
@@ -184,8 +189,8 @@ Plan never imports ope.
 | 4.1 | Release settings on `biz_master` + biz API | `f9bbe9648f15` | **done** (`d65af44`) |
 | 4.2 | ope tables: `ope_order`, append-only `ope_order_event` (immutability trigger like plan's `plan_reject_mutation`). Models + migration + tests, **no behavior** | `9e1bcef6cbc7` | **done** (`0552e9f`) |
 | 4.3 | **done** (`7d94be7`) — Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
-| 4.4 | **built 2026-10-30, awaiting review** — Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
-| 4.5 | Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry | — | |
+| 4.4 | **done** (`0389de2`) — Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
+| 4.5 | **built 2026-10-30, awaiting review** — Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry (entry not registered yet, see §1) | — | |
 | 4.6 | SOP version resolution, pin / unpin (releaser/admin), freeze at release | maybe | |
 | 4.7 | Frontend: order status on the dashboard + actions | — | |
 
@@ -261,6 +266,17 @@ approve early start = **releaser only**; a releaser / admin **may release an AUT
 - Force-start is **not** built (it belongs to dependencies, Phase 6). SOP freeze at release is 4.6.
 - Tests: `tests/test_order_actions.py` (7; client prefix `"A"`; `monkeypatch.setattr(ope, "_now", …)` to pick
   "today"). HTTP-checked on `plan_check` with staff 4 (operator) and 5 (releaser). Doc rev 38 records the decisions.
+
+**4.5 as built — automatic release** (no migration). `ope.release_due_orders(db) -> AutoReleaseResult{checked,
+released}`: pending, non-conflicted orders of `AUTOMATIC` businesses (`ope_order_repo.get_pending_automatic`, FOR UPDATE
+SKIP LOCKED, scheduled within 31 days) whose `release_moment` = (scheduled day JST − `release_days_before`) at
+`release_time` JST has passed → ready, SYSTEM event `detail {"cause": "automatic release", "release_at": …}`.
+Overdue ones (job was down) are released on the next run; idempotent. Manual and automatic release share
+`_release()` (4.6 adds the SOP freeze there). Script `scripts/release_orders.py` (no listener needed: it doesn't touch
+plan). **Runs every 15 minutes** (my call: release times differ per business, e.g. 21:30 the day before, so a single
+03:00 run isn't enough; releases happen up to 15 min after the set time). Tests `tests/test_release_job.py` (3;
+client prefix `"R"`). On `plan_check`: run with biz 1 manual → 0 checked; automatic → 71 checked, 0 released
+(earliest pending is 11/1, due 11/1 03:00); set back to manual.
 5. Steps: conditions, maker-checker, `is_blocking`.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
