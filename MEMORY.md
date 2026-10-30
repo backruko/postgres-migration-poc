@@ -9,16 +9,16 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   **Current work: `feature/ope-orders`** (from `main`), Phase 4. The user pushes; I never do.
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
   next-occurrence guarantee) and 3 (staff: backend + screen) are done. Phase 4 (ope orders): step 4.1 (release
-  settings on businesses) done and committed. Next step: 4.2, the ope tables** (plan in §2 "Phase 4 step plan"). All
-  Phase 4 design decisions are made (§2); no open question blocks 4.2.
-- **DB:** latest Alembic head is `f9bbe9648f15` (biz release settings). Migrations: `ceee1634d6a7` (squashed init) →
-  `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) →
-  `f9bbe9648f15` (biz release settings). The user's dev DB had `568c3287c359` + staff id 1 (login `system`,
-  system_admin); `f9bbe9648f15` was handed over for them to apply.
-  `plan_check` is at `f9bbe9648f15` and has staff 1 `check-admin` (system_admin), 2 `check-op` (suspended) + harness users.
+  settings on businesses) committed; step 4.2 (ope tables) built 2026-10-30, awaiting review. Next: 4.3, the
+  slot-change listener** (plan in §2 "Phase 4 step plan").
+- **DB:** latest Alembic head is `9e1bcef6cbc7` (ope orders and order events). Migrations: `ceee1634d6a7` (squashed
+  init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff)
+  → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables). The user's dev DB is at `f9bbe9648f15`
+  (applied by 2026-10-30; staff id 1, login `system`, system_admin); `9e1bcef6cbc7` handed over for them to apply.
+  `plan_check` is at `9e1bcef6cbc7` and has staff 1 `check-admin` (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py` → 64 passed (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py tests/test_ope.py` → 70 passed (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -178,23 +178,33 @@ Plan never imports ope.
 | # | Step | Migration | Status |
 |---|---|---|---|
 | 4.1 | Release settings on `biz_master` + biz API | `f9bbe9648f15` | **done** (`d65af44`) |
-| 4.2 | ope tables: `ope_order`, append-only `ope_order_event` (immutability trigger like plan's `plan_reject_mutation`). Models + migration + tests, **no behavior** | yes | **next** |
-| 4.3 | Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
+| 4.2 | ope tables: `ope_order`, append-only `ope_order_event` (immutability trigger like plan's `plan_reject_mutation`). Models + migration + tests, **no behavior** | `9e1bcef6cbc7` | **built**, awaiting review |
+| 4.3 | **next** — Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
 | 4.4 | Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
 | 4.5 | Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry | — | |
 | 4.6 | SOP version resolution, pin / unpin (releaser/admin), freeze at release | maybe | |
 | 4.7 | Frontend: order status on the dashboard + actions | — | |
 
-**4.2 detail to get right — order slot identity must equal plan's slot identity** (`_slot()` in
-`domain_plan/services.py`): sheet-based instances use `("sheet_event", source_sheet_event_id)` (the slot survives a
-sheet date move), all others `("date", occurrence_date)`. So `ope_order` needs a unique key that follows that rule
-(e.g. `template_id` + nullable `source_sheet_event_id` + `occurrence_date` with two partial unique indexes), not just
-`(template_id, occurrence_date)` as the doc's sketch says — update the doc's data model row too. Also store for each
-order: current plan instance id, biz_master_id, client_code (needed later for the client-limited role), scheduled
-start/end (copy of the current instance), status (cache of the latest event), pinned / frozen SOP version ids,
-released_at, conflict flag + reason. Events: order_id, from, to, actor_staff_id (null = system), source human|system,
-reason, at. Statuses: pending, ready, in_progress, on_hold, finished, canceled (on_hold resume returns to the
-previous status → store it).
+**4.2 as built (`src/domain_ope/models.py`, migration `9e1bcef6cbc7`) — order slot identity = plan's slot.**
+Plan has three slot kinds: rule-generated `("date", occurrence_date)`, sheet-based `("sheet_event",
+source_sheet_event_id)` (survives a sheet date move), and **one-offs, which have no slot in plan** (`add_one_off` sets
+only its own date; overrides inherit their original's slot). User's decision 2026-10-30: **typed slot columns** —
+`ope_order` keeps `template_id` + `occurrence_date` always, plus `source_sheet_event_id` (snapshot, no FK, like plan)
+**or** `one_off_instance_id` (FK plan_instance: the one-off's *first* instance; later moves keep it).
+Partial unique indexes `uq_ope_order_sheet_slot`, `uq_ope_order_one_off_slot`, `uq_ope_order_date_slot` (neither set) +
+CHECK `ck_ope_order_one_slot_kind`. So 4.3's listener must find a one-off's root instance (walk
+`overrides_instance_id`) to locate its order.
+Other `ope_order` columns: `current_instance_id` (FK, last one after the slot disappears), `biz_master_id`,
+`client_code` (FK client_master; for the future client-limited role), `scheduled_start` / `scheduled_end`, `status`
+(`OrderStatus`, member names stored, default PENDING; cache of the latest event), `status_before_hold` (only while
+ON_HOLD; PENDING / READY / IN_PROGRESS), `pinned_sop_version_id` / `frozen_sop_version_id` (FK sop_version),
+`released_at` (required for READY / IN_PROGRESS / FINISHED), `conflict` + `conflict_reason` (required when conflict).
+`ope_order_event` (append-only; trigger `trg_ope_order_event_immutable` → `ope_reject_mutation()`, also installed by
+`create_all` for tests): `event_type` (`OrderEventType`: CREATED, STATUS_CHANGED, RESCHEDULED, PINNED, UNPINNED,
+EARLY_START_APPROVED, CONFLICT_RAISED, CONFLICT_RESOLVED), `from_status` / `to_status`, `source` (HUMAN | SYSTEM;
+CHECK: HUMAN ⇔ `actor_staff_id` set), `reason`, `detail` (JSONB), `occurred_at`. FK order_id RESTRICT (orders with
+events can't be deleted). Adding an event type later = `ALTER TYPE … ADD VALUE` migration.
+Tests: `tests/test_ope.py` (6, constraints only; client prefix `"O"`). The doc's data-model rows were updated (rev 33).
 5. Steps: conditions, maker-checker, `is_blocking`.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
