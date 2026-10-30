@@ -1,5 +1,6 @@
 import re
 from datetime import datetime, time
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -97,10 +98,41 @@ class SOPVersionResponse(BaseModel):
 # ==========================================
 # 📝 SOPStepTemplate Schemas
 # ==========================================
+# ==========================================
+# ステップを含める条件（オーダーの予定日で判定。バージョンとともに固定される）
+# ==========================================
+class AlwaysCondition(BaseModel):
+    """すべてのオーダーに含める（既定）"""
+    type: Literal["always"] = "always"
+
+
+class MonthInCondition(BaseModel):
+    """予定日の月が months に含まれるオーダーだけに含める（例: 年次の照合は4月のみ）"""
+    type: Literal["month_in"] = "month_in"
+    months: list[int] = Field(..., min_length=1, description="months 1-12")
+
+    @field_validator("months")
+    @classmethod
+    def check_months(cls, v: list[int]) -> list[int]:
+        if any(m < 1 or m > 12 for m in v):
+            raise ValueError("months must be between 1 and 12")
+        return sorted(set(v))
+
+
+class FirstInWeekCondition(BaseModel):
+    """そのテンプレートの、その ISO 週で最初の予定のオーダーだけに含める（例: 週次のまとめ）"""
+    type: Literal["first_in_week"] = "first_in_week"
+
+
+StepCondition = Annotated[Union[AlwaysCondition, MonthInCondition, FirstInWeekCondition], Field(discriminator="type")]
+
+
 class SOPStepTemplateCreate(BaseModel):
     step_num: int = Field(..., gt=0, description="ステップの実行順序（1以上の整数）")
     title: str = Field(..., max_length=100, description="ステップタイトル")
     content: str | None = Field(None, description="具体的な手順・マニュアル内容")
+    condition: StepCondition = Field(default_factory=AlwaysCondition, description="when the step is included in an order")
+    is_blocking: bool = Field(False, description="the next step opens only after this one is approved (otherwise on submit)")
 
 class SOPStepTemplateResponse(BaseModel):
     id: int
@@ -108,6 +140,8 @@ class SOPStepTemplateResponse(BaseModel):
     step_num: int
     title: str
     content: str | None
+    condition: dict[str, Any]
+    is_blocking: bool
 
     class Config:
         from_attributes = True

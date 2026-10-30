@@ -201,7 +201,9 @@ def clone_active_to_draft(db: Session, biz_id: int, version_in: SOPVersionCreate
             sop_version_id=new_draft.id,
             step_num=step.step_num,
             title=step.title,
-            content=step.content
+            content=step.content,
+            condition=step.condition,
+            is_blocking=step.is_blocking
         )
         db.add(copied_step)
         

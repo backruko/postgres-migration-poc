@@ -1,4 +1,5 @@
 from datetime import datetime, time, timezone
+from typing import Any
 import enum
 from datetime import datetime
 
@@ -6,6 +7,7 @@ from datetime import datetime
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     String, 
     Text, 
     Enum, 
@@ -19,6 +21,7 @@ from sqlalchemy import (
     Time,
     text
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.orm import validates, relationship
@@ -294,9 +297,23 @@ class SOPStepTemplate(Base):
     
     title: Mapped[str] = mapped_column(String(100), nullable=False, comment="ステップタイトル")
     content: Mapped[str | None] = mapped_column(
-        Text, 
-        nullable=True, 
+        Text,
+        nullable=True,
         comment="具体的な作業手順・マニュアル内容"
+    )
+    # オーダーの予定日に応じて、このステップを含めるかどうか（バージョンとともに固定される）
+    # {"type": "always"} | {"type": "month_in", "months": [4]} | {"type": "first_in_week"}
+    condition: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=lambda: {"type": "always"},
+        server_default=text("""'{"type": "always"}'::jsonb"""),
+        comment="ステップを含める条件（always / month_in / first_in_week）",
+    )
+    # true なら、このステップが承認されるまで次のステップを開けない（false なら提出で次が開く）
+    is_blocking: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"),
+        comment="承認されるまで次のステップを開けないか",
     )
     # 双方向リレーションの設定
     sop_version: Mapped["SOPVersion"] = relationship(

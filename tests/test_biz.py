@@ -75,3 +75,38 @@ def test_release_settings_validation(db, biz):
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
+
+
+# ==========================================
+# ステップの条件・is_blocking（5.1）
+# ==========================================
+def test_step_template_condition_and_is_blocking(db, biz):
+    from datetime import datetime, timedelta, timezone as tz
+    from src.domain_biz.models import SOPStatus, SOPVersion
+    from src.domain_biz.schemas import SOPStepTemplateCreate, SOPStepTemplateResponse, SOPVersionCreate
+
+    draft = services.create_new_sop_version(db, biz.id, SOPVersionCreate(version_tag="v1.0.0"))
+    plain = services.create_step_template(db, draft.id, SOPStepTemplateCreate.model_validate({"step_num": 1, "title": "データ確認"}))
+    annual = services.create_step_template(db, draft.id, SOPStepTemplateCreate.model_validate(
+        {"step_num": 2, "title": "年次照合", "condition": {"type": "month_in", "months": [4, 10, 4]}, "is_blocking": True}
+    ))
+    weekly = services.create_step_template(db, draft.id, SOPStepTemplateCreate.model_validate(
+        {"step_num": 3, "title": "週次まとめ", "condition": {"type": "first_in_week"}}
+    ))
+    # 既定は always・ブロックしない。月は重複を除いて並べる
+    assert (plain.condition, plain.is_blocking) == ({"type": "always"}, False)
+    assert (annual.condition, annual.is_blocking) == ({"type": "month_in", "months": [4, 10]}, True)
+    assert weekly.condition == {"type": "first_in_week"}
+    assert SOPStepTemplateResponse.model_validate(annual).condition["months"] == [4, 10]
+
+    for bad in ({"type": "month_in", "months": []}, {"type": "month_in", "months": [13]}, {"type": "sometimes"}):
+        with pytest.raises(ValidationError):
+            SOPStepTemplateCreate.model_validate({"step_num": 9, "title": "x", "condition": bad})
+
+    # 現行版を複製した草稿にも、条件と is_blocking が引き継がれる
+    draft.status = SOPStatus.ACTIVE
+    draft.effective_at = datetime.now(tz.utc) - timedelta(days=1)
+    db.commit()
+    clone = services.clone_active_to_draft(db, biz.id, SOPVersionCreate(version_tag="v1.1.0"))
+    copied = {s.step_num: (s.condition, s.is_blocking) for s in services.get_steps_by_version(db, clone.id)}
+    assert copied == {1: ({"type": "always"}, False), 2: ({"type": "month_in", "months": [4, 10]}, True), 3: ({"type": "first_in_week"}, False)}
