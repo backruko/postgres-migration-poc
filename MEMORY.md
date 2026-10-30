@@ -12,20 +12,20 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   settings on businesses), 4.2 (ope tables, `0552e9f`, pushed), 4.3 (order sync, `7d94be7`) and 4.4 (status API,
   `0389de2`) and 4.5 (automatic release job, `09f7455`) committed (4.3–4.5 not pushed). Step 4.6 (SOP version
   resolution / pinning / freeze at release) and 4.7 (order screen on the dashboard) committed 2026-10-30 (4.3–4.7
-  not pushed). **Phase 4 is functionally complete. Next: Phase 5 (steps, maker-checker)** — re-read the doc first;
-  its open question "reset later steps when a non-blocking step is rejected? (proposed: no)" must be settled.**
-  (plan in §2 "Phase 4 step plan"). The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders,
-  2026-10-30); orders have no screen until 4.7 (the user knows and chose to keep the original step order).
-- **DB:** latest Alembic head is `5eede5808433` (slot uniqueness ignores canceled). Migrations: `ceee1634d6a7`
+  not pushed). **Phase 4 is complete. Phase 5 (steps, maker-checker) started 2026-10-30: decisions made and step plan
+  approved (§2 "Phase 5 step plan"); step 5.1 (step template condition + is_blocking) built, awaiting review.**
+  The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
+- **DB:** latest Alembic head is `971958268657` (sop step condition and is_blocking). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
-  `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433`.
-  The user's dev DB was at `f9bbe9648f15` on 2026-10-30 (staff id 1, login `system`, system_admin); `9e1bcef6cbc7` and
-  `5eede5808433` handed over, then `python scripts/create_orders.py` once (go-live backfill).
-  `plan_check` is at `5eede5808433`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
+  `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` →
+  `971958268657` (step template condition / is_blocking).
+  The user's dev DB: at `5eede5808433` on 2026-10-30 (staff id 1, login `system`, system_admin; biz 1 has SOP
+  version 1 `v1.1.0`); `971958268657` handed over.
+  `plan_check` is at `971958268657`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, ope, order_sync, order_actions, release_job, sop_resolution) → 94 passed, ~110 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, ope, order_sync, order_actions, release_job, sop_resolution) → 96 passed, ~115 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -311,7 +311,25 @@ staff may use with a reason / memo modal — reason required for hold, cancel, r
 timeline, newest first; actors shown as 職員 #id). **Not in the UI:** pin / unpin (biz has no endpoint listing a
 business's SOP versions to pick from; API only), staff names in the timeline, the SOP "impact before approval" list.
 Harness-checked through Vite on `plan_check` (10 checks). Frontend types regenerated (includes 4.3–4.6 changes).
-5. Steps: conditions, maker-checker, `is_blocking`.
+5. Steps: conditions, maker-checker, `is_blocking`. ← **in progress** (branch `feature/ope-orders`)
+
+#### Phase 5 decisions (2026-10-30, doc rev 41)
+Rejecting a non-blocking step returns **only that step** to todo (later steps keep their state; the order can't
+finish until all are approved). Steps are created at release but stay **locked until the order starts**; starting
+opens step 1. **Only the checker role** approves / rejects, never the step's submitter (four-eyes). Already in the
+doc: conditions `always` / `month_in` / `first_in_week` evaluated on the scheduled date (`first_in_week` = the
+template's first occurrence in that ISO week, read from plan); live preview while pending, frozen at release; next
+step opens on submit, or on approve when `is_blocking` (versioned on the step template); order finishes automatically
+when the last step is approved; a ready order whose step conditions change after a system move gets a conflict flag.
+
+#### Phase 5 step plan (approved 2026-10-30)
+| # | Step | Status |
+|---|---|---|
+| 5.1 | biz `sop_step_template.condition` (JSONB, default `{"type": "always"}`) + `is_blocking` (default false); migration `971958268657`; schemas `StepCondition` = discriminated union `AlwaysCondition` / `MonthInCondition(months 1–12, deduped + sorted)` / `FirstInWeekCondition`; `clone_active_to_draft` copies both; tests in `tests/test_biz.py` | **built**, awaiting review |
+| 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event` | next |
+| 5.3 | Build steps: live preview while pending (in the order detail), create + freeze at release, conflict flag when a system move changes a ready order's step set | |
+| 5.4 | Step actions: submit (operator) / approve / reject (checker, four-eyes, reason for reject), unlock rules, start opens step 1, auto-finish on the last approval; manual finish only for zero-step orders | |
+| 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | |
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
 
