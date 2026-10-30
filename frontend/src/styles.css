@@ -248,6 +248,13 @@ h1 .client { color: var(--accent); }
 .daily-item.voided { color: var(--muted); }
 .daily-item.voided .daily-title { text-decoration: line-through; text-decoration-thickness: 1px; }
 .voided-swatch { background: transparent; border: 1.5px dashed var(--rule-strong); }
+/* オーダーの状態（行をクリックすると詳細と操作のドロワー） */
+.daily-item.has-order { cursor: pointer; border-radius: 4px; margin-inline: -4px; padding: 2px 4px; }
+.daily-item.has-order:hover { background: var(--select); }
+.daily-item.has-order:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.order-status-tag { min-width: 64px; text-align: center; }
+.order-blocked { margin-top: 6px; font-size: 12px; }
+.order-event { display: grid; gap: 2px; font-size: 13px; }
 
 .page-footer { color: var(--muted); font-size: 12px; }
 @media (prefers-reduced-motion: no-preference) {

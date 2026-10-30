@@ -921,6 +921,226 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ope/orders/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Order Endpoint
+         * @description オーダーと、その記録（古い順）
+         */
+        get: operations["get_order_endpoint_ope_orders__order_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release Order Endpoint
+         * @description pending → ready。自動リリースの業務でも、予定より早く手動でリリースできます。
+         */
+        post: operations["release_order_endpoint_ope_orders__order_id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pin Sop Version Endpoint
+         * @description リリース前のオーダーに使う SOP バージョンを指定します（同じ業務の承認済みバージョン。古い・新しいどちらでも可）。
+         */
+        post: operations["pin_sop_version_endpoint_ope_orders__order_id__pin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/unpin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unpin Sop Version Endpoint
+         * @description 指定を外し、予定日時に有効なバージョンに戻します（リリース前のみ）。
+         */
+        post: operations["unpin_sop_version_endpoint_ope_orders__order_id__unpin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/approve-early-start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Early Start Endpoint
+         * @description 予定日より前の開始を承認します（承認後は予定日前でも開始できます）。
+         */
+        post: operations["approve_early_start_endpoint_ope_orders__order_id__approve_early_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Order Endpoint
+         * @description ready → in_progress。予定日（日本時間）以降のみ。それより前はリリース担当の承認が必要です。矛盾があると開始できません。
+         */
+        post: operations["start_order_endpoint_ope_orders__order_id__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/hold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hold Order Endpoint
+         * @description pending / ready / in_progress → on_hold（理由必須。再開すると保留前の状態に戻ります）
+         */
+        post: operations["hold_order_endpoint_ope_orders__order_id__hold_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Order Endpoint
+         * @description on_hold → 保留前の状態
+         */
+        post: operations["resume_order_endpoint_ope_orders__order_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish Order Endpoint
+         * @description in_progress → finished（ステップができるまでの暫定の完了操作）
+         */
+        post: operations["finish_order_endpoint_ope_orders__order_id__finish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Order Endpoint
+         * @description finished / canceled 以外 → canceled（理由必須）。plan の予定も取り消し、カレンダーからも消えます。
+         */
+        post: operations["cancel_order_endpoint_ope_orders__order_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/orders/{order_id}/resolve-conflict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Conflict Endpoint
+         * @description 矛盾の解決: accept_plan（plan の新しい日時を採用）・keep（そのまま続ける）・cancel（取消。理由必須）
+         */
+        post: operations["resolve_conflict_endpoint_ope_orders__order_id__resolve_conflict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -1352,6 +1572,21 @@ export interface components {
              */
             name?: string | null;
         };
+        /**
+         * ConflictAction
+         * @description 矛盾の解決方法
+         * @enum {string}
+         */
+        ConflictAction: "accept_plan" | "keep" | "cancel";
+        /** ConflictResolveIn */
+        ConflictResolveIn: {
+            action: components["schemas"]["ConflictAction"];
+            /**
+             * Reason
+             * @description required when action is cancel
+             */
+            reason?: string | null;
+        };
         /** DailyBusiness */
         DailyBusiness: {
             /** Biz Master Id */
@@ -1527,6 +1762,21 @@ export interface components {
             ui_metadata: {
                 [key: string]: unknown;
             } | null;
+            /** @description the order of this occurrence (null: none, e.g. past occurrences before go-live) */
+            order?: components["schemas"]["DailyOrderSummary"] | null;
+        };
+        /**
+         * DailyOrderSummary
+         * @description 予定のオーダーの要約（詳細と操作は GET /ope/orders/{id}）
+         */
+        DailyOrderSummary: {
+            /** Id */
+            id: number;
+            status: components["schemas"]["OrderStatus"];
+            /** Conflict */
+            conflict: boolean;
+            /** Conflict Reason */
+            conflict_reason?: string | null;
         };
         /**
          * DailyVoidedItem
@@ -1573,7 +1823,7 @@ export interface components {
          *     意味が直感的にわかるように、すべて大文字の文字列（スネークケース）で定義します。
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "STAFF_NOT_ACTIVE" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "DELETE_FAILED_RECORD_IN_USE" | "INTERNAL_SERVER_ERROR";
+        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "STAFF_NOT_ACTIVE" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "ORDER_IN_PROGRESS" | "DELETE_FAILED_RECORD_IN_USE" | "INTERNAL_SERVER_ERROR";
         /** ErrorResponse */
         ErrorResponse: {
             /**
@@ -1589,6 +1839,11 @@ export interface components {
              */
             message: string;
         };
+        /**
+         * EventSource
+         * @enum {string}
+         */
+        EventSource: "human" | "system";
         /** ExplicitDatesAdd */
         ExplicitDatesAdd: {
             /** Dates */
@@ -1703,6 +1958,148 @@ export interface components {
             business_calendar_id?: number | null;
             /** @default as_is */
             holiday_policy: components["schemas"]["HolidayPolicy"];
+        };
+        /**
+         * OrderCommentIn
+         * @description 理由・メモが任意の操作（リリース・開始・再開・完了・早期開始の承認）
+         */
+        OrderCommentIn: {
+            /** Comment */
+            comment?: string | null;
+        };
+        /** OrderDetailResponse */
+        OrderDetailResponse: {
+            /** Id */
+            id: number;
+            /** Template Id */
+            template_id: number;
+            /**
+             * Occurrence Date
+             * Format: date
+             */
+            occurrence_date: string;
+            /** Source Sheet Event Id */
+            source_sheet_event_id: number | null;
+            /** One Off Instance Id */
+            one_off_instance_id: number | null;
+            /** Current Instance Id */
+            current_instance_id: number;
+            /** Biz Master Id */
+            biz_master_id: number;
+            /** Client Code */
+            client_code: string;
+            /**
+             * Scheduled Start
+             * Format: date-time
+             */
+            scheduled_start: string;
+            /**
+             * Scheduled End
+             * Format: date-time
+             */
+            scheduled_end: string;
+            status: components["schemas"]["OrderStatus"];
+            status_before_hold: components["schemas"]["OrderStatus"] | null;
+            /** Pinned Sop Version Id */
+            pinned_sop_version_id: number | null;
+            /** Frozen Sop Version Id */
+            frozen_sop_version_id: number | null;
+            /** Released At */
+            released_at: string | null;
+            /** Conflict */
+            conflict: boolean;
+            /** Conflict Reason */
+            conflict_reason: string | null;
+            /**
+             * Early Start Approved
+             * @description a releaser approved starting before the scheduled day
+             * @default false
+             */
+            early_start_approved: boolean;
+            /** @description the SOP version this order runs (null: none approved / none was frozen at release) */
+            sop_version?: components["schemas"]["OrderSopVersion"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Events
+             * @description the order's events, oldest first
+             */
+            events: components["schemas"]["OrderEventResponse"][];
+        };
+        /** OrderEventResponse */
+        OrderEventResponse: {
+            /** Id */
+            id: number;
+            event_type: components["schemas"]["OrderEventType"];
+            from_status: components["schemas"]["OrderStatus"] | null;
+            to_status: components["schemas"]["OrderStatus"] | null;
+            source: components["schemas"]["EventSource"];
+            /** Actor Staff Id */
+            actor_staff_id: number | null;
+            /** Reason */
+            reason: string | null;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+        };
+        /**
+         * OrderEventType
+         * @description オーダーの記録の種類（追記のみ）
+         * @enum {string}
+         */
+        OrderEventType: "created" | "status_changed" | "rescheduled" | "pinned" | "unpinned" | "early_start_approved" | "conflict_raised" | "conflict_resolved";
+        /**
+         * OrderReasonIn
+         * @description 理由が必須の操作（保留・取消）
+         */
+        OrderReasonIn: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * OrderSopVersion
+         * @description オーダーが使う SOP バージョン（リリース後は固定したもの、リリース前は指定または予定日時に有効なもの）
+         */
+        OrderSopVersion: {
+            /** Id */
+            id: number;
+            /** Version Tag */
+            version_tag: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "frozen" | "pinned" | "effective";
+        };
+        /**
+         * OrderStatus
+         * @description オーダーの状態。finished / canceled は最終状態
+         * @enum {string}
+         */
+        OrderStatus: "pending" | "ready" | "in_progress" | "on_hold" | "finished" | "canceled";
+        /** PinSopVersionIn */
+        PinSopVersionIn: {
+            /**
+             * Sop Version Id
+             * @description an approved (non-draft) version of the order's business
+             */
+            sop_version_id: number;
+            /** Reason */
+            reason?: string | null;
         };
         /** PlanExplicitDateResponse */
         PlanExplicitDateResponse: {
@@ -5391,7 +5788,10 @@ export interface operations {
     add_one_off_instance_endpoint_plans_templates__template_id__instances_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
             path: {
                 template_id: number;
             };
@@ -5414,6 +5814,24 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5529,7 +5947,10 @@ export interface operations {
     override_instance_endpoint_plans_instances__instance_id__override_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
             path: {
                 instance_id: number;
             };
@@ -5552,6 +5973,24 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5600,7 +6039,10 @@ export interface operations {
     cancel_instance_endpoint_plans_instances__instance_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
             path: {
                 instance_id: number;
             };
@@ -5623,6 +6065,24 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5671,7 +6131,10 @@ export interface operations {
     restore_cancelled_instance_endpoint_plans_instances__instance_id__restore_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
             path: {
                 instance_id: number;
             };
@@ -5690,6 +6153,24 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5738,7 +6219,10 @@ export interface operations {
     revert_instance_endpoint_plans_instances__instance_id__revert_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
             path: {
                 instance_id: number;
             };
@@ -5761,6 +6245,24 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6810,6 +7312,1014 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_order_endpoint_ope_orders__order_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    release_order_endpoint_ope_orders__order_id__release_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    pin_sop_version_endpoint_ope_orders__order_id__pin_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinSopVersionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unpin_sop_version_endpoint_ope_orders__order_id__unpin_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approve_early_start_endpoint_ope_orders__order_id__approve_early_start_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    start_order_endpoint_ope_orders__order_id__start_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    hold_order_endpoint_ope_orders__order_id__hold_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderReasonIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resume_order_endpoint_ope_orders__order_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    finish_order_endpoint_ope_orders__order_id__finish_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_order_endpoint_ope_orders__order_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderReasonIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resolve_conflict_endpoint_ope_orders__order_id__resolve_conflict_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConflictResolveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
                 };
             };
             /** @description Bad Request(リクエスト不正) */

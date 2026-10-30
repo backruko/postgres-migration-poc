@@ -10,9 +10,10 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
   next-occurrence guarantee) and 3 (staff: backend + screen) are done. Phase 4 (ope orders): step 4.1 (release
   settings on businesses), 4.2 (ope tables, `0552e9f`, pushed), 4.3 (order sync, `7d94be7`) and 4.4 (status API,
-  `0389de2`) committed (4.3 / 4.4 not pushed); step 4.5 (automatic release job) built 2026-10-30, awaiting review —
-  **its Task Scheduler entry was not created** (the permission check refused it; the user was given the command).
-  Next: 4.6, SOP version resolution / pinning / freeze at release**
+  `0389de2`) and 4.5 (automatic release job, `09f7455`) committed (4.3–4.5 not pushed). Step 4.6 (SOP version
+  resolution / pinning / freeze at release) and 4.7 (order screen on the dashboard) committed 2026-10-30 (4.3–4.7
+  not pushed). **Phase 4 is functionally complete. Next: Phase 5 (steps, maker-checker)** — re-read the doc first;
+  its open question "reset later steps when a non-blocking step is rejected? (proposed: no)" must be settled.**
   (plan in §2 "Phase 4 step plan"). The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders,
   2026-10-30); orders have no screen until 4.7 (the user knows and chose to keep the original step order).
 - **DB:** latest Alembic head is `5eede5808433` (slot uniqueness ignores canceled). Migrations: `ceee1634d6a7`
@@ -24,7 +25,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py tests/test_ope.py tests/test_order_sync.py tests/test_order_actions.py tests/test_release_job.py` → 89 passed, ~80 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, ope, order_sync, order_actions, release_job, sop_resolution) → 94 passed, ~110 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -34,9 +35,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 - **Scheduled job (user's machine):** Task Scheduler `\postgres-migration-poc\PlanExtendJob`, daily 00:05, runs
   `scripts/extend_plans.py` in the repo root (so `.env` → dev DB) as the user (interactive logon, runs on next logon if
   missed), output appended to `extend_plans.log` (git-ignored). First run 2026-10-28: exit 0, 7 templates, 1 extended.
-  Planned second task `\postgres-migration-poc\OrderReleaseJob` (every 15 min, `scripts/release_orders.py` →
-  `release_orders.log`): **not registered yet** — creating it was refused by the permission check on 2026-10-30; the
-  user got the PowerShell command to run themselves. Check `Get-ScheduledTask -TaskPath '\postgres-migration-poc\'`.
+  Second task `\postgres-migration-poc\OrderReleaseJob` (every 15 min, `scripts/release_orders.py` →
+  `release_orders.log`), registered by the user 2026-10-30 (my attempt was refused by the permission check); first
+  run 11:04 exit 0, 0 orders (all their businesses are MANUAL_APPROVAL).
 - **Browser check:** the user clicked through the 年間計画シート and 休日カレンダー screens (2026-10-28): no issues found.
   Not yet clicked through: 日次ダッシュボード (`/daily`), the 「次の予定」 column on the template settings page, and the
   職員 screen (`/settings/staff`) + nav picker 「操作する職員」.
@@ -190,8 +191,8 @@ Plan never imports ope.
 | 4.2 | ope tables: `ope_order`, append-only `ope_order_event` (immutability trigger like plan's `plan_reject_mutation`). Models + migration + tests, **no behavior** | `9e1bcef6cbc7` | **done** (`0552e9f`) |
 | 4.3 | **done** (`7d94be7`) — Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
 | 4.4 | **done** (`0389de2`) — Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
-| 4.5 | **built 2026-10-30, awaiting review** — Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry (entry not registered yet, see §1) | — | |
-| 4.6 | SOP version resolution, pin / unpin (releaser/admin), freeze at release | maybe | |
+| 4.5 | **done** (`09f7455`) — Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry (registered by the user) | — | |
+| 4.6 | **done** — SOP version resolution, pin / unpin (releaser/admin), freeze at release | none needed | |
 | 4.7 | Frontend: order status on the dashboard + actions | — | |
 
 **4.2 as built (`src/domain_ope/models.py`, migration `9e1bcef6cbc7`) — order slot identity = plan's slot.**
@@ -277,6 +278,39 @@ plan). **Runs every 15 minutes** (my call: release times differ per business, e.
 03:00 run isn't enough; releases happen up to 15 min after the set time). Tests `tests/test_release_job.py` (3;
 client prefix `"R"`). On `plan_check`: run with biz 1 manual → 0 checked; automatic → 71 checked, 0 released
 (earliest pending is 11/1, due 11/1 03:00); set back to manual.
+
+**4.6 as built — SOP version on orders** (no migration; the columns came with 4.2). User decision 2026-10-30:
+**release goes ahead when no approved version is effective** (frozen = null; the release event detail says
+`{"sop_version": null, "sop_note": "no SOP version effective on <day>"}`) — none of the user's businesses had an
+approved SOP version on 2026-10-30.
+- `ope.resolve_sop_version(db, order)` = pinned ?? `sop_version_repo.get_effective_at(biz, at=order.scheduled_start)`
+  (non-draft, `effective_at ≤ at < expired_at`, newest `version_number`). Computed, so a plan move of a pending order
+  changes it automatically. Biz's own `get_current_active_version` only works for "now" — don't use it for orders.
+- `_release` freezes: `frozen_sop_version_id` + event detail `sop_version {id, version_tag, source pinned|effective}`.
+  Manual and automatic release both go through it. A released order's version never changes (a later plan move
+  keeps it).
+- `POST /ope/orders/{id}/pin {sop_version_id, reason?}` / `…/unpin` (releaser, admin; pending only): same business,
+  non-draft (older or newer); PINNED / UNPINNED events with `version_tag` / `previous_pin`.
+- `OrderResponse.sop_version` = `{id, version_tag, source: frozen | pinned | effective}` or null.
+- Not built from the doc's SOP section: the "impact before approval" list on the biz SOP approval screen
+  ("which upcoming orders will run v4") — no step owns it yet; copying the step list at release is Phase 5.
+- Biz quirk seen: only one FUTURE version may exist and nothing turns FUTURE into ACTIVE (status stays FUTURE;
+  `dynamic_status` computes it), so tests create consecutive versions directly via the ORM.
+- Tests: `tests/test_sop_resolution.py` (5; client prefix `"V"`). HTTP-checked on `plan_check` (biz 1 now has an
+  approved version `v9.…` effective 2026-11-02, and order 191 is released with it frozen). Doc rev 39.
+- The user's dev DB: biz 1 has SOP version id 1 `v1.1.0` (effective 2026-10-30 11:49; biz shows status "future") →
+  biz 1's pending orders (e.g. 888–890) resolve to it.
+
+**4.7 as built — order screen** (no migration). Backend: `/ops/daily` rows carry `order: {id, status, conflict,
+conflict_reason}` (`ope_order_repo.get_active_by_instances`, one query; null for occurrences without an order).
+Frontend: `domain/ope/{types,api,hooks,lib}` (`orderApi` = every `/ope/orders` action; `lib/orderActions.ts` = status /
+event labels and `availableActions(order, staff, today, day)` mirroring the backend roles + rules, display only);
+the 日次ダッシュボード rows show an order status tag (未リリース / リリース済 / 作業中 / 保留中 / 完了 / 取消) + 矛盾,
+and clicking a row opens `OrderDrawer` (status, schedule, SOP version + source, release time, the actions the acting
+staff may use with a reason / memo modal — reason required for hold, cancel, resolve-conflict cancel — and the event
+timeline, newest first; actors shown as 職員 #id). **Not in the UI:** pin / unpin (biz has no endpoint listing a
+business's SOP versions to pick from; API only), staff names in the timeline, the SOP "impact before approval" list.
+Harness-checked through Vite on `plan_check` (10 checks). Frontend types regenerated (includes 4.3–4.6 changes).
 5. Steps: conditions, maker-checker, `is_blocking`.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).

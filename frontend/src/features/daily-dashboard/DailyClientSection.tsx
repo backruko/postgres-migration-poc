@@ -1,5 +1,6 @@
 import { Tag } from "antd";
 import { Link } from "react-router-dom";
+import { ORDER_STATUS_COLOR, ORDER_STATUS_LABEL } from "../../domain/ope/lib/orderActions";
 import type { DailyClient } from "../../domain/ops/types";
 import { timeIn } from "../../shared/lib/datetime";
 import { Icon } from "../calendar/components/Icon";
@@ -10,10 +11,12 @@ interface Props {
   client: DailyClient;
   date: string;
   timezone: string;
+  /** 予定の行をクリックしたとき（オーダーのある予定のみ） */
+  onOpenOrder: (orderId: number, title: string) => void;
 }
 
-/** 1顧客分: その日のシート日付と、業務ごとの予定（過去の日付では無効化・取消された予定も） */
-export function DailyClientSection({ client, date, timezone }: Props) {
+/** 1顧客分: その日のシート日付と、業務ごとの予定（オーダーの状態付き。過去の日付では無効化・取消された予定も） */
+export function DailyClientSection({ client, date, timezone, onOpenOrder }: Props) {
   const count = client.businesses.reduce((n, b) => n + b.occurrences.length, 0);
   const span = (start: string, end: string) => `${timeIn(start, timezone)}–${timeIn(end, timezone)}`;
 
@@ -50,9 +53,24 @@ export function DailyClientSection({ client, date, timezone }: Props) {
           <ul className="daily-items">
             {b.occurrences.map((o) => {
               const style = chipStyle(o.ui_metadata);
+              const order = o.order;
+              const open = order ? () => onOpenOrder(order.id, `${b.biz_code} ${o.title}`) : undefined;
               return (
-                <li key={o.instance_id} className="daily-item">
+                <li
+                  key={o.instance_id}
+                  className={order ? "daily-item has-order" : "daily-item"}
+                  onClick={open}
+                  onKeyDown={(e) => open && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open())}
+                  role={order ? "button" : undefined}
+                  tabIndex={order ? 0 : undefined}
+                  title={order ? "オーダーの詳細と操作" : undefined}
+                >
                   <span className="mono daily-time">{span(o.starts_at, o.ends_at)}</span>
+                  {order ? (
+                    <Tag color={ORDER_STATUS_COLOR[order.status]} className="order-status-tag">{ORDER_STATUS_LABEL[order.status]}</Tag>
+                  ) : (
+                    <span className="order-status-tag muted">—</span>
+                  )}
                   <span className="swatch" style={{ background: style.background, color: style.color }}>
                     <Icon name={style.icon} />
                   </span>
@@ -60,6 +78,7 @@ export function DailyClientSection({ client, date, timezone }: Props) {
                   {o.is_override && <Tag>人が変更</Tag>}
                   {o.origin === "one_off" && <Tag>臨時</Tag>}
                   {o.occurrence_date !== date && <span className="muted">元の日付 {shortDate(o.occurrence_date)}</span>}
+                  {order?.conflict && <Tag color="warning" title={order.conflict_reason ?? undefined}>矛盾</Tag>}
                 </li>
               );
             })}

@@ -38,6 +38,15 @@ class OpeOrderRepository:
             )
         return db.scalars(stmt.with_for_update()).first()
 
+    def get_active_by_instances(self, db: Session, *, instance_ids: list[int]) -> dict[int, OpeOrder]:
+        """plan インスタンスごとの、取消されていないオーダー（ダッシュボードの一覧用。1回のクエリ）"""
+        if not instance_ids:
+            return {}
+        stmt = select(OpeOrder).where(
+            OpeOrder.current_instance_id.in_(instance_ids), OpeOrder.status != OrderStatus.CANCELED
+        )
+        return {o.current_instance_id: o for o in db.scalars(stmt)}
+
     def get_locked(self, db: Session, *, id: int) -> OpeOrder | None:
         """状態を変えるときは行ロックしてから読む（同時に操作されても状態の遷移が食い違わないよう）"""
         return db.scalars(select(OpeOrder).where(OpeOrder.id == id).with_for_update()).first()

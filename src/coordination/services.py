@@ -12,6 +12,7 @@ from src.coordination.schemas import (
     DailyDashboardResponse,
     DailyMilestone,
     DailyOccurrence,
+    DailyOrderSummary,
     DailyVoidedItem,
 )
 from src.domain_biz.models import BizMaster
@@ -20,6 +21,7 @@ from src.domain_plan.models import validate_timezone_name
 from src.infrastructure.repositories import (
     business_calendar_repo,
     client_repo,
+    ope_order_repo,
     plan_cache_repo,
     plan_instance_repo,
     reference_sheet_repo,
@@ -61,7 +63,10 @@ def get_daily_dashboard(db: Session, target_date: date | None, tz_name: str) -> 
         return businesses[biz.id]
 
     occurrences = plan_cache_repo.query_starting_in(db, start=start, end=end)
+    # 予定ごとのオーダー（1回のクエリで取得。取消済みのオーダーは除く）
+    orders = ope_order_repo.get_active_by_instances(db, instance_ids=[cache.instance_id for cache, _, _ in occurrences])
     for cache, instance, biz in occurrences:
+        order = orders.get(cache.instance_id)
         business(biz).occurrences.append(DailyOccurrence(
             instance_id=cache.instance_id,
             template_id=cache.template_id,
@@ -73,6 +78,9 @@ def get_daily_dashboard(db: Session, target_date: date | None, tz_name: str) -> 
             is_override=cache.is_override,
             source_sheet_event_id=instance.source_sheet_event_id,
             ui_metadata=cache.ui_metadata,
+            order=DailyOrderSummary(
+                id=order.id, status=order.status, conflict=order.conflict, conflict_reason=order.conflict_reason,
+            ) if order else None,
         ))
 
     if is_past:

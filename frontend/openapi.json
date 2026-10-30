@@ -3782,6 +3782,24 @@
               "type": "integer",
               "title": "Template Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -3837,6 +3855,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3957,6 +3995,24 @@
               "type": "integer",
               "title": "Instance Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -4020,6 +4076,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4050,6 +4126,24 @@
               "type": "integer",
               "title": "Instance Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -4120,6 +4214,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4150,6 +4264,24 @@
               "type": "integer",
               "title": "Instance Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -4203,6 +4335,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4233,6 +4385,24 @@
               "type": "integer",
               "title": "Instance Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -4295,6 +4465,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5850,6 +6040,1479 @@
         }
       }
     },
+    "/ope/orders/{order_id}": {
+      "get": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Get Order Endpoint",
+        "description": "オーダーと、その記録（古い順）",
+        "operationId": "get_order_endpoint_ope_orders__order_id__get",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/release": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Release Order Endpoint",
+        "description": "pending → ready。自動リリースの業務でも、予定より早く手動でリリースできます。",
+        "operationId": "release_order_endpoint_ope_orders__order_id__release_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OrderCommentIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/pin": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Pin Sop Version Endpoint",
+        "description": "リリース前のオーダーに使う SOP バージョンを指定します（同じ業務の承認済みバージョン。古い・新しいどちらでも可）。",
+        "operationId": "pin_sop_version_endpoint_ope_orders__order_id__pin_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinSopVersionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/unpin": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Unpin Sop Version Endpoint",
+        "description": "指定を外し、予定日時に有効なバージョンに戻します（リリース前のみ）。",
+        "operationId": "unpin_sop_version_endpoint_ope_orders__order_id__unpin_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OrderCommentIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/approve-early-start": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Approve Early Start Endpoint",
+        "description": "予定日より前の開始を承認します（承認後は予定日前でも開始できます）。",
+        "operationId": "approve_early_start_endpoint_ope_orders__order_id__approve_early_start_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OrderCommentIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/start": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Start Order Endpoint",
+        "description": "ready → in_progress。予定日（日本時間）以降のみ。それより前はリリース担当の承認が必要です。矛盾があると開始できません。",
+        "operationId": "start_order_endpoint_ope_orders__order_id__start_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OrderCommentIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/hold": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Hold Order Endpoint",
+        "description": "pending / ready / in_progress → on_hold（理由必須。再開すると保留前の状態に戻ります）",
+        "operationId": "hold_order_endpoint_ope_orders__order_id__hold_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderReasonIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/resume": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Resume Order Endpoint",
+        "description": "on_hold → 保留前の状態",
+        "operationId": "resume_order_endpoint_ope_orders__order_id__resume_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OrderCommentIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/finish": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Finish Order Endpoint",
+        "description": "in_progress → finished（ステップができるまでの暫定の完了操作）",
+        "operationId": "finish_order_endpoint_ope_orders__order_id__finish_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/OrderCommentIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/cancel": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Cancel Order Endpoint",
+        "description": "finished / canceled 以外 → canceled（理由必須）。plan の予定も取り消し、カレンダーからも消えます。",
+        "operationId": "cancel_order_endpoint_ope_orders__order_id__cancel_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderReasonIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/orders/{order_id}/resolve-conflict": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Resolve Conflict Endpoint",
+        "description": "矛盾の解決: accept_plan（plan の新しい日時を採用）・keep（そのまま続ける）・cancel（取消。理由必須）",
+        "operationId": "resolve_conflict_endpoint_ope_orders__order_id__resolve_conflict_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConflictResolveIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Read Root",
@@ -6752,6 +8415,41 @@
         "type": "object",
         "title": "ClientUpdate"
       },
+      "ConflictAction": {
+        "type": "string",
+        "enum": [
+          "accept_plan",
+          "keep",
+          "cancel"
+        ],
+        "title": "ConflictAction",
+        "description": "矛盾の解決方法"
+      },
+      "ConflictResolveIn": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ConflictAction"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "required when action is cancel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ConflictResolveIn"
+      },
       "DailyBusiness": {
         "properties": {
           "biz_master_id": {
@@ -7073,6 +8771,17 @@
             ],
             "title": "Ui Metadata",
             "description": "effective styling (template merged with instance)"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DailyOrderSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the order of this occurrence (null: none, e.g. past occurrences before go-live)"
           }
         },
         "type": "object",
@@ -7089,6 +8798,40 @@
         ],
         "title": "DailyOccurrence",
         "description": "その日に開始する有効な予定"
+      },
+      "DailyOrderSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "conflict": {
+            "type": "boolean",
+            "title": "Conflict"
+          },
+          "conflict_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "conflict"
+        ],
+        "title": "DailyOrderSummary",
+        "description": "予定のオーダーの要約（詳細と操作は GET /ope/orders/{id}）"
       },
       "DailyVoidedItem": {
         "properties": {
@@ -7173,6 +8916,7 @@
           "NOT_FOUND",
           "RECORD_ALREADY_EXISTS",
           "INSTANCE_ALREADY_VOIDED",
+          "ORDER_IN_PROGRESS",
           "DELETE_FAILED_RECORD_IN_USE",
           "INTERNAL_SERVER_ERROR"
         ],
@@ -7203,6 +8947,14 @@
           "message"
         ],
         "title": "ErrorResponse"
+      },
+      "EventSource": {
+        "type": "string",
+        "enum": [
+          "human",
+          "system"
+        ],
+        "title": "EventSource"
       },
       "ExplicitDatesAdd": {
         "properties": {
@@ -7445,6 +9197,392 @@
         ],
         "title": "MarkerRule",
         "description": "生成マーカーのルール。例: 毎月27日、休日なら翌営業日"
+      },
+      "OrderCommentIn": {
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "title": "OrderCommentIn",
+        "description": "理由・メモが任意の操作（リリース・開始・再開・完了・早期開始の承認）"
+      },
+      "OrderDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "template_id": {
+            "type": "integer",
+            "title": "Template Id"
+          },
+          "occurrence_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Occurrence Date"
+          },
+          "source_sheet_event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Sheet Event Id"
+          },
+          "one_off_instance_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "One Off Instance Id"
+          },
+          "current_instance_id": {
+            "type": "integer",
+            "title": "Current Instance Id"
+          },
+          "biz_master_id": {
+            "type": "integer",
+            "title": "Biz Master Id"
+          },
+          "client_code": {
+            "type": "string",
+            "title": "Client Code"
+          },
+          "scheduled_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled Start"
+          },
+          "scheduled_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled End"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "status_before_hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pinned_sop_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned Sop Version Id"
+          },
+          "frozen_sop_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frozen Sop Version Id"
+          },
+          "released_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released At"
+          },
+          "conflict": {
+            "type": "boolean",
+            "title": "Conflict"
+          },
+          "conflict_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Reason"
+          },
+          "early_start_approved": {
+            "type": "boolean",
+            "title": "Early Start Approved",
+            "description": "a releaser approved starting before the scheduled day",
+            "default": false
+          },
+          "sop_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderSopVersion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the SOP version this order runs (null: none approved / none was frozen at release)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/OrderEventResponse"
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "the order's events, oldest first"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "template_id",
+          "occurrence_date",
+          "source_sheet_event_id",
+          "one_off_instance_id",
+          "current_instance_id",
+          "biz_master_id",
+          "client_code",
+          "scheduled_start",
+          "scheduled_end",
+          "status",
+          "status_before_hold",
+          "pinned_sop_version_id",
+          "frozen_sop_version_id",
+          "released_at",
+          "conflict",
+          "conflict_reason",
+          "created_at",
+          "updated_at",
+          "events"
+        ],
+        "title": "OrderDetailResponse"
+      },
+      "OrderEventResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/OrderEventType"
+          },
+          "from_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/EventSource"
+          },
+          "actor_staff_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Staff Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "from_status",
+          "to_status",
+          "source",
+          "actor_staff_id",
+          "reason",
+          "detail",
+          "occurred_at"
+        ],
+        "title": "OrderEventResponse"
+      },
+      "OrderEventType": {
+        "type": "string",
+        "enum": [
+          "created",
+          "status_changed",
+          "rescheduled",
+          "pinned",
+          "unpinned",
+          "early_start_approved",
+          "conflict_raised",
+          "conflict_resolved"
+        ],
+        "title": "OrderEventType",
+        "description": "オーダーの記録の種類（追記のみ）"
+      },
+      "OrderReasonIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "OrderReasonIn",
+        "description": "理由が必須の操作（保留・取消）"
+      },
+      "OrderSopVersion": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "version_tag": {
+            "type": "string",
+            "title": "Version Tag"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "frozen",
+              "pinned",
+              "effective"
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version_tag",
+          "source"
+        ],
+        "title": "OrderSopVersion",
+        "description": "オーダーが使う SOP バージョン（リリース後は固定したもの、リリース前は指定または予定日時に有効なもの）"
+      },
+      "OrderStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "ready",
+          "in_progress",
+          "on_hold",
+          "finished",
+          "canceled"
+        ],
+        "title": "OrderStatus",
+        "description": "オーダーの状態。finished / canceled は最終状態"
+      },
+      "PinSopVersionIn": {
+        "properties": {
+          "sop_version_id": {
+            "type": "integer",
+            "title": "Sop Version Id",
+            "description": "an approved (non-draft) version of the order's business"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sop_version_id"
+        ],
+        "title": "PinSopVersionIn"
       },
       "PlanExplicitDateResponse": {
         "properties": {

@@ -1,10 +1,12 @@
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { Alert, Button, DatePicker, Empty, Space, Spin, Tag } from "antd";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useDailyDashboard } from "../../domain/ops/hooks/useDailyDashboard";
 import { TIMEZONE } from "../../shared/config";
 import { dayjs, todayIn } from "../../shared/lib/datetime";
 import { DailyClientSection } from "./DailyClientSection";
+import { OrderDrawer } from "./OrderDrawer";
 import { addDays, calendarDayLabel, dayLabel, parseDateParam, summarize } from "./dailyDashboard";
 
 /**
@@ -19,6 +21,8 @@ export function DailyDashboardPage() {
   const date = parseDateParam(params.get("date"), today);
   const isPast = date < today;
   const dashboard = useDailyDashboard(date, TIMEZONE);
+  // 開いているオーダー（予定の行をクリックすると右のドロワーで詳細と操作）
+  const [openOrder, setOpenOrder] = useState<{ id: number; title: string } | null>(null);
 
   const go = (next: string) => setParams({ date: next }, { replace: true });
 
@@ -85,10 +89,22 @@ export function DailyDashboardPage() {
         ) : (
           <div className="daily-clients">
             {data.clients.map((c) => (
-              <DailyClientSection key={c.client_code} client={c} date={date} timezone={TIMEZONE} />
+              <DailyClientSection
+                key={c.client_code}
+                client={c}
+                date={date}
+                timezone={TIMEZONE}
+                onOpenOrder={(id, title) => setOpenOrder({ id, title })}
+              />
             ))}
           </div>
         ))}
+      <OrderDrawer
+        orderId={openOrder?.id ?? null}
+        title={openOrder?.title ?? ""}
+        onClose={() => setOpenOrder(null)}
+        onChanged={dashboard.reload}
+      />
     </div>
   );
 }
