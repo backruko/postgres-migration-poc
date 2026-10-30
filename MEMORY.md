@@ -192,8 +192,8 @@ Plan never imports ope.
 | 4.3 | **done** (`7d94be7`) — Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
 | 4.4 | **done** (`0389de2`) — Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
 | 4.5 | **done** (`09f7455`) — Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry (registered by the user) | — | |
-| 4.6 | **done** — SOP version resolution, pin / unpin (releaser/admin), freeze at release | none needed | |
-| 4.7 | Frontend: order status on the dashboard + actions | — | |
+| 4.6 | **done** (`4790ac1`) — SOP version resolution, pin / unpin (releaser/admin), freeze at release | none needed | |
+| 4.7 | **done** (`d151fbf`) — Frontend: order status on the dashboard + actions | — | |
 
 **4.2 as built (`src/domain_ope/models.py`, migration `9e1bcef6cbc7`) — order slot identity = plan's slot.**
 Plan has three slot kinds: rule-generated `("date", occurrence_date)`, sheet-based `("sheet_event",
