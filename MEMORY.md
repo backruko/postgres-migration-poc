@@ -13,7 +13,8 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   `0389de2`) and 4.5 (automatic release job, `09f7455`) committed (4.3–4.5 not pushed). Step 4.6 (SOP version
   resolution / pinning / freeze at release) and 4.7 (order screen on the dashboard) committed 2026-10-30 (4.3–4.7
   not pushed). **Phase 4 is complete. Phase 5 (steps, maker-checker) started 2026-10-30: decisions made and step plan
-  approved (§2 "Phase 5 step plan"); step 5.1 (step template condition + is_blocking) built, awaiting review.**
+  approved (§2 "Phase 5 step plan"); step 5.1 (step template condition + is_blocking) done — committed and pushed
+  by the user as `05850c1 phase4(compelete)` (with `5dbbe0f phase4`). Branch in sync with origin. Next: step 5.2.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
 - **DB:** latest Alembic head is `971958268657` (sop step condition and is_blocking). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
@@ -78,6 +79,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
+**Last rev written by me: 46 (2026-10-30)** — read with `{"kind": "view", "sinceRev": 46}` to see only newer edits, and
+query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
+The delivery-phase list in the doc carries the build status (phases 1–4 built, 5 in progress).
 
 ### Domains (decided: plan and ope stay separate, no merge)
 | Domain | Owns | Status |
@@ -325,8 +329,8 @@ when the last step is approved; a ready order whose step conditions change after
 #### Phase 5 step plan (approved 2026-10-30)
 | # | Step | Status |
 |---|---|---|
-| 5.1 | biz `sop_step_template.condition` (JSONB, default `{"type": "always"}`) + `is_blocking` (default false); migration `971958268657`; schemas `StepCondition` = discriminated union `AlwaysCondition` / `MonthInCondition(months 1–12, deduped + sorted)` / `FirstInWeekCondition`; `clone_active_to_draft` copies both; tests in `tests/test_biz.py` | **built**, awaiting review |
-| 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event` | next |
+| 5.1 | biz `sop_step_template.condition` (JSONB, default `{"type": "always"}`) + `is_blocking` (default false); migration `971958268657`; schemas `StepCondition` = discriminated union `AlwaysCondition` / `MonthInCondition(months 1–12, deduped + sorted)` / `FirstInWeekCondition`; `clone_active_to_draft` copies both; tests in `tests/test_biz.py` | **done** (`05850c1`, pushed by the user) |
+| 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event` | **next** |
 | 5.3 | Build steps: live preview while pending (in the order detail), create + freeze at release, conflict flag when a system move changes a ready order's step set | |
 | 5.4 | Step actions: submit (operator) / approve / reject (checker, four-eyes, reason for reject), unlock rules, start opens step 1, auto-finish on the last approval; manual finish only for zero-step orders | |
 | 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | |
