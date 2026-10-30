@@ -1,6 +1,6 @@
 import enum
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +22,13 @@ class OrderCommentIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     comment: str | None = Field(default=None, max_length=500)
+
+
+class PinSopVersionIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    sop_version_id: int = Field(..., description="an approved (non-draft) version of the order's business")
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class ConflictAction(str, enum.Enum):
@@ -55,6 +62,13 @@ class OrderEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OrderSopVersion(BaseModel):
+    """オーダーが使う SOP バージョン（リリース後は固定したもの、リリース前は指定または予定日時に有効なもの）"""
+    id: int
+    version_tag: str
+    source: Literal["frozen", "pinned", "effective"]
+
+
 class OrderResponse(BaseModel):
     id: int
     template_id: int
@@ -74,6 +88,9 @@ class OrderResponse(BaseModel):
     conflict: bool
     conflict_reason: str | None
     early_start_approved: bool = Field(default=False, description="a releaser approved starting before the scheduled day")
+    sop_version: OrderSopVersion | None = Field(
+        default=None, description="the SOP version this order runs (null: none approved / none was frozen at release)"
+    )
     created_at: datetime
     updated_at: datetime
 

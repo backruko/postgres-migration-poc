@@ -17,15 +17,15 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
-from src.domain_biz.models import BizMaster
+from src.domain_biz.models import BizMaster, SOPStatus, SOPVersion
 from src.domain_ope.models import EventSource, OpeOrder, OrderEventType, OrderStatus
 from src.domain_ope.schemas import (
-    AutoReleaseResult, ConflictAction, ConflictResolveIn, OrderDetailResponse, OrderEventResponse,
+    AutoReleaseResult, ConflictAction, ConflictResolveIn, OrderDetailResponse, OrderEventResponse, OrderSopVersion,
 )
 from src.domain_plan import services as plan_services
 from src.domain_plan.schemas import PlanInstanceCancel
 from src.domain_plan.slot_events import SlotKey, live_instance_for_slot
-from src.infrastructure.repositories import ope_order_repo, plan_instance_repo
+from src.infrastructure.repositories import ope_order_repo, plan_instance_repo, sop_version_repo
 
 # 予定日の判定に使うタイムゾーン（シートの日付・休日と同じく日本の日付）
 LOCAL_TIMEZONE = ZoneInfo("Asia/Tokyo")
@@ -50,12 +50,34 @@ def _scheduled_day(order: OpeOrder) -> date:
 # ==========================================
 # 参照
 # ==========================================
+def resolve_sop_version(db: Session, order: OpeOrder) -> SOPVersion | None:
+    """
+    リリース前のオーダーが使う SOP バージョン = 人が指定したもの ?? 予定日時に有効な承認済みバージョン。
+    （リリース後は frozen_sop_version_id が正。予定が動けば、有効なバージョンも動いた日時で決まり直す）
+    """
+    if order.pinned_sop_version_id is not None:
+        return db.get(SOPVersion, order.pinned_sop_version_id)
+    return sop_version_repo.get_effective_at(db, biz_master_id=order.biz_master_id, at=order.scheduled_start)
+
+
+def _order_sop_version(db: Session, order: OpeOrder) -> OrderSopVersion | None:
+    if order.released_at is not None:
+        frozen = db.get(SOPVersion, order.frozen_sop_version_id) if order.frozen_sop_version_id else None
+        return OrderSopVersion(id=frozen.id, version_tag=frozen.version_tag, source="frozen") if frozen else None
+    version = resolve_sop_version(db, order)
+    if version is None:
+        return None
+    return OrderSopVersion(id=version.id, version_tag=version.version_tag,
+                           source="pinned" if order.pinned_sop_version_id else "effective")
+
+
 def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
     events = ope_order_repo.get_events(db, order_id=order.id)
     return OrderDetailResponse.model_validate(
         {
             **{c.key: getattr(order, c.key) for c in OpeOrder.__table__.columns},
             "early_start_approved": any(e.event_type == OrderEventType.EARLY_START_APPROVED for e in events),
+            "sop_version": _order_sop_version(db, order),
             "events": [OrderEventResponse.model_validate(e) for e in events],
         }
     )
@@ -113,12 +135,23 @@ def _release(
     db: Session, order: OpeOrder, source: EventSource, actor_staff_id: int | None, reason: str | None,
     detail: dict[str, Any] | None = None,
 ) -> None:
-    """pending → ready。手動・自動のリリースで共通（4.6 で SOP バージョンの固定もここで行う）"""
+    """
+    pending → ready。手動・自動のリリースで共通。リリース時点で使う SOP バージョンを固定する（以後は変わらない）。
+    承認済みのバージョンが無い業務でもリリースはできる（2026-10-30 の決定。記録に「バージョンなし」と残す）。
+    """
+    version = resolve_sop_version(db, order)
+    order.frozen_sop_version_id = version.id if version else None
     order.released_at = _now()
     order.status = OrderStatus.READY
+    sop: dict[str, Any] = (
+        {"sop_version": {"id": version.id, "version_tag": version.version_tag,
+                         "source": "pinned" if order.pinned_sop_version_id else "effective"}}
+        if version else {"sop_version": None, "sop_note": f"no SOP version effective on {_scheduled_day(order).isoformat()}"}
+    )
     ope_order_repo.add_event(
         db, order=order, event_type=OrderEventType.STATUS_CHANGED, from_status=OrderStatus.PENDING,
-        to_status=OrderStatus.READY, source=source, actor_staff_id=actor_staff_id, reason=reason, detail=detail,
+        to_status=OrderStatus.READY, source=source, actor_staff_id=actor_staff_id, reason=reason,
+        detail={**(detail or {}), **sop},
     )
 
 
@@ -160,6 +193,46 @@ def release_due_orders(db: Session) -> AutoReleaseResult:
             released.append(order.id)
     db.commit()
     return AutoReleaseResult(checked=len(candidates), released=released)
+
+
+def pin_sop_version(
+    db: Session, order_id: int, actor_staff_id: int, sop_version_id: int, reason: str | None = None,
+) -> OrderDetailResponse:
+    """
+    リリース前のオーダーに使う SOP バージョンを指定します（リリース担当・業務管理者）。
+    同じ業務の承認済み（草稿以外）のバージョンなら、古いものでも新しいものでも指定できます。
+    """
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.PENDING,), "pin a SOP version for")
+    version = db.get(SOPVersion, sop_version_id)
+    if version is None or version.biz_master_id != order.biz_master_id:
+        raise NotFoundError(f"SOPVersion(id={sop_version_id}) of this order's business not found.")
+    if version.status == SOPStatus.DRAFT:
+        raise BadRequestError(f"SOPVersion {version.version_tag} is a draft; only approved versions can be pinned.")
+    if order.pinned_sop_version_id == version.id:
+        raise BadRequestError(f"Order {order.id} is already pinned to {version.version_tag}.")
+    previous = order.pinned_sop_version_id
+    order.pinned_sop_version_id = version.id
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.PINNED, source=EventSource.HUMAN, actor_staff_id=actor_staff_id,
+        reason=reason, detail={"sop_version_id": version.id, "version_tag": version.version_tag, "previous_pin": previous},
+    )
+    return _finish(db, order)
+
+
+def unpin_sop_version(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """指定を外し、予定日時に有効なバージョンに戻します（リリース担当・業務管理者。リリース前のみ）。"""
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.PENDING,), "unpin the SOP version of")
+    if order.pinned_sop_version_id is None:
+        raise BadRequestError(f"Order {order.id} has no pinned SOP version.")
+    previous = order.pinned_sop_version_id
+    order.pinned_sop_version_id = None
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.UNPINNED, source=EventSource.HUMAN, actor_staff_id=actor_staff_id,
+        reason=comment, detail={"previous_pin": previous},
+    )
+    return _finish(db, order)
 
 
 def approve_early_start(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:

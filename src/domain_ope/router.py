@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 
 from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
 from src.infrastructure.database import get_db
-from src.domain_ope.schemas import ConflictResolveIn, OrderCommentIn, OrderDetailResponse, OrderReasonIn
+from src.domain_ope.schemas import ConflictResolveIn, OrderCommentIn, OrderDetailResponse, OrderReasonIn, PinSopVersionIn
 from src.domain_ope.services import (
-    approve_early_start, cancel_order, finish_order, get_order, hold_order, release_order, resolve_conflict,
-    resume_order, start_order,
+    approve_early_start, cancel_order, finish_order, get_order, hold_order, pin_sop_version, release_order,
+    resolve_conflict, resume_order, start_order, unpin_sop_version,
 )
 from src.domain_staff.auth import get_current_staff, require_active, require_roles
 from src.domain_staff.models import RoleCode, StaffUser
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/ope", tags=["ope"])
 # 誰が操作できるか（2026-10-28 / 10-30 の決定）
 OPERATOR = [RoleCode.OPERATOR]
 HOLDERS = [RoleCode.OPERATOR, RoleCode.RELEASER, RoleCode.ADMIN]
-PRIVILEGED = [RoleCode.RELEASER, RoleCode.ADMIN]  # リリース・取消・矛盾の解決
+PRIVILEGED = [RoleCode.RELEASER, RoleCode.ADMIN]  # リリース・SOP バージョンの指定・取消・矛盾の解決
 
 RESPONSES: dict[int | str, dict[str, Any]] = {**COMMON_ERRORS, **AUTH_ERRORS}
 STAFF = Depends(get_current_staff)
@@ -40,6 +40,20 @@ def release_order_endpoint(
 ):
     """pending → ready。自動リリースの業務でも、予定より早く手動でリリースできます。"""
     return release_order(db=db, order_id=order_id, actor_staff_id=current_staff.id, comment=(body or OrderCommentIn()).comment)
+
+@router.post("/orders/{order_id}/pin", response_model=OrderDetailResponse, responses=RESPONSES)
+@require_roles(PRIVILEGED)
+def pin_sop_version_endpoint(order_id: int, body: PinSopVersionIn, db: Session = Depends(get_db), current_staff: StaffUser = STAFF):
+    """リリース前のオーダーに使う SOP バージョンを指定します（同じ業務の承認済みバージョン。古い・新しいどちらでも可）。"""
+    return pin_sop_version(db=db, order_id=order_id, actor_staff_id=current_staff.id, sop_version_id=body.sop_version_id, reason=body.reason)
+
+@router.post("/orders/{order_id}/unpin", response_model=OrderDetailResponse, responses=RESPONSES)
+@require_roles(PRIVILEGED)
+def unpin_sop_version_endpoint(
+    order_id: int, body: OrderCommentIn | None = None, db: Session = Depends(get_db), current_staff: StaffUser = STAFF,
+):
+    """指定を外し、予定日時に有効なバージョンに戻します（リリース前のみ）。"""
+    return unpin_sop_version(db=db, order_id=order_id, actor_staff_id=current_staff.id, comment=(body or OrderCommentIn()).comment)
 
 @router.post("/orders/{order_id}/approve-early-start", response_model=OrderDetailResponse, responses=RESPONSES)
 @require_roles([RoleCode.RELEASER])
