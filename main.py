@@ -25,6 +25,10 @@ from src.domain_biz.router import router as biz_router
 from src.domain_plan.router import router as plan_router
 from src.coordination.router import router as ops_router
 from src.domain_staff.router import router as staff_router
+from src.coordination import order_sync
+
+# plan の発生枠の変更をオーダーに反映する受け手を登録（同じトランザクションで追従する）
+order_sync.register()
 
 app = FastAPI(title="Schedule System")
 

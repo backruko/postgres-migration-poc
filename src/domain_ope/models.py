@@ -110,18 +110,22 @@ class OpeOrder(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
-        # 1つの発生枠に1件のオーダー（枠の種類ごとの部分一意インデックス）
+        # 1つの発生枠に、取消されていないオーダーは1件（枠の種類ごとの部分一意インデックス）。
+        # 取消されたオーダーは履歴として残り、枠が戻ったとき（取消の復元・休日の解除など）は新しいオーダーを作る
         Index(
             "uq_ope_order_sheet_slot", "template_id", "source_sheet_event_id",
-            unique=True, postgresql_where=text("source_sheet_event_id IS NOT NULL"),
+            unique=True, postgresql_where=text("source_sheet_event_id IS NOT NULL AND status <> 'CANCELED'"),
         ),
         Index(
             "uq_ope_order_one_off_slot", "template_id", "one_off_instance_id",
-            unique=True, postgresql_where=text("one_off_instance_id IS NOT NULL"),
+            unique=True, postgresql_where=text("one_off_instance_id IS NOT NULL AND status <> 'CANCELED'"),
         ),
         Index(
             "uq_ope_order_date_slot", "template_id", "occurrence_date",
-            unique=True, postgresql_where=text("source_sheet_event_id IS NULL AND one_off_instance_id IS NULL"),
+            unique=True,
+            postgresql_where=text(
+                "source_sheet_event_id IS NULL AND one_off_instance_id IS NULL AND status <> 'CANCELED'"
+            ),
         ),
         CheckConstraint(
             "source_sheet_event_id IS NULL OR one_off_instance_id IS NULL", name="ck_ope_order_one_slot_kind"

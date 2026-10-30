@@ -17,7 +17,7 @@ from src.infrastructure.repositories import (
     reference_sheet_repo,
 )
 from src.domain_biz.models import BizMaster
-from src.domain_plan import engine
+from src.domain_plan import engine, slot_events
 from src.domain_plan.engine import DayUnit, HolidayPolicy
 from src.domain_plan.models import (
     merge_ui_metadata,
@@ -1195,7 +1195,9 @@ def _is_revertable(db: Session, instance: PlanInstance, now: datetime) -> bool:
     return root.origin == InstanceOrigin.GENERATED and root.scheduled_start >= now
 
 
-def override_instance(db: Session, instance_id: int, override_in: PlanInstanceOverride) -> PlanInstanceResponse:
+def override_instance(
+    db: Session, instance_id: int, override_in: PlanInstanceOverride, actor_staff_id: int | None = None
+) -> PlanInstanceResponse:
     """
     特定のインスタンスだけ時刻を変更します（テンプレートのルールは変えません）。
     内部では、元インスタンスを MANUAL で無効化し、同じ発生枠を引き継いだ新しいインスタンスを追記します。
@@ -1215,6 +1217,7 @@ def override_instance(db: Session, instance_id: int, override_in: PlanInstanceOv
         else original.ui_metadata
     )
 
+    slot_events.mark_person_change(db, actor_staff_id, override_in.note)
     plan_instance_void_repo.void_many(db, instance_ids=[original.id], reason=VoidReason.MANUAL, note=override_in.note)
     plan_cache_repo.purge(db, instance_ids=[original.id])
     replacement = plan_instance_repo.add_override(
@@ -1227,10 +1230,13 @@ def override_instance(db: Session, instance_id: int, override_in: PlanInstanceOv
     return _to_instance_response(replacement, None)
 
 
-def cancel_instance(db: Session, instance_id: int, cancel_in: PlanInstanceCancel) -> PlanInstanceResponse:
+def cancel_instance(
+    db: Session, instance_id: int, cancel_in: PlanInstanceCancel, actor_staff_id: int | None = None
+) -> PlanInstanceResponse:
     """特定のインスタンスだけを取り消します。ルールからの再生成でも復活しません。"""
     instance, _ = _get_live_instance_for_manual_change(db, instance_id)
 
+    slot_events.mark_person_change(db, actor_staff_id, cancel_in.note)
     plan_instance_void_repo.void_many(db, instance_ids=[instance.id], reason=VoidReason.MANUAL, note=cancel_in.note)
     plan_cache_repo.purge(db, instance_ids=[instance.id])
     _commit(db, f"PlanInstance(id={instance_id}) was changed concurrently. Please retry.")
@@ -1240,7 +1246,9 @@ def cancel_instance(db: Session, instance_id: int, cancel_in: PlanInstanceCancel
     return _to_instance_response(*found)
 
 
-def revert_instance(db: Session, instance_id: int, revert_in: PlanInstanceRevert) -> PlanRevertResponse:
+def revert_instance(
+    db: Session, instance_id: int, revert_in: PlanInstanceRevert, actor_staff_id: int | None = None
+) -> PlanRevertResponse:
     """
     手動変更（オーバーライド・取消）を取り消し、その発生枠をテンプレートのルールの管理下に戻します。
     置き換えの連鎖のどのインスタンスを指定しても、連鎖全体（=1つの発生枠）が対象になります。
@@ -1274,6 +1282,7 @@ def revert_instance(db: Session, instance_id: int, revert_in: PlanInstanceRevert
             "The original occurrence is in the past and cannot be regenerated. Cancel or override it instead."
         )
 
+    slot_events.mark_person_change(db, actor_staff_id, revert_in.note)
     # 連鎖の末端（現在のオーバーライド）が有効なら無効化する
     terminal = root
     while (child := plan_instance_repo.get_override_child(db, instance_id=terminal.id)) is not None:
@@ -1313,7 +1322,9 @@ def revert_instance(db: Session, instance_id: int, revert_in: PlanInstanceRevert
     return PlanRevertResponse(voided_instance=response(voided), restored_instance=response(restored))
 
 
-def add_one_off_instance(db: Session, template_id: int, one_off_in: PlanOneOffCreate) -> PlanInstanceResponse:
+def add_one_off_instance(
+    db: Session, template_id: int, one_off_in: PlanOneOffCreate, actor_staff_id: int | None = None
+) -> PlanInstanceResponse:
     """
     発生枠に紐づかない単発のインスタンスを追加します（例: 臨時の作業）。
     ルールからの再生成の対象外のため、テンプレートを変更しても維持されます（テンプレート削除時は無効化）。
@@ -1323,6 +1334,7 @@ def add_one_off_instance(db: Session, template_id: int, one_off_in: PlanOneOffCr
     start = one_off_in.scheduled_start
     end = one_off_in.scheduled_end or start + timedelta(minutes=template.duration_minutes)
     _reject_past_start(start)
+    slot_events.mark_person_change(db, actor_staff_id)
     instance = plan_instance_repo.add_one_off(
         db,
         template=template,
@@ -1382,7 +1394,7 @@ def get_cancelled_instances(
     return results
 
 
-def restore_cancelled_instance(db: Session, instance_id: int) -> PlanInstanceResponse:
+def restore_cancelled_instance(db: Session, instance_id: int, actor_staff_id: int | None = None) -> PlanInstanceResponse:
     """
     取り消した予定を元に戻します（取消の直前と同じ日時・表示で復元）。
     インスタンスは不変のため、取り消された予定を置き換える新しいインスタンスを追記して復元します
@@ -1416,6 +1428,7 @@ def restore_cancelled_instance(db: Session, instance_id: int) -> PlanInstanceRes
             error_code=ErrorCode.INSTANCE_ALREADY_VOIDED,
         )
 
+    slot_events.mark_person_change(db, actor_staff_id)
     restored = plan_instance_repo.add_override(
         db, template=template, original=instance, start=instance.scheduled_start, end=instance.scheduled_end,
         ui_metadata=instance.ui_metadata,

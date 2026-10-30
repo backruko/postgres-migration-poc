@@ -17,6 +17,7 @@ from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.domain_ope.models import EventSource, OpeOrder, OpeOrderEvent, OrderEventType, OrderStatus
 from src.domain_plan import services as plan_services
+from src.domain_plan import slot_events
 from src.domain_plan.models import TemplateType
 from src.domain_plan.schemas import PlanOneOffCreate, RRuleTemplateCreate
 from src.domain_staff import services as staff_services
@@ -42,8 +43,12 @@ def db():
 
 
 @pytest.fixture
-def plan(db):
-    """顧客・業務・毎日のテンプレートと、その生成済みインスタンス"""
+def plan(db, monkeypatch):
+    """
+    顧客・業務・毎日のテンプレートと、その生成済みインスタンス。
+    ここではテーブルの制約だけを確かめるため、plan → オーダーの自動追従（4.3）を止めてオーダーを直接作る。
+    """
+    monkeypatch.setattr(slot_events, "_listeners", [])
     # test_plan.py ("T") / test_ops.py ("D") / test_biz.py ("B") の顧客とコードが衝突しないよう、別の先頭文字を使う
     code = "O" + uuid.uuid4().hex[:3].upper()
     client_repo.create(db, obj_in=ClientCreate(code=code, name="ope test client"))
@@ -96,6 +101,12 @@ def test_one_order_per_rule_date_slot(db, plan):
 
     # 同じテンプレート・同じルール上の日付のオーダーは2件作れない（インスタンスが置き換わっても枠は同じ）
     assert_rejected(db, order_for(plan, first, current_instance_id=second.id), "uq_ope_order_date_slot")
+
+    # 取消されたオーダーは一意の対象外: 同じ枠が戻ったら新しいオーダーを作れる（取消済みは履歴として残る）
+    third = plan["instances"][15]
+    db.add(order_for(plan, third, status=OrderStatus.CANCELED))
+    db.add(order_for(plan, third))
+    db.commit()
 
 
 def test_sheet_slots_are_keyed_by_the_sheet_date_row(db, plan):

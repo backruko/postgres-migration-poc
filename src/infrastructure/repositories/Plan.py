@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, aliased
 from src.core.error_codes import ErrorCode
 from src.domain_biz.models import BizMaster
 from src.core.exceptions import BadRequestError
+from src.domain_plan import slot_events
 from src.domain_plan.engine import Occurrence
 from src.domain_plan.models import (
     BusinessCalendar,
@@ -335,6 +336,7 @@ class PlanInstanceRepository(CRUDBase[PlanInstance, BaseModel, BaseModel]):
         )
         db.add(instance)
         db.flush()
+        slot_events.record_created(db, [instance])
         return instance
 
     def add_one_off(
@@ -359,6 +361,7 @@ class PlanInstanceRepository(CRUDBase[PlanInstance, BaseModel, BaseModel]):
         )
         db.add(instance)
         db.flush()
+        slot_events.record_created(db, [instance])
         return instance
 
     def get_live_by_template(self, db: Session, *, template_id: int) -> list[PlanInstance]:
@@ -379,6 +382,7 @@ class PlanInstanceRepository(CRUDBase[PlanInstance, BaseModel, BaseModel]):
         ]
         db.add_all(instances)
         db.flush()
+        slot_events.record_created(db, instances)
         return instances
 
     def get_with_void_status(
@@ -405,6 +409,7 @@ class PlanInstanceVoidRepository:
     ) -> None:
         db.add_all(PlanInstanceVoid(instance_id=i, reason=reason, note=note) for i in instance_ids)
         db.flush()
+        slot_events.record_voided(db, list(instance_ids), reason)
 
 
 # ==========================================

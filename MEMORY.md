@@ -9,16 +9,18 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   **Current work: `feature/ope-orders`** (from `main`), Phase 4. The user pushes; I never do.
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
   next-occurrence guarantee) and 3 (staff: backend + screen) are done. Phase 4 (ope orders): step 4.1 (release
-  settings on businesses) committed; step 4.2 (ope tables) built 2026-10-30, awaiting review. Next: 4.3, the
-  slot-change listener** (plan in §2 "Phase 4 step plan").
-- **DB:** latest Alembic head is `9e1bcef6cbc7` (ope orders and order events). Migrations: `ceee1634d6a7` (squashed
-  init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff)
-  → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables). The user's dev DB is at `f9bbe9648f15`
-  (applied by 2026-10-30; staff id 1, login `system`, system_admin); `9e1bcef6cbc7` handed over for them to apply.
-  `plan_check` is at `9e1bcef6cbc7` and has staff 1 `check-admin` (system_admin), 2 `check-op` (suspended) + harness users.
+  settings on businesses) and 4.2 (ope tables, `0552e9f`, pushed) committed; step 4.3 (slot-change listener +
+  order sync) built 2026-10-30, awaiting review. Next: 4.4, the order status API** (plan in §2 "Phase 4 step plan").
+- **DB:** latest Alembic head is `5eede5808433` (slot uniqueness ignores canceled). Migrations: `ceee1634d6a7`
+  (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
+  `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433`.
+  The user's dev DB was at `f9bbe9648f15` on 2026-10-30 (staff id 1, login `system`, system_admin); `9e1bcef6cbc7` and
+  `5eede5808433` handed over, then `python scripts/create_orders.py` once (go-live backfill).
+  `plan_check` is at `5eede5808433`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
+  (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py tests/test_ope.py` → 70 passed (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py tests/test_ope.py tests/test_order_sync.py` → 79 passed, ~50 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -178,8 +180,8 @@ Plan never imports ope.
 | # | Step | Migration | Status |
 |---|---|---|---|
 | 4.1 | Release settings on `biz_master` + biz API | `f9bbe9648f15` | **done** (`d65af44`) |
-| 4.2 | ope tables: `ope_order`, append-only `ope_order_event` (immutability trigger like plan's `plan_reject_mutation`). Models + migration + tests, **no behavior** | `9e1bcef6cbc7` | **built**, awaiting review |
-| 4.3 | **next** — Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
+| 4.2 | ope tables: `ope_order`, append-only `ope_order_event` (immutability trigger like plan's `plan_reject_mutation`). Models + migration + tests, **no behavior** | `9e1bcef6cbc7` | **done** (`0552e9f`) |
+| 4.3 | **built 2026-10-30, awaiting review** — Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
 | 4.4 | Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
 | 4.5 | Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry | — | |
 | 4.6 | SOP version resolution, pin / unpin (releaser/admin), freeze at release | maybe | |
@@ -204,7 +206,35 @@ ON_HOLD; PENDING / READY / IN_PROGRESS), `pinned_sop_version_id` / `frozen_sop_v
 EARLY_START_APPROVED, CONFLICT_RAISED, CONFLICT_RESOLVED), `from_status` / `to_status`, `source` (HUMAN | SYSTEM;
 CHECK: HUMAN ⇔ `actor_staff_id` set), `reason`, `detail` (JSONB), `occurred_at`. FK order_id RESTRICT (orders with
 events can't be deleted). Adding an event type later = `ALTER TYPE … ADD VALUE` migration.
-Tests: `tests/test_ope.py` (6, constraints only; client prefix `"O"`). The doc's data-model rows were updated (rev 33).
+Tests: `tests/test_ope.py` (6, constraints only — they switch the 4.3 listener off with
+`monkeypatch.setattr(slot_events, "_listeners", [])`; client prefix `"O"`). The doc's data-model rows were updated (rev 33).
+
+**4.3 as built — plan → order sync** (decisions 2026-10-30: a returning slot gets a **new** order, the canceled one
+stays as history → migration `5eede5808433` adds `status <> 'CANCELED'` to the three slot unique indexes; plan's
+manual endpoints **require X-Staff-Id**).
+- `src/domain_plan/slot_events.py` (plan side, knows nothing of ope): `SlotKey(template_id, kind date|sheet_event|
+  one_off, ref, occurrence_date[compare=False])`, `slot_key_of(db, instance)` (one-offs: walk to the root),
+  `live_instance_for_slot`, `record_created` / `record_voided` (called from the repo chokepoints `add_many`,
+  `add_override`, `add_one_off`, `void_many`), `mark_person_change(db, actor_staff_id, note)` (called by the 5 manual
+  services), `register_slot_listener`. A global `Session` `before_commit` hook groups the recorded slots and calls the
+  listeners **in the same transaction**; `after_rollback` discards them. A listener exception aborts the commit.
+- Plan manual services (`override_instance`, `cancel_instance`, `revert_instance`, `add_one_off_instance`,
+  `restore_cancelled_instance`) take `actor_staff_id: int | None = None`; their endpoints have `@require_active()` +
+  `current_staff` (→ the calendar's 変更 / 取消 / 臨時 / 元に戻す buttons get 401 until an acting staff is picked in
+  the nav). Service calls without an actor (scripts, old tests) are recorded as SYSTEM events with
+  `detail.cause = "manual plan change"`.
+- `src/coordination/order_sync.py`: `register()` (called in `main.py`, `tests/conftest.py`, `scripts/extend_plans.py`,
+  `scripts/create_orders.py` — **any new script that changes plan must call it too**), `apply_slot_changes` = the
+  doc's propagation table: no order + live future instance → CREATED pending; moved → pending / ready / on_hold
+  follow (RESCHEDULED, detail before / after), in_progress: person → `DuplicatedRecordError` code
+  `ORDER_IN_PROGRESS` (409, rolls back the plan change), system → CONFLICT_RAISED + `conflict_reason`; removed →
+  person: cancel (in_progress refused), system: pending / ready canceled with the plan void reason as `reason`,
+  on_hold / in_progress conflict; finished untouched. No orders for past instances. `create_missing_orders(db)` =
+  go-live backfill (`scripts/create_orders.py`, idempotent).
+- Repo `src/infrastructure/repositories/Ope.py` (`ope_order_repo.get_active_for_slot` with `FOR UPDATE`,
+  `add_event`, `get_events`).
+- "Ready order whose step conditions change gets a flag" (doc table) waits for Phase 5 (steps).
+- Tests: `tests/test_order_sync.py` (9; client prefix `"S"`). Doc rev 34 records both decisions.
 5. Steps: conditions, maker-checker, `is_blocking`.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
