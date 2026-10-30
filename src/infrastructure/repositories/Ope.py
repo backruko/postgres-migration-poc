@@ -37,6 +37,14 @@ class OpeOrderRepository:
             )
         return db.scalars(stmt.with_for_update()).first()
 
+    def get_locked(self, db: Session, *, id: int) -> OpeOrder | None:
+        """状態を変えるときは行ロックしてから読む（同時に操作されても状態の遷移が食い違わないよう）"""
+        return db.scalars(select(OpeOrder).where(OpeOrder.id == id).with_for_update()).first()
+
+    def has_event(self, db: Session, *, order_id: int, event_type: OrderEventType) -> bool:
+        stmt = select(OpeOrderEvent.id).where(OpeOrderEvent.order_id == order_id, OpeOrderEvent.event_type == event_type)
+        return db.scalars(stmt.limit(1)).first() is not None
+
     def get_events(self, db: Session, *, order_id: int) -> list[OpeOrderEvent]:
         stmt = select(OpeOrderEvent).where(OpeOrderEvent.order_id == order_id).order_by(OpeOrderEvent.id)
         return list(db.scalars(stmt).all())

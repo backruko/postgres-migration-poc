@@ -9,8 +9,10 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   **Current work: `feature/ope-orders`** (from `main`), Phase 4. The user pushes; I never do.
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
   next-occurrence guarantee) and 3 (staff: backend + screen) are done. Phase 4 (ope orders): step 4.1 (release
-  settings on businesses) and 4.2 (ope tables, `0552e9f`, pushed) committed; step 4.3 (slot-change listener +
-  order sync) built 2026-10-30, awaiting review. Next: 4.4, the order status API** (plan in §2 "Phase 4 step plan").
+  settings on businesses), 4.2 (ope tables, `0552e9f`, pushed) and 4.3 (order sync, `7d94be7`, not pushed)
+  committed; step 4.4 (order status API) built 2026-10-30, awaiting review. Next: 4.5, the automatic release job**
+  (plan in §2 "Phase 4 step plan"). The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders,
+  2026-10-30); orders have no screen until 4.7 (the user knows and chose to keep the original step order).
 - **DB:** latest Alembic head is `5eede5808433` (slot uniqueness ignores canceled). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
   `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433`.
@@ -20,7 +22,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py tests/test_ope.py tests/test_order_sync.py` → 79 passed, ~50 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py tests/test_biz.py tests/test_ope.py tests/test_order_sync.py tests/test_order_actions.py` → 86 passed, ~60 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -181,8 +183,8 @@ Plan never imports ope.
 |---|---|---|---|
 | 4.1 | Release settings on `biz_master` + biz API | `f9bbe9648f15` | **done** (`d65af44`) |
 | 4.2 | ope tables: `ope_order`, append-only `ope_order_event` (immutability trigger like plan's `plan_reject_mutation`). Models + migration + tests, **no behavior** | `9e1bcef6cbc7` | **done** (`0552e9f`) |
-| 4.3 | **built 2026-10-30, awaiting review** — Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
-| 4.4 | Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
+| 4.3 | **done** (`7d94be7`) — Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
+| 4.4 | **built 2026-10-30, awaiting review** — Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
 | 4.5 | Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry | — | |
 | 4.6 | SOP version resolution, pin / unpin (releaser/admin), freeze at release | maybe | |
 | 4.7 | Frontend: order status on the dashboard + actions | — | |
@@ -235,6 +237,30 @@ manual endpoints **require X-Staff-Id**).
   `add_event`, `get_events`).
 - "Ready order whose step conditions change gets a flag" (doc table) waits for Phase 5 (steps).
 - Tests: `tests/test_order_sync.py` (9; client prefix `"S"`). Doc rev 34 records both decisions.
+
+**4.4 as built — order status API** (`src/domain_ope/{schemas,services,router}.py`, prefix `/ope`; no migration).
+User decisions 2026-10-30: **cancel = releaser / admin** (reason required); **hold / resume = operator, releaser,
+admin** (reason required to hold); start + finish = operator; release + resolve conflict = releaser / admin;
+approve early start = **releaser only**; a releaser / admin **may release an AUTOMATIC business's order by hand**;
+**a conflict flag blocks release and start** until resolved.
+- `GET /ope/orders/{id}` (active staff) → `OrderDetailResponse` (order + `early_start_approved` + events oldest first).
+- `POST /ope/orders/{id}/release | approve-early-start | start | hold | resume | finish | cancel | resolve-conflict`;
+  every action locks the order (`ope_order_repo.get_locked`, FOR UPDATE), checks the status, appends one event
+  (HUMAN, actor) and returns the detail. Wrong status → 400 (message lists allowed statuses).
+- Start: scheduled day = `scheduled_start` in JST vs `_local_today()` (JST); before it only if an
+  EARLY_START_APPROVED event exists (start event then has `detail.early_start = true`). Approving twice → 409;
+  approving on/after the day → 400.
+- Hold stores `status_before_hold`; resume returns to it. Finish = interim (Phase 5 replaces it for orders with steps).
+- **Cancel also cancels the plan occurrence**: the order is marked canceled first, then
+  `plan_services.cancel_instance(..., actor_staff_id)` voids the live instance (MANUAL, reason as note), so the
+  listener finds no active order and creates nothing; the calendar drops it. Cancel works from in_progress too
+  (unlike a plan-side cancel, which the listener refuses for in-progress orders).
+- Resolve conflict: `accept_plan` (adopt the slot's live instance times; if the slot is gone → cancel), `keep` (clear
+  the flag only), `cancel` (reason required; also cancels the plan occurrence if still live). One CONFLICT_RESOLVED
+  event (with from / to status when it cancels).
+- Force-start is **not** built (it belongs to dependencies, Phase 6). SOP freeze at release is 4.6.
+- Tests: `tests/test_order_actions.py` (7; client prefix `"A"`; `monkeypatch.setattr(ope, "_now", …)` to pick
+  "today"). HTTP-checked on `plan_check` with staff 4 (operator) and 5 (releaser). Doc rev 38 records the decisions.
 5. Steps: conditions, maker-checker, `is_blocking`.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).

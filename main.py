@@ -25,6 +25,7 @@ from src.domain_biz.router import router as biz_router
 from src.domain_plan.router import router as plan_router
 from src.coordination.router import router as ops_router
 from src.domain_staff.router import router as staff_router
+from src.domain_ope.router import router as ope_router
 from src.coordination import order_sync
 
 # plan の発生枠の変更をオーダーに反映する受け手を登録（同じトランザクションで追従する）
@@ -69,6 +70,7 @@ app.include_router(biz_router)
 app.include_router(plan_router)
 app.include_router(ops_router)
 app.include_router(staff_router)
+app.include_router(ope_router)
 
 @app.get("/")
 def read_root():
