@@ -85,10 +85,11 @@ def test_releases_at_the_business_time_on_the_scheduled_day(db, monkeypatch):
     assert (event.event_type, event.from_status, event.to_status, event.source, event.actor_staff_id) == (
         OrderEventType.STATUS_CHANGED, OrderStatus.PENDING, OrderStatus.READY, EventSource.SYSTEM, None,
     )
-    # 承認済みの SOP バージョンが無い業務のため「バージョンなし」で固定される（4.6）
+    # 承認済みの SOP バージョンが無い業務のため「バージョンなし」で固定される（4.6）。ステップは0件（5.3）
     assert event.detail == {
         "cause": "automatic release", "release_at": datetime.combine(d, time(3, 0), tzinfo=JST).isoformat(),
         "sop_version": None, "sop_note": f"no SOP version effective on {d.isoformat()}",
+        "steps": {"created": [], "skipped": []},
     }
     assert db.get(OpeOrder, target.id).released_at is not None
 

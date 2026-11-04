@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.domain_ope.models import EventSource, OrderEventType, OrderStatus
+from src.domain_ope.models import EventSource, OrderEventType, OrderStatus, StepState
 
 
 # ==========================================
@@ -62,6 +62,17 @@ class OrderEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OrderStepResponse(BaseModel):
+    """オーダーのステップ（リリース前はプレビュー: id と state は null）"""
+    id: int | None = Field(description="null in a preview (pending order: steps are created at release)")
+    step_template_id: int
+    step_num: int = Field(description="the step template's number (gaps where a step's condition did not match)")
+    title: str
+    content: str | None
+    is_blocking: bool
+    state: StepState | None = Field(description="null in a preview")
+
+
 class OrderSopVersion(BaseModel):
     """オーダーが使う SOP バージョン（リリース後は固定したもの、リリース前は指定または予定日時に有効なもの）"""
     id: int
@@ -104,4 +115,9 @@ class AutoReleaseResult(BaseModel):
 
 
 class OrderDetailResponse(OrderResponse):
+    steps: list[OrderStepResponse] = Field(
+        default_factory=list,
+        description="released: the order's steps; not released: a live preview from the SOP version it would run",
+    )
+    steps_preview: bool = Field(default=False, description="true while the steps are only a preview (not released yet)")
     events: list[OrderEventResponse] = Field(description="the order's events, oldest first")

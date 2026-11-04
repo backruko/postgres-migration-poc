@@ -1162,6 +1162,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AlwaysCondition
+         * @description すべてのオーダーに含める（既定）
+         */
+        AlwaysCondition: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "always";
+        };
         /** BizMasterCreate */
         BizMasterCreate: {
             /**
@@ -1898,6 +1909,17 @@ export interface components {
              */
             dates?: string[];
         };
+        /**
+         * FirstInWeekCondition
+         * @description そのテンプレートの、その ISO 週で最初の予定のオーダーだけに含める（例: 週次のまとめ）
+         */
+        FirstInWeekCondition: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "first_in_week";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1958,6 +1980,22 @@ export interface components {
             business_calendar_id?: number | null;
             /** @default as_is */
             holiday_policy: components["schemas"]["HolidayPolicy"];
+        };
+        /**
+         * MonthInCondition
+         * @description 予定日の月が months に含まれるオーダーだけに含める（例: 年次の照合は4月のみ）
+         */
+        MonthInCondition: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "month_in";
+            /**
+             * Months
+             * @description months 1-12
+             */
+            months: number[];
         };
         /**
          * OrderCommentIn
@@ -2029,6 +2067,17 @@ export interface components {
              */
             updated_at: string;
             /**
+             * Steps
+             * @description released: the order's steps; not released: a live preview from the SOP version it would run
+             */
+            steps?: components["schemas"]["OrderStepResponse"][];
+            /**
+             * Steps Preview
+             * @description true while the steps are only a preview (not released yet)
+             * @default false
+             */
+            steps_preview: boolean;
+            /**
              * Events
              * @description the order's events, oldest first
              */
@@ -2091,6 +2140,32 @@ export interface components {
          * @enum {string}
          */
         OrderStatus: "pending" | "ready" | "in_progress" | "on_hold" | "finished" | "canceled";
+        /**
+         * OrderStepResponse
+         * @description オーダーのステップ（リリース前はプレビュー: id と state は null）
+         */
+        OrderStepResponse: {
+            /**
+             * Id
+             * @description null in a preview (pending order: steps are created at release)
+             */
+            id: number | null;
+            /** Step Template Id */
+            step_template_id: number;
+            /**
+             * Step Num
+             * @description the step template's number (gaps where a step's condition did not match)
+             */
+            step_num: number;
+            /** Title */
+            title: string;
+            /** Content */
+            content: string | null;
+            /** Is Blocking */
+            is_blocking: boolean;
+            /** @description null in a preview */
+            state: components["schemas"]["StepState"] | null;
+        };
         /** PinSopVersionIn */
         PinSopVersionIn: {
             /**
@@ -2712,6 +2787,17 @@ export interface components {
              * @description 具体的な手順・マニュアル内容
              */
             content?: string | null;
+            /**
+             * Condition
+             * @description when the step is included in an order
+             */
+            condition?: components["schemas"]["AlwaysCondition"] | components["schemas"]["MonthInCondition"] | components["schemas"]["FirstInWeekCondition"];
+            /**
+             * Is Blocking
+             * @description the next step opens only after this one is approved (otherwise on submit)
+             * @default false
+             */
+            is_blocking: boolean;
         };
         /** SOPStepTemplateResponse */
         SOPStepTemplateResponse: {
@@ -2725,6 +2811,12 @@ export interface components {
             title: string;
             /** Content */
             content: string | null;
+            /** Condition */
+            condition: {
+                [key: string]: unknown;
+            };
+            /** Is Blocking */
+            is_blocking: boolean;
         };
         /** SOPVersionCreate */
         SOPVersionCreate: {
@@ -2832,6 +2924,12 @@ export interface components {
             /** Email */
             email?: string | null;
         };
+        /**
+         * StepState
+         * @description ステップの状態。approved が最終状態（差し戻しは submitted → todo）
+         * @enum {string}
+         */
+        StepState: "locked" | "todo" | "submitted" | "approved";
         /**
          * TemplateType
          * @enum {string}

@@ -122,7 +122,7 @@ def test_release_freezes_the_version(db, releaser, monkeypatch):
 
     r = ope.release_order(db, target.id, releaser)
     assert r.frozen_sop_version_id == v2.id and r.sop_version is not None and r.sop_version.source == "frozen"
-    assert r.events[-1].detail == {"sop_version": {"id": v2.id, "version_tag": "v2.0.0", "source": "effective"}}
+    assert r.events[-1].detail == {"sop_version": {"id": v2.id, "version_tag": "v2.0.0", "source": "effective"}, "steps": {"created": [], "skipped": []}}
     with pytest.raises(BadRequestError):
         ope.pin_sop_version(db, target.id, releaser, v1.id)  # リリース後は指定できない
 
@@ -137,7 +137,7 @@ def test_release_freezes_the_version(db, releaser, monkeypatch):
     ope.pin_sop_version(db, pinned_order.id, releaser, v1.id)
     r = ope.release_order(db, pinned_order.id, releaser)
     assert r.frozen_sop_version_id == v1.id
-    assert r.events[-1].detail == {"sop_version": {"id": v1.id, "version_tag": "v1.0.0", "source": "pinned"}}
+    assert r.events[-1].detail == {"sop_version": {"id": v1.id, "version_tag": "v1.0.0", "source": "pinned"}, "steps": {"created": [], "skipped": []}}
 
 
 def test_release_without_any_approved_version(db, releaser):
@@ -147,7 +147,9 @@ def test_release_without_any_approved_version(db, releaser):
 
     r = ope.release_order(db, target.id, releaser)
     assert r.status == OrderStatus.READY and r.frozen_sop_version_id is None and r.sop_version is None
-    assert r.events[-1].detail == {"sop_version": None, "sop_note": f"no SOP version effective on {day_of(target).isoformat()}"}
+    assert r.events[-1].detail == {
+        "sop_version": None, "sop_note": f"no SOP version effective on {day_of(target).isoformat()}", "steps": {"created": [], "skipped": []},
+    }
 
 
 def test_pin_endpoints_are_guarded():

@@ -518,6 +518,19 @@ class PlanOccurrenceCacheRepository:
         )
         return {row[0]: row[1] for row in db.execute(stmt)}
 
+    def starts_for_template(self, db: Session, *, template_id: int, start: datetime, end: datetime) -> list[tuple[datetime, int]]:
+        """テンプレートの、範囲内に開始する有効な予定の (開始日時, インスタンス ID)（開始順）"""
+        stmt = (
+            select(PlanOccurrenceCache.starts_at, PlanOccurrenceCache.instance_id)
+            .where(
+                PlanOccurrenceCache.template_id == template_id,
+                PlanOccurrenceCache.starts_at >= start,
+                PlanOccurrenceCache.starts_at < end,
+            )
+            .order_by(PlanOccurrenceCache.starts_at, PlanOccurrenceCache.instance_id)
+        )
+        return [(row[0], row[1]) for row in db.execute(stmt)]
+
     def query_starting_in(
         self, db: Session, *, start: datetime, end: datetime
     ) -> list[tuple[PlanOccurrenceCache, PlanInstance, BizMaster]]:

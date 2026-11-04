@@ -59,6 +59,7 @@ class StepEventType(str, enum.Enum):
     """ステップの記録の種類（追記のみ）"""
     CREATED = "created"              # ステップの作成（リリース時に、固定した SOP バージョンから）
     STATE_CHANGED = "state_changed"  # 状態の変更（開く・提出・承認・差し戻し）
+    RETIRED = "retired"              # 作り直しで外れた（開始前のオーダーの矛盾を、plan に合わせて解決したとき）
 
 
 class EventSource(str, enum.Enum):
@@ -205,6 +206,8 @@ class OpeOrderEvent(Base):
 # OpeStep（オーダーのステップ）
 # リリース時に、固定した SOP バージョンのステップテンプレートのうち条件に合うものだけを作る（合わないものは作らない）。
 # タイトル・内容・is_blocking は作成時の写し（SOP バージョン側が後で変わっても、このオーダーの手順は変わらない）。
+# 開始前のオーダーの予定が動いて条件の結果が変わり、矛盾を「plan に合わせる」で解決したときだけ作り直す:
+# 古い行は retired_at を付けて残し（記録があるので消さない）、新しい行を作る。一意性は外れていない行だけで見る。
 # ==========================================
 class OpeStep(Base):
     __tablename__ = "ope_step"
@@ -230,15 +233,21 @@ class OpeStep(Base):
         Enum(StepState, name="ope_step_state_enum"), nullable=False, default=StepState.LOCKED,
         server_default=text("'LOCKED'"),
     )
+    retired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="作り直しで外れた日時（外れていないステップは NULL）"
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
         CheckConstraint("step_num > 0", name="ck_ope_step_num_positive"),
-        # 1つのオーダーに、同じ番号・同じテンプレートのステップは1件
-        Index("uq_ope_step_order_num", "order_id", "step_num", unique=True),
-        Index("uq_ope_step_order_template", "order_id", "step_template_id", unique=True),
+        # 1つのオーダーに、同じ番号・同じテンプレートのステップは1件（作り直しで外れたものは除く）
+        Index("uq_ope_step_order_num", "order_id", "step_num", unique=True, postgresql_where=text("retired_at IS NULL")),
+        Index(
+            "uq_ope_step_order_template", "order_id", "step_template_id",
+            unique=True, postgresql_where=text("retired_at IS NULL"),
+        ),
     )
 
 

@@ -7,7 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.domain_biz.models import BizMaster, ReleaseMode
-from src.domain_ope.models import EventSource, OpeOrder, OpeOrderEvent, OrderEventType, OrderStatus
+from src.domain_ope.models import (
+    EventSource, OpeOrder, OpeOrderEvent, OpeStep, OpeStepEvent, OrderEventType, OrderStatus, StepEventType, StepState,
+)
 
 
 # ==========================================
@@ -70,6 +72,24 @@ class OpeOrderRepository:
         )
         return [(row[0], row[1]) for row in db.execute(stmt)]
 
+    def get_released_unstarted(self, db: Session, *, template_id: int) -> list[OpeOrder]:
+        """
+        テンプレートの、リリース済みで未開始のオーダー（ready、または ready から保留したもの）を行ロックして返します。
+        ステップの条件の再確認用（予定が動いて、固定したステップと条件の結果が食い違っていないか）。
+        """
+        stmt = (
+            select(OpeOrder)
+            .where(
+                OpeOrder.template_id == template_id,
+                OpeOrder.released_at.is_not(None),
+                (OpeOrder.status == OrderStatus.READY)
+                | ((OpeOrder.status == OrderStatus.ON_HOLD) & (OpeOrder.status_before_hold == OrderStatus.READY)),
+            )
+            .order_by(OpeOrder.scheduled_start, OpeOrder.id)
+            .with_for_update()
+        )
+        return list(db.scalars(stmt).all())
+
     def has_event(self, db: Session, *, order_id: int, event_type: OrderEventType) -> bool:
         stmt = select(OpeOrderEvent.id).where(OpeOrderEvent.order_id == order_id, OpeOrderEvent.event_type == event_type)
         return db.scalars(stmt.limit(1)).first() is not None
@@ -103,6 +123,42 @@ class OpeOrderRepository:
 
 
 # ==========================================
+#  OpeStep Repository
+# ==========================================
+class OpeStepRepository:
+
+    def get_active(self, db: Session, *, order_id: int) -> list[OpeStep]:
+        """オーダーのステップ（作り直しで外れたものを除く。番号順）"""
+        stmt = (
+            select(OpeStep)
+            .where(OpeStep.order_id == order_id, OpeStep.retired_at.is_(None))
+            .order_by(OpeStep.step_num)
+        )
+        return list(db.scalars(stmt).all())
+
+    def add_event(
+        self,
+        db: Session,
+        *,
+        step: OpeStep,
+        event_type: StepEventType,
+        source: EventSource,
+        actor_staff_id: int | None,
+        from_state: StepState | None = None,
+        to_state: StepState | None = None,
+        reason: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> OpeStepEvent:
+        event = OpeStepEvent(
+            step_id=step.id, event_type=event_type, source=source, actor_staff_id=actor_staff_id,
+            from_state=from_state, to_state=to_state, reason=reason, detail=detail,
+        )
+        db.add(event)
+        return event
+
+
+# ==========================================
 #  インスタンス化とエクスポート
 # ==========================================
 ope_order_repo = OpeOrderRepository()
+ope_step_repo = OpeStepRepository()

@@ -9,6 +9,7 @@
 - start は予定日（日本時間）以降のみ。それより前はリリース担当の承認（approve_early_start）が必要。
 - 矛盾フラグのあるオーダーは、解決（resolve_conflict）するまでリリース・開始できない。
 - 誰が操作できるかはルーターの @require_roles で決める（ここでは判定しない）。
+- ステップ（5.3）: リリース時に固定したバージョンから作る（domain_ope/steps.py）。リリース前は詳細でプレビューを返す。
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -19,13 +20,15 @@ from sqlalchemy.orm import Session
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
 from src.domain_biz.models import BizMaster, SOPStatus, SOPVersion
 from src.domain_ope.models import EventSource, OpeOrder, OrderEventType, OrderStatus
+from src.domain_ope import steps
 from src.domain_ope.schemas import (
     AutoReleaseResult, ConflictAction, ConflictResolveIn, OrderDetailResponse, OrderEventResponse, OrderSopVersion,
+    OrderStepResponse,
 )
 from src.domain_plan import services as plan_services
 from src.domain_plan.schemas import PlanInstanceCancel
 from src.domain_plan.slot_events import SlotKey, live_instance_for_slot
-from src.infrastructure.repositories import ope_order_repo, plan_instance_repo, sop_version_repo
+from src.infrastructure.repositories import ope_order_repo, ope_step_repo, plan_instance_repo, sop_version_repo
 
 # 予定日の判定に使うタイムゾーン（シートの日付・休日と同じく日本の日付）
 LOCAL_TIMEZONE = ZoneInfo("Asia/Tokyo")
@@ -71,13 +74,38 @@ def _order_sop_version(db: Session, order: OpeOrder) -> OrderSopVersion | None:
                            source="pinned" if order.pinned_sop_version_id else "effective")
 
 
+def _order_steps(db: Session, order: OpeOrder) -> tuple[list[OrderStepResponse], bool]:
+    """リリース後は作ったステップ、リリース前は使う予定のバージョンからのプレビュー（取消済みの未リリースは空）"""
+    if order.released_at is not None:
+        return [
+            OrderStepResponse(
+                id=s.id, step_template_id=s.step_template_id, step_num=s.step_num, title=s.title, content=s.content,
+                is_blocking=s.is_blocking, state=s.state,
+            )
+            for s in ope_step_repo.get_active(db, order_id=order.id)
+        ], False
+    if order.status == OrderStatus.CANCELED:
+        return [], False
+    plan = steps.plan_steps(db, order, resolve_sop_version(db, order))
+    return [
+        OrderStepResponse(
+            id=None, step_template_id=t.id, step_num=t.step_num, title=t.title, content=t.content,
+            is_blocking=t.is_blocking, state=None,
+        )
+        for t in plan.included
+    ], True
+
+
 def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
     events = ope_order_repo.get_events(db, order_id=order.id)
+    order_steps, preview = _order_steps(db, order)
     return OrderDetailResponse.model_validate(
         {
             **{c.key: getattr(order, c.key) for c in OpeOrder.__table__.columns},
             "early_start_approved": any(e.event_type == OrderEventType.EARLY_START_APPROVED for e in events),
             "sop_version": _order_sop_version(db, order),
+            "steps": order_steps,
+            "steps_preview": preview,
             "events": [OrderEventResponse.model_validate(e) for e in events],
         }
     )
@@ -137,7 +165,8 @@ def _release(
 ) -> None:
     """
     pending → ready。手動・自動のリリースで共通。リリース時点で使う SOP バージョンを固定する（以後は変わらない）。
-    承認済みのバージョンが無い業務でもリリースはできる（2026-10-30 の決定。記録に「バージョンなし」と残す）。
+    承認済みのバージョンが無い業務でもリリースはできる（2026-10-30 の決定。記録に「バージョンなし」と残す。ステップは0件）。
+    同時に、条件に合うステップを作る（すべて locked。作ったもの・条件で外れたものを記録の detail.steps に残す）。
     """
     version = resolve_sop_version(db, order)
     order.frozen_sop_version_id = version.id if version else None
@@ -148,6 +177,7 @@ def _release(
                          "source": "pinned" if order.pinned_sop_version_id else "effective"}}
         if version else {"sop_version": None, "sop_note": f"no SOP version effective on {_scheduled_day(order).isoformat()}"}
     )
+    sop["steps"] = steps.create_steps(db, order, version, source, actor_staff_id)
     ope_order_repo.add_event(
         db, order=order, event_type=OrderEventType.STATUS_CHANGED, from_status=OrderStatus.PENDING,
         to_status=OrderStatus.READY, source=source, actor_staff_id=actor_staff_id, reason=reason,
@@ -332,7 +362,8 @@ def _slot_of(order: OpeOrder) -> SlotKey:
 def resolve_conflict(db: Session, order_id: int, actor_staff_id: int, resolve_in: ConflictResolveIn) -> OrderDetailResponse:
     """
     矛盾を解決します（リリース担当・業務管理者）。
-    - accept_plan: plan の新しい日時を採用（plan の予定が無くなっていた場合はオーダーを取消）
+    - accept_plan: plan の新しい日時を採用（plan の予定が無くなっていた場合はオーダーを取消）。
+      リリース済みで未開始なら、今の予定日の条件でステップを作り直す（結果が変わっていた場合のみ。detail.steps）
     - keep: オーダーをそのまま続ける（フラグだけ外す）
     - cancel: オーダーを取り消す（plan の予定がまだあれば、それも取り消す。理由必須）
     """
@@ -358,6 +389,12 @@ def resolve_conflict(db: Session, order_id: int, actor_staff_id: int, resolve_in
             order.occurrence_date = live.occurrence_date
             order.scheduled_start = live.scheduled_start
             order.scheduled_end = live.scheduled_end
+
+        if not cancel and steps.is_unstarted_release(order):
+            db.flush()
+            change = steps.step_set_change(db, order)
+            if change is not None:
+                detail["steps"] = steps.rebuild_steps(db, order, change, EventSource.HUMAN, actor_staff_id)
 
     from_status = order.status
     if cancel:
