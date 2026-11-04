@@ -1405,6 +1405,430 @@
         }
       }
     },
+    "/biz/clients/{client_code}/dependencies": {
+      "get": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "List Client Dependencies Endpoint",
+        "description": "顧客の業務どうしの依存関係すべて",
+        "operationId": "list_client_dependencies_endpoint_biz_clients__client_code__dependencies_get",
+        "parameters": [
+          {
+            "name": "client_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Client Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BizDependencyResponse"
+                  },
+                  "title": "Response List Client Dependencies Endpoint Biz Clients  Client Code  Dependencies Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/biz/{biz_id}/dependencies": {
+      "get": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "List Dependencies Endpoint",
+        "description": "この業務が上流または下流になっている依存関係",
+        "operationId": "list_dependencies_endpoint_biz__biz_id__dependencies_get",
+        "parameters": [
+          {
+            "name": "biz_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Biz Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BizDependencyResponse"
+                  },
+                  "title": "Response List Dependencies Endpoint Biz  Biz Id  Dependencies Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "Create Dependency Endpoint",
+        "description": "この業務（下流）が上流の業務を待つ定義を作ります（同じ顧客の業務のみ。循環・二重登録は不可）。",
+        "operationId": "create_dependency_endpoint_biz__biz_id__dependencies_post",
+        "parameters": [
+          {
+            "name": "biz_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Biz Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BizDependencyCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BizDependencyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/biz/dependencies/{dependency_id}": {
+      "delete": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "Delete Dependency Endpoint",
+        "description": "依存関係の定義を削除します。",
+        "operationId": "delete_dependency_endpoint_biz_dependencies__dependency_id__delete",
+        "parameters": [
+          {
+            "name": "dependency_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Dependency Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BizDependencyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/plans/calendars": {
       "get": {
         "tags": [
@@ -6706,13 +7130,144 @@
         }
       }
     },
+    "/ope/orders/{order_id}/approve-dependency-override": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Approve Dependency Override Endpoint",
+        "description": "満たされていない hard の依存関係のまま開始することを承認します（理由必須。開始は作業者が行います）。",
+        "operationId": "approve_dependency_override_endpoint_ope_orders__order_id__approve_dependency_override_post",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderReasonIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/ope/orders/{order_id}/start": {
       "post": {
         "tags": [
           "ope"
         ],
         "summary": "Start Order Endpoint",
-        "description": "ready → in_progress。予定日（日本時間）以降のみ。それより前はリリース担当の承認が必要です。矛盾があると開始できません。",
+        "description": "ready → in_progress。予定日（日本時間）以降のみ（それより前はリリース担当の承認が必要）。矛盾があると開始できません。\nhard の依存関係は上流のオーダーの完了が必要です（満たされていなければ、リリース担当・業務管理者の承認が必要）。",
         "operationId": "start_order_endpoint_ope_orders__order_id__start_post",
         "parameters": [
           {
@@ -7952,6 +8507,63 @@
         "title": "AlwaysCondition",
         "description": "すべてのオーダーに含める（既定）"
       },
+      "BizDependencyCreate": {
+        "properties": {
+          "upstream_biz_id": {
+            "type": "integer",
+            "title": "Upstream Biz Id"
+          },
+          "match_rule": {
+            "$ref": "#/components/schemas/DependencyMatchRule"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DependencyKind",
+            "default": "hard"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upstream_biz_id",
+          "match_rule"
+        ],
+        "title": "BizDependencyCreate",
+        "description": "この業務（下流）が、upstream_biz_id の業務（上流）を待つ"
+      },
+      "BizDependencyResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "upstream": {
+            "$ref": "#/components/schemas/BizRef"
+          },
+          "downstream": {
+            "$ref": "#/components/schemas/BizRef"
+          },
+          "match_rule": {
+            "$ref": "#/components/schemas/DependencyMatchRule"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DependencyKind"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "upstream",
+          "downstream",
+          "match_rule",
+          "kind",
+          "created_at"
+        ],
+        "title": "BizDependencyResponse"
+      },
       "BizMasterCreate": {
         "properties": {
           "client_code": {
@@ -8181,6 +8793,29 @@
         },
         "type": "object",
         "title": "BizMasterUpdate"
+      },
+      "BizRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "business_code": {
+            "type": "string",
+            "title": "Business Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "business_code",
+          "name"
+        ],
+        "title": "BizRef"
       },
       "BusinessCalendarCreate": {
         "properties": {
@@ -9254,6 +9889,12 @@
             "title": "Steps Approved",
             "description": "steps approved so far",
             "default": 0
+          },
+          "blocked": {
+            "type": "boolean",
+            "title": "Blocked",
+            "description": "hard dependencies not met (and not overridden): start is refused",
+            "default": false
           }
         },
         "type": "object",
@@ -9334,6 +9975,46 @@
           "business"
         ],
         "title": "DayUnit"
+      },
+      "DependencyBiz": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "business_code": {
+            "type": "string",
+            "title": "Business Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "business_code",
+          "name"
+        ],
+        "title": "DependencyBiz"
+      },
+      "DependencyKind": {
+        "type": "string",
+        "enum": [
+          "hard",
+          "informational"
+        ],
+        "title": "DependencyKind"
+      },
+      "DependencyMatchRule": {
+        "type": "string",
+        "enum": [
+          "same_sheet_event",
+          "same_occurrence_date"
+        ],
+        "title": "DependencyMatchRule",
+        "description": "下流のオーダーが、どの上流のオーダーを待つか"
       },
       "ErrorCode": {
         "type": "string",
@@ -9688,6 +10369,118 @@
         "title": "OrderCommentIn",
         "description": "理由・メモが任意の操作（リリース・開始・再開・完了・早期開始の承認）"
       },
+      "OrderDependencyResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DependencyKind"
+          },
+          "match_rule": {
+            "$ref": "#/components/schemas/DependencyMatchRule"
+          },
+          "upstream_biz": {
+            "$ref": "#/components/schemas/DependencyBiz"
+          },
+          "upstream_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Order Id",
+            "description": "null: no upstream order found (not met)"
+          },
+          "upstream_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "upstream_scheduled_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Scheduled Start"
+          },
+          "met": {
+            "type": "boolean",
+            "title": "Met",
+            "description": "the upstream order has finished"
+          },
+          "overridden": {
+            "type": "boolean",
+            "title": "Overridden",
+            "description": "a releaser / admin approved starting without it"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "match_rule",
+          "upstream_biz",
+          "upstream_order_id",
+          "upstream_status",
+          "upstream_scheduled_start",
+          "met",
+          "overridden"
+        ],
+        "title": "OrderDependencyResponse",
+        "description": "このオーダーが待つ上流のオーダー（つながり1件）"
+      },
+      "OrderDependentResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DependencyKind"
+          },
+          "downstream_biz": {
+            "$ref": "#/components/schemas/DependencyBiz"
+          },
+          "downstream_order_id": {
+            "type": "integer",
+            "title": "Downstream Order Id"
+          },
+          "downstream_status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "downstream_scheduled_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Downstream Scheduled Start"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "downstream_biz",
+          "downstream_order_id",
+          "downstream_status",
+          "downstream_scheduled_start"
+        ],
+        "title": "OrderDependentResponse",
+        "description": "このオーダーを上流として待っている下流のオーダー（つながり1件）"
+      },
       "OrderDetailResponse": {
         "properties": {
           "id": {
@@ -9849,6 +10642,22 @@
             "title": "Steps Preview",
             "description": "true while the steps are only a preview (not released yet)"
           },
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/OrderDependencyResponse"
+            },
+            "type": "array",
+            "title": "Dependencies",
+            "description": "upstream orders this order waits for (active links)"
+          },
+          "dependents": {
+            "items": {
+              "$ref": "#/components/schemas/OrderDependentResponse"
+            },
+            "type": "array",
+            "title": "Dependents",
+            "description": "downstream orders waiting for this order (active links)"
+          },
           "events": {
             "items": {
               "$ref": "#/components/schemas/OrderEventResponse"
@@ -9881,6 +10690,8 @@
           "updated_at",
           "steps",
           "steps_preview",
+          "dependencies",
+          "dependents",
           "events"
         ],
         "title": "OrderDetailResponse"
@@ -9981,7 +10792,8 @@
           "unpinned",
           "early_start_approved",
           "conflict_raised",
-          "conflict_resolved"
+          "conflict_resolved",
+          "dependency_override_approved"
         ],
         "title": "OrderEventType",
         "description": "オーダーの記録の種類（追記のみ）"

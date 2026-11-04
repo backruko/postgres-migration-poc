@@ -7,7 +7,7 @@ from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
 from src.infrastructure.database import get_db
 from src.domain_ope.schemas import ConflictResolveIn, OrderCommentIn, OrderDetailResponse, OrderReasonIn, PinSopVersionIn
 from src.domain_ope.services import (
-    approve_early_start, approve_step, cancel_order, finish_order, get_order, hold_order, pin_sop_version, reject_step,
+    approve_dependency_override, approve_early_start, approve_step, cancel_order, finish_order, get_order, hold_order, pin_sop_version, reject_step,
     release_order, resolve_conflict, resume_order, start_order, submit_step, unpin_sop_version,
 )
 from src.domain_staff.auth import get_current_staff, require_active, require_roles
@@ -63,12 +63,19 @@ def approve_early_start_endpoint(
     """予定日より前の開始を承認します（承認後は予定日前でも開始できます）。"""
     return approve_early_start(db=db, order_id=order_id, actor_staff_id=current_staff.id, comment=(body or OrderCommentIn()).comment)
 
+@router.post("/orders/{order_id}/approve-dependency-override", response_model=OrderDetailResponse, responses=RESPONSES)
+@require_roles(PRIVILEGED)
+def approve_dependency_override_endpoint(order_id: int, body: OrderReasonIn, db: Session = Depends(get_db), current_staff: StaffUser = STAFF):
+    """満たされていない hard の依存関係のまま開始することを承認します（理由必須。開始は作業者が行います）。"""
+    return approve_dependency_override(db=db, order_id=order_id, actor_staff_id=current_staff.id, reason=body.reason)
+
 @router.post("/orders/{order_id}/start", response_model=OrderDetailResponse, responses=RESPONSES)
 @require_roles(OPERATOR)
 def start_order_endpoint(
     order_id: int, body: OrderCommentIn | None = None, db: Session = Depends(get_db), current_staff: StaffUser = STAFF,
 ):
-    """ready → in_progress。予定日（日本時間）以降のみ。それより前はリリース担当の承認が必要です。矛盾があると開始できません。"""
+    """ready → in_progress。予定日（日本時間）以降のみ（それより前はリリース担当の承認が必要）。矛盾があると開始できません。
+    hard の依存関係は上流のオーダーの完了が必要です（満たされていなければ、リリース担当・業務管理者の承認が必要）。"""
     return start_order(db=db, order_id=order_id, actor_staff_id=current_staff.id, comment=(body or OrderCommentIn()).comment)
 
 @router.post("/orders/{order_id}/hold", response_model=OrderDetailResponse, responses=RESPONSES)

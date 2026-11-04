@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { CalendarPage } from "../features/calendar/CalendarPage";
 import { DailyDashboardPage } from "../features/daily-dashboard/DailyDashboardPage";
+import { DependencySettingsPage } from "../features/dependency-settings/DependencySettingsPage";
 import { HolidaySettingsPage } from "../features/plan-settings/HolidaySettingsPage";
 import { PlanSettingsPage } from "../features/plan-settings/PlanSettingsPage";
 import { SheetSettingsPage } from "../features/plan-settings/SheetSettingsPage";
@@ -14,6 +15,7 @@ import { AppLayout } from "./AppLayout";
  * - /settings/templates   事前設定: 予定テンプレートの管理（一覧・作成・編集・削除）
  * - /settings/sheets      事前設定: 年間計画シートの参照と、ルールで日付を作るマーカー・日付の管理
  * - /settings/holidays    事前設定: 営業日カレンダーの休日の管理
+ * - /settings/dependencies 事前設定: 業務の依存関係（上流 → 下流）の管理（顧客ごと）
  * - /settings/staff       事前設定: 職員の管理（一覧・登録・編集・ロール・有効化／利用停止）
  */
 export function AppRoutes() {
@@ -25,6 +27,7 @@ export function AppRoutes() {
         <Route path="settings/templates" element={<PlanSettingsPage />} />
         <Route path="settings/sheets" element={<SheetSettingsPage />} />
         <Route path="settings/holidays" element={<HolidaySettingsPage />} />
+        <Route path="settings/dependencies" element={<DependencySettingsPage />} />
         <Route path="settings/staff" element={<StaffSettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

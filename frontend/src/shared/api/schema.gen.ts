@@ -239,6 +239,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/biz/clients/{client_code}/dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Client Dependencies Endpoint
+         * @description 顧客の業務どうしの依存関係すべて
+         */
+        get: operations["list_client_dependencies_endpoint_biz_clients__client_code__dependencies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/biz/{biz_id}/dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Dependencies Endpoint
+         * @description この業務が上流または下流になっている依存関係
+         */
+        get: operations["list_dependencies_endpoint_biz__biz_id__dependencies_get"];
+        put?: never;
+        /**
+         * Create Dependency Endpoint
+         * @description この業務（下流）が上流の業務を待つ定義を作ります（同じ顧客の業務のみ。循環・二重登録は不可）。
+         */
+        post: operations["create_dependency_endpoint_biz__biz_id__dependencies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/biz/dependencies/{dependency_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Dependency Endpoint
+         * @description 依存関係の定義を削除します。
+         */
+        delete: operations["delete_dependency_endpoint_biz_dependencies__dependency_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plans/calendars": {
         parameters: {
             query?: never;
@@ -1021,6 +1085,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ope/orders/{order_id}/approve-dependency-override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Dependency Override Endpoint
+         * @description 満たされていない hard の依存関係のまま開始することを承認します（理由必須。開始は作業者が行います）。
+         */
+        post: operations["approve_dependency_override_endpoint_ope_orders__order_id__approve_dependency_override_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ope/orders/{order_id}/start": {
         parameters: {
             query?: never;
@@ -1032,7 +1116,8 @@ export interface paths {
         put?: never;
         /**
          * Start Order Endpoint
-         * @description ready → in_progress。予定日（日本時間）以降のみ。それより前はリリース担当の承認が必要です。矛盾があると開始できません。
+         * @description ready → in_progress。予定日（日本時間）以降のみ（それより前はリリース担当の承認が必要）。矛盾があると開始できません。
+         *     hard の依存関係は上流のオーダーの完了が必要です（満たされていなければ、リリース担当・業務管理者の承認が必要）。
          */
         post: operations["start_order_endpoint_ope_orders__order_id__start_post"];
         delete?: never;
@@ -1233,6 +1318,31 @@ export interface components {
              */
             type: "always";
         };
+        /**
+         * BizDependencyCreate
+         * @description この業務（下流）が、upstream_biz_id の業務（上流）を待つ
+         */
+        BizDependencyCreate: {
+            /** Upstream Biz Id */
+            upstream_biz_id: number;
+            match_rule: components["schemas"]["DependencyMatchRule"];
+            /** @default hard */
+            kind: components["schemas"]["DependencyKind"];
+        };
+        /** BizDependencyResponse */
+        BizDependencyResponse: {
+            /** Id */
+            id: number;
+            upstream: components["schemas"]["BizRef"];
+            downstream: components["schemas"]["BizRef"];
+            match_rule: components["schemas"]["DependencyMatchRule"];
+            kind: components["schemas"]["DependencyKind"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** BizMasterCreate */
         BizMasterCreate: {
             /**
@@ -1331,6 +1441,15 @@ export interface components {
              * @description automatic release N days before the scheduled day
              */
             release_days_before?: number | null;
+        };
+        /** BizRef */
+        BizRef: {
+            /** Id */
+            id: number;
+            /** Business Code */
+            business_code: string;
+            /** Name */
+            name: string;
         };
         /** BusinessCalendarCreate */
         BusinessCalendarCreate: {
@@ -1860,6 +1979,12 @@ export interface components {
              * @default 0
              */
             steps_approved: number;
+            /**
+             * Blocked
+             * @description hard dependencies not met (and not overridden): start is refused
+             * @default false
+             */
+            blocked: boolean;
         };
         /**
          * DailyVoidedItem
@@ -1900,6 +2025,26 @@ export interface components {
          * @enum {string}
          */
         DayUnit: "calendar" | "business";
+        /** DependencyBiz */
+        DependencyBiz: {
+            /** Id */
+            id: number;
+            /** Business Code */
+            business_code: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * DependencyKind
+         * @enum {string}
+         */
+        DependencyKind: "hard" | "informational";
+        /**
+         * DependencyMatchRule
+         * @description 下流のオーダーが、どの上流のオーダーを待つか
+         * @enum {string}
+         */
+        DependencyMatchRule: "same_sheet_event" | "same_occurrence_date";
         /**
          * ErrorCode
          * @description フロントエンドとバックエンドで共有するエラーコードの定数群。
@@ -2077,6 +2222,53 @@ export interface components {
             /** Comment */
             comment?: string | null;
         };
+        /**
+         * OrderDependencyResponse
+         * @description このオーダーが待つ上流のオーダー（つながり1件）
+         */
+        OrderDependencyResponse: {
+            /** Id */
+            id: number;
+            kind: components["schemas"]["DependencyKind"];
+            match_rule: components["schemas"]["DependencyMatchRule"];
+            upstream_biz: components["schemas"]["DependencyBiz"];
+            /**
+             * Upstream Order Id
+             * @description null: no upstream order found (not met)
+             */
+            upstream_order_id: number | null;
+            upstream_status: components["schemas"]["OrderStatus"] | null;
+            /** Upstream Scheduled Start */
+            upstream_scheduled_start: string | null;
+            /**
+             * Met
+             * @description the upstream order has finished
+             */
+            met: boolean;
+            /**
+             * Overridden
+             * @description a releaser / admin approved starting without it
+             */
+            overridden: boolean;
+        };
+        /**
+         * OrderDependentResponse
+         * @description このオーダーを上流として待っている下流のオーダー（つながり1件）
+         */
+        OrderDependentResponse: {
+            /** Id */
+            id: number;
+            kind: components["schemas"]["DependencyKind"];
+            downstream_biz: components["schemas"]["DependencyBiz"];
+            /** Downstream Order Id */
+            downstream_order_id: number;
+            downstream_status: components["schemas"]["OrderStatus"];
+            /**
+             * Downstream Scheduled Start
+             * Format: date-time
+             */
+            downstream_scheduled_start: string;
+        };
         /** OrderDetailResponse */
         OrderDetailResponse: {
             /** Id */
@@ -2149,6 +2341,16 @@ export interface components {
              */
             steps_preview: boolean;
             /**
+             * Dependencies
+             * @description upstream orders this order waits for (active links)
+             */
+            dependencies: components["schemas"]["OrderDependencyResponse"][];
+            /**
+             * Dependents
+             * @description downstream orders waiting for this order (active links)
+             */
+            dependents: components["schemas"]["OrderDependentResponse"][];
+            /**
              * Events
              * @description the order's events, oldest first
              */
@@ -2181,7 +2383,7 @@ export interface components {
          * @description オーダーの記録の種類（追記のみ）
          * @enum {string}
          */
-        OrderEventType: "created" | "status_changed" | "rescheduled" | "pinned" | "unpinned" | "early_start_approved" | "conflict_raised" | "conflict_resolved";
+        OrderEventType: "created" | "status_changed" | "rescheduled" | "pinned" | "unpinned" | "early_start_approved" | "conflict_raised" | "conflict_resolved" | "dependency_override_approved";
         /**
          * OrderReasonIn
          * @description 理由が必須の操作（保留・取消）
@@ -4159,6 +4361,320 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_client_dependencies_endpoint_biz_clients__client_code__dependencies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BizDependencyResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_dependencies_endpoint_biz__biz_id__dependencies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                biz_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BizDependencyResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_dependency_endpoint_biz__biz_id__dependencies_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                biz_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BizDependencyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BizDependencyResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_dependency_endpoint_biz_dependencies__dependency_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                dependency_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BizDependencyResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7960,6 +8476,98 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approve_dependency_override_endpoint_ope_orders__order_id__approve_dependency_override_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderReasonIn"];
             };
         };
         responses: {

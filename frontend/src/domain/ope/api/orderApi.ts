@@ -24,6 +24,11 @@ export const orderApi = {
     return unwrap(http.POST("/ope/orders/{order_id}/approve-early-start", { ...path(orderId), body: { comment: comment || null } }));
   },
 
+  /** 満たされていない依存関係のまま開始することを承認（理由必須）（POST /ope/orders/{id}/approve-dependency-override） */
+  approveDependencyOverride(orderId: number, reason: string): Promise<OrderDetail> {
+    return unwrap(http.POST("/ope/orders/{order_id}/approve-dependency-override", { ...path(orderId), body: { reason } }));
+  },
+
   /** ready → in_progress（POST /ope/orders/{id}/start） */
   start(orderId: number, comment?: string): Promise<OrderDetail> {
     return unwrap(http.POST("/ope/orders/{order_id}/start", { ...path(orderId), body: { comment: comment || null } }));

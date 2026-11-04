@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
+from src.domain_biz.models import DependencyKind, DependencyMatchRule
 from src.infrastructure.database import Base
 
 
@@ -45,6 +46,7 @@ class OrderEventType(str, enum.Enum):
     EARLY_START_APPROVED = "early_start_approved"  # 予定日より前の開始をリリース担当が承認
     CONFLICT_RAISED = "conflict_raised"            # plan の変更と矛盾（作業中に日時が動いた・発生枠が消えた等）
     CONFLICT_RESOLVED = "conflict_resolved"        # 矛盾の解決（新しい日時を採用・そのまま・取消）
+    DEPENDENCY_OVERRIDE_APPROVED = "dependency_override_approved"  # 満たされていない依存関係のまま開始することを承認（Phase 6）
 
 
 class StepState(str, enum.Enum):
@@ -327,3 +329,61 @@ event.listen(
         "FOR EACH ROW EXECUTE FUNCTION ope_reject_mutation()"
     ).execute_if(dialect="postgresql"),
 )
+
+
+# ==========================================
+# OpeDependency（オーダー同士の依存関係。Phase 6）
+# biz_dependency（業務間の定義）から、下流のオーダーごとに作る「この上流のオーダーを待つ」というつながり。
+# 上流のオーダーがまだ無い（見つからない）ときは upstream_order_id が NULL の行（待ち先なし = 条件を満たさない）を置き、
+# 上流のオーダーができたら埋める（6.3）。定義が削除されたら行は残して removed_at を付ける（記録として残す）。
+# 種類・突き合わせの規則は作成時の写し（定義が無くなっても読める）。
+# ==========================================
+class OpeDependency(Base):
+    __tablename__ = "ope_dependency"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    downstream_order_id: Mapped[int] = mapped_column(ForeignKey("ope_order.id", ondelete="RESTRICT"), index=True)
+    upstream_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ope_order.id", ondelete="RESTRICT"), index=True, comment="待つ上流のオーダー（見つからない間は NULL）"
+    )
+    biz_dependency_id: Mapped[int | None] = mapped_column(
+        ForeignKey("biz_dependency.id", ondelete="SET NULL"), index=True, comment="作成元の定義（定義が削除されたら NULL）"
+    )
+    upstream_biz_id: Mapped[int] = mapped_column(
+        ForeignKey("biz_master.id", ondelete="RESTRICT"), comment="上流の業務（上流のオーダーが無い間も、何を待つかが分かるように）"
+    )
+
+    # --- 作成時の写し ---
+    kind: Mapped[DependencyKind] = mapped_column(Enum(DependencyKind, name="biz_dependency_kind_enum"), nullable=False)
+    match_rule: Mapped[DependencyMatchRule] = mapped_column(
+        Enum(DependencyMatchRule, name="biz_dependency_match_rule_enum"), nullable=False
+    )
+    match_sheet_event_id: Mapped[int | None] = mapped_column(Integer, comment="突き合わせたシート日付（same_sheet_event）")
+    match_date: Mapped[date | None] = mapped_column(Date, comment="突き合わせたルール上の日付（same_occurrence_date）")
+
+    # --- 外れた（定義の削除・発生枠の変更など。行は記録として残す） ---
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="外れた日時（有効な行は NULL）")
+    removed_reason: Mapped[str | None] = mapped_column(Text, comment="外れた理由（removed_at があるときのみ）")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("upstream_order_id IS NULL OR upstream_order_id <> downstream_order_id", name="ck_ope_dependency_not_self"),
+        CheckConstraint(
+            "match_rule <> 'SAME_SHEET_EVENT' OR match_sheet_event_id IS NOT NULL", name="ck_ope_dependency_sheet_key"
+        ),
+        CheckConstraint(
+            "match_rule <> 'SAME_OCCURRENCE_DATE' OR match_date IS NOT NULL", name="ck_ope_dependency_date_key"
+        ),
+        CheckConstraint("(removed_at IS NULL) = (removed_reason IS NULL)", name="ck_ope_dependency_removed"),
+        # 有効なつながりは、下流と上流の組み合わせごとに1件。上流が見つからない行は、下流と上流の業務ごとに1件
+        Index(
+            "uq_ope_dependency_pair", "downstream_order_id", "upstream_order_id",
+            unique=True, postgresql_where=text("removed_at IS NULL AND upstream_order_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_ope_dependency_waiting", "downstream_order_id", "upstream_biz_id",
+            unique=True, postgresql_where=text("removed_at IS NULL AND upstream_order_id IS NULL"),
+        ),
+    )

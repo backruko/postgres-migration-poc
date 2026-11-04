@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.domain_biz.models import DependencyKind, DependencyMatchRule
 from src.domain_ope.models import EventSource, OrderEventType, OrderStatus, StepEventType, StepState
 
 
@@ -88,6 +89,35 @@ class OrderStepResponse(BaseModel):
     events: list[StepEventResponse] = Field(description="the step's events, oldest first (empty in a preview)")
 
 
+class DependencyBiz(BaseModel):
+    id: int
+    business_code: str
+    name: str
+
+
+class OrderDependencyResponse(BaseModel):
+    """このオーダーが待つ上流のオーダー（つながり1件）"""
+    id: int
+    kind: DependencyKind
+    match_rule: DependencyMatchRule
+    upstream_biz: DependencyBiz
+    upstream_order_id: int | None = Field(description="null: no upstream order found (not met)")
+    upstream_status: OrderStatus | None
+    upstream_scheduled_start: datetime | None
+    met: bool = Field(description="the upstream order has finished")
+    overridden: bool = Field(description="a releaser / admin approved starting without it")
+
+
+class OrderDependentResponse(BaseModel):
+    """このオーダーを上流として待っている下流のオーダー（つながり1件）"""
+    id: int
+    kind: DependencyKind
+    downstream_biz: DependencyBiz
+    downstream_order_id: int
+    downstream_status: OrderStatus
+    downstream_scheduled_start: datetime
+
+
 class OrderSopVersion(BaseModel):
     """オーダーが使う SOP バージョン（リリース後は固定したもの、リリース前は指定または予定日時に有効なもの）"""
     id: int
@@ -134,4 +164,6 @@ class OrderDetailResponse(OrderResponse):
         description="released: the order's steps; not released: a live preview from the SOP version it would run",
     )
     steps_preview: bool = Field(description="true while the steps are only a preview (not released yet)")
+    dependencies: list[OrderDependencyResponse] = Field(description="upstream orders this order waits for (active links)")
+    dependents: list[OrderDependentResponse] = Field(description="downstream orders waiting for this order (active links)")
     events: list[OrderEventResponse] = Field(description="the order's events, oldest first")

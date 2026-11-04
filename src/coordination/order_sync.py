@@ -13,6 +13,8 @@ plan がコミットする直前に、変更された発生枠の一覧を受け
 | 新しい枠                 | 新しい pending オーダー（今以降の予定のみ）                                  |
 
 取消されたオーダーは履歴として残り、同じ枠が戻ったときは新しいオーダーを作ります。
+オーダーの作成・取消・ルール上の日付の変更のたびに、業務間の依存関係の定義からオーダー同士のつながりを直します
+（domain_ope/links.py）。定義の作成・削除も受け取ります（biz の dependency_events）。
 リリース済みで未開始のオーダーは、予定の変更でステップの条件の結果（固定したステップ）が変わったら矛盾フラグにします
 （人の変更・システムの変更とも。first_in_week は同じ週の他の予定にも左右されるため、変更のあった週のオーダーをすべて確かめる）。
 起動時に register() で plan に受け手として登録します（アプリ: main.py、スクリプト・テストも同様）。
@@ -25,7 +27,9 @@ from sqlalchemy.orm import Session
 
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import DuplicatedRecordError
-from src.domain_biz.models import BizMaster
+from src.domain_biz import dependency_events
+from src.domain_biz.models import BizDependency, BizMaster
+from src.domain_ope import links
 from src.domain_ope.models import EventSource, OpeOrder, OrderEventType, OrderStatus
 from src.domain_ope.steps import LOCAL_TIMEZONE, StepSetChange, scheduled_day, step_set_change, week_start
 from src.domain_plan.models import PlanInstance, PlanOccurrenceCache, PlanTemplate, VoidReason
@@ -43,8 +47,16 @@ def _now() -> datetime:
 
 
 def register() -> None:
-    """plan の発生枠の変更の受け手として登録します（何度呼んでも1回だけ登録される）。"""
+    """plan の発生枠の変更・biz の依存関係の定義の変更の受け手として登録します（何度呼んでも1回だけ登録される）。"""
     register_slot_listener(apply_slot_changes)
+    dependency_events.register_dependency_listener(apply_dependency_change)
+
+
+def apply_dependency_change(db: Session, change: dependency_events.DependencyChange, dependency: BizDependency) -> None:
+    if change == "created":
+        links.definition_created(db, dependency)
+    else:
+        links.definition_deleted(db, dependency)
 
 
 def apply_slot_changes(db: Session, changes: list[SlotChange]) -> None:
@@ -143,6 +155,7 @@ def create_order(
         db, order=order, event_type=OrderEventType.CREATED, to_status=OrderStatus.PENDING,
         source=source, actor_staff_id=actor_staff_id if source == EventSource.HUMAN else None, detail=detail,
     )
+    links.refresh_order(db, order)
     return order
 
 
@@ -158,6 +171,7 @@ def _slot_moved(db: Session, order: OpeOrder, live: PlanInstance, change: SlotCh
                         _cause(change, before=before, after=after))
         return
     times_changed = (order.scheduled_start, order.scheduled_end) != (live.scheduled_start, live.scheduled_end)
+    key_changed = order.occurrence_date != live.occurrence_date  # 依存関係の突き合わせのキー（臨時の予定で変わる）
     order.current_instance_id = live.id
     order.occurrence_date = live.occurrence_date
     order.scheduled_start = live.scheduled_start
@@ -169,6 +183,8 @@ def _slot_moved(db: Session, order: OpeOrder, live: PlanInstance, change: SlotCh
             actor_staff_id=change.actor_staff_id if source == EventSource.HUMAN else None,
             reason=change.note if change.by_person else None, detail=_cause(change, before=before, after=after),
         )
+    if key_changed:
+        links.refresh_order(db, order)
 
 
 def _slot_removed(db: Session, order: OpeOrder, change: SlotChange) -> None:
@@ -194,6 +210,7 @@ def _cancel(db: Session, order: OpeOrder, change: SlotChange, reason: str | None
         actor_staff_id=change.actor_staff_id if source == EventSource.HUMAN else None,
         reason=reason, detail=_cause(change),
     )
+    links.refresh_order(db, order)  # このオーダーを待つ下流のつながりを直す
 
 
 def _raise_conflict(db: Session, order: OpeOrder, reason: str, detail: dict[str, Any]) -> None:

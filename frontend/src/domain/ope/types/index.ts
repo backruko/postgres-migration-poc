@@ -19,3 +19,7 @@ export type StepState = Schemas["StepState"];
 export type StepEventType = Schemas["StepEventType"];
 export type OrderStep = Schemas["OrderStepResponse"];
 export type StepEvent = Schemas["StepEventResponse"];
+
+// ---- 依存関係 ----
+export type OrderDependency = Schemas["OrderDependencyResponse"];
+export type OrderDependent = Schemas["OrderDependentResponse"];

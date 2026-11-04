@@ -28,6 +28,7 @@ class DailyOrderSummary(BaseModel):
     conflict_reason: str | None = None
     steps_total: int = Field(default=0, description="the order's steps (0: not released yet, or no steps)")
     steps_approved: int = Field(default=0, description="steps approved so far")
+    blocked: bool = Field(default=False, description="hard dependencies not met (and not overridden): start is refused")
 
 
 class DailyOccurrence(BaseModel):
