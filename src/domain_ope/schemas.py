@@ -108,6 +108,16 @@ class OrderDependencyResponse(BaseModel):
     overridden: bool = Field(description="a releaser / admin approved starting without it")
 
 
+class OrderDependentResponse(BaseModel):
+    """このオーダーを上流として待っている下流のオーダー（つながり1件）"""
+    id: int
+    kind: DependencyKind
+    downstream_biz: DependencyBiz
+    downstream_order_id: int
+    downstream_status: OrderStatus
+    downstream_scheduled_start: datetime
+
+
 class OrderSopVersion(BaseModel):
     """オーダーが使う SOP バージョン（リリース後は固定したもの、リリース前は指定または予定日時に有効なもの）"""
     id: int
@@ -155,4 +165,5 @@ class OrderDetailResponse(OrderResponse):
     )
     steps_preview: bool = Field(description="true while the steps are only a preview (not released yet)")
     dependencies: list[OrderDependencyResponse] = Field(description="upstream orders this order waits for (active links)")
+    dependents: list[OrderDependentResponse] = Field(description="downstream orders waiting for this order (active links)")
     events: list[OrderEventResponse] = Field(description="the order's events, oldest first")

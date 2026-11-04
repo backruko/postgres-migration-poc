@@ -26,7 +26,8 @@ from src.domain_biz.models import BizMaster, SOPStatus, SOPVersion
 from src.domain_ope.models import EventSource, OpeOrder, OpeOrderEvent, OpeStep, OrderEventType, OrderStatus, StepState
 from src.domain_ope import links, steps
 from src.domain_ope.schemas import (
-    AutoReleaseResult, ConflictAction, ConflictResolveIn, DependencyBiz, OrderDependencyResponse, OrderDetailResponse,
+    AutoReleaseResult, ConflictAction, ConflictResolveIn, DependencyBiz, OrderDependencyResponse, OrderDependentResponse,
+    OrderDetailResponse,
     OrderEventResponse, OrderSopVersion, OrderStepResponse, StepEventResponse,
 )
 from src.domain_plan import services as plan_services
@@ -106,13 +107,24 @@ def _order_steps(db: Session, order: OpeOrder) -> tuple[list[OrderStepResponse],
     ], True
 
 
-def _overridden_link_ids(events: list[OpeOrderEvent]) -> set[int]:
-    """依存関係の承認（DEPENDENCY_OVERRIDE_APPROVED）が対象にしたつながり"""
-    ids: set[int] = set()
-    for e in events:
-        if e.event_type == OrderEventType.DEPENDENCY_OVERRIDE_APPROVED and e.detail:
-            ids.update(int(i) for i in e.detail.get("links", []))
-    return ids
+_overridden_link_ids = links.overridden_link_ids
+
+
+def _order_dependents(db: Session, order: OpeOrder) -> list[OrderDependentResponse]:
+    """このオーダーを上流として待っている下流のオーダー"""
+    result = []
+    for link in ope_dependency_repo.get_active_by_upstream(db, upstream_order_id=order.id):
+        downstream = db.get(OpeOrder, link.downstream_order_id)
+        if downstream is None:
+            continue
+        biz = db.get(BizMaster, downstream.biz_master_id)
+        result.append(OrderDependentResponse(
+            id=link.id, kind=link.kind,
+            downstream_biz=DependencyBiz(id=downstream.biz_master_id, business_code=biz.business_code if biz else "", name=biz.name if biz else ""),
+            downstream_order_id=downstream.id, downstream_status=downstream.status,
+            downstream_scheduled_start=downstream.scheduled_start,
+        ))
+    return result
 
 
 def _order_dependencies(db: Session, order: OpeOrder, events: list[OpeOrderEvent]) -> list[OrderDependencyResponse]:
@@ -144,6 +156,7 @@ def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
             "steps": order_steps,
             "steps_preview": preview,
             "dependencies": _order_dependencies(db, order, events),
+            "dependents": _order_dependents(db, order),
             "events": [OrderEventResponse.model_validate(e) for e in events],
         }
     )

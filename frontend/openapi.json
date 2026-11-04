@@ -1405,6 +1405,93 @@
         }
       }
     },
+    "/biz/clients/{client_code}/dependencies": {
+      "get": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "List Client Dependencies Endpoint",
+        "description": "顧客の業務どうしの依存関係すべて",
+        "operationId": "list_client_dependencies_endpoint_biz_clients__client_code__dependencies_get",
+        "parameters": [
+          {
+            "name": "client_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Client Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BizDependencyResponse"
+                  },
+                  "title": "Response List Client Dependencies Endpoint Biz Clients  Client Code  Dependencies Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/biz/{biz_id}/dependencies": {
       "get": {
         "tags": [
@@ -9802,6 +9889,12 @@
             "title": "Steps Approved",
             "description": "steps approved so far",
             "default": 0
+          },
+          "blocked": {
+            "type": "boolean",
+            "title": "Blocked",
+            "description": "hard dependencies not met (and not overridden): start is refused",
+            "default": false
           }
         },
         "type": "object",
@@ -10351,6 +10444,43 @@
         "title": "OrderDependencyResponse",
         "description": "このオーダーが待つ上流のオーダー（つながり1件）"
       },
+      "OrderDependentResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DependencyKind"
+          },
+          "downstream_biz": {
+            "$ref": "#/components/schemas/DependencyBiz"
+          },
+          "downstream_order_id": {
+            "type": "integer",
+            "title": "Downstream Order Id"
+          },
+          "downstream_status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "downstream_scheduled_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Downstream Scheduled Start"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "downstream_biz",
+          "downstream_order_id",
+          "downstream_status",
+          "downstream_scheduled_start"
+        ],
+        "title": "OrderDependentResponse",
+        "description": "このオーダーを上流として待っている下流のオーダー（つながり1件）"
+      },
       "OrderDetailResponse": {
         "properties": {
           "id": {
@@ -10520,6 +10650,14 @@
             "title": "Dependencies",
             "description": "upstream orders this order waits for (active links)"
           },
+          "dependents": {
+            "items": {
+              "$ref": "#/components/schemas/OrderDependentResponse"
+            },
+            "type": "array",
+            "title": "Dependents",
+            "description": "downstream orders waiting for this order (active links)"
+          },
           "events": {
             "items": {
               "$ref": "#/components/schemas/OrderEventResponse"
@@ -10553,6 +10691,7 @@
           "steps",
           "steps_preview",
           "dependencies",
+          "dependents",
           "events"
         ],
         "title": "OrderDetailResponse"

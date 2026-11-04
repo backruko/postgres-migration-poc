@@ -7,7 +7,8 @@ from src.infrastructure.database import get_db
 from src.domain_biz.services import (
     create_biz, get_biz, get_bizes, update_biz, delete_biz, restore_biz, clone_active_to_draft, 
     create_step_template, approve_and_schedule_version, cancel_future_version,
-    get_current_active_version, create_new_sop_version, list_dependencies, create_dependency, delete_dependency,
+    get_current_active_version, create_new_sop_version, list_dependencies, list_client_dependencies, create_dependency,
+    delete_dependency,
 )
 from src.domain_biz.schemas import (
     BizMasterCreate, BizMasterUpdate, BizMasterResponse, SOPVersionCreate, 
@@ -115,6 +116,11 @@ def create_step_template_endpoint(version_id: int, step_in: SOPStepTemplateCreat
 # ==========================================
 # 業務間の依存関係（Phase 6）。定義の変更は業務管理者のみ（参照は他の biz エンドポイントと同じく制限なし）
 # ==========================================
+
+@router.get("/clients/{client_code}/dependencies", response_model=list[BizDependencyResponse], responses={**COMMON_ERRORS})
+def list_client_dependencies_endpoint(client_code: str, db: Session = Depends(get_db)):
+    """顧客の業務どうしの依存関係すべて"""
+    return list_client_dependencies(db=db, client_code=client_code)
 
 @router.get("/{biz_id}/dependencies", response_model=list[BizDependencyResponse], responses={**COMMON_ERRORS})
 def list_dependencies_endpoint(biz_id: int, db: Session = Depends(get_db)):

@@ -8,6 +8,7 @@ const PAGES = [
   { path: "/settings/templates", label: "予定テンプレート設定", end: false },
   { path: "/settings/sheets", label: "年間計画シート", end: false },
   { path: "/settings/holidays", label: "休日カレンダー", end: false },
+  { path: "/settings/dependencies", label: "業務の依存関係", end: false },
   { path: "/settings/staff", label: "職員", end: false },
 ];
 

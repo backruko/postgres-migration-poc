@@ -11,11 +11,12 @@
 """
 from datetime import date, datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.domain_biz.models import BizDependency, BizMaster, DependencyKind, DependencyMatchRule
-from src.domain_ope.models import OpeDependency, OpeOrder, OrderStatus
-from src.infrastructure.repositories import biz_dependency_repo, ope_dependency_repo
+from src.domain_ope.models import OpeDependency, OpeOrder, OpeOrderEvent, OrderEventType, OrderStatus
+from src.infrastructure.repositories import biz_dependency_repo, ope_dependency_repo, ope_order_repo
 
 NOT_STARTED = (OrderStatus.PENDING, OrderStatus.READY)
 
@@ -174,3 +175,38 @@ def describe(db: Session, link: OpeDependency) -> str:
         return f"no order of {code} for {key}"
     upstream = db.get(OpeOrder, link.upstream_order_id)
     return f"order {link.upstream_order_id} of {code} is {upstream.status.value if upstream else 'missing'}"
+
+
+def overridden_link_ids(events: list[OpeOrderEvent]) -> set[int]:
+    """依存関係の承認（DEPENDENCY_OVERRIDE_APPROVED）が対象にしたつながり"""
+    ids: set[int] = set()
+    for e in events:
+        if e.event_type == OrderEventType.DEPENDENCY_OVERRIDE_APPROVED and e.detail:
+            ids.update(int(i) for i in e.detail.get("links", []))
+    return ids
+
+
+def blocked_order_ids(db: Session, orders: list[OpeOrder]) -> set[int]:
+    """
+    依存関係で開始できないオーダー（開始前で、満たされず承認もされていない hard のつながりがある）。
+    ダッシュボードの一覧用に、オーダーの数によらず数回のクエリで判定する。
+    """
+    candidates = {o.id: o for o in orders if is_not_started(o)}
+    hard = [
+        link for link in ope_dependency_repo.get_active_for_orders(db, downstream_order_ids=list(candidates))
+        if link.kind == DependencyKind.HARD
+    ]
+    if not hard:
+        return set()
+    upstream_ids = {link.upstream_order_id for link in hard if link.upstream_order_id is not None}
+    finished = set(db.scalars(
+        select(OpeOrder.id).where(OpeOrder.id.in_(upstream_ids), OpeOrder.status == OrderStatus.FINISHED)
+    )) if upstream_ids else set()
+    events = ope_order_repo.get_events_of_type(
+        db, order_ids=list({link.downstream_order_id for link in hard}), event_type=OrderEventType.DEPENDENCY_OVERRIDE_APPROVED,
+    )
+    covered = overridden_link_ids(events)
+    return {
+        link.downstream_order_id for link in hard
+        if link.upstream_order_id not in finished and link.id not in covered
+    }

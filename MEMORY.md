@@ -25,7 +25,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   planned 2026-11-04 (§2 "Phase 6 step plan"); step 6.1 committed 2026-11-04 (`8ab5f92`, not pushed). Step 6.2 (ope_dependency table, migration
   `cb0ae371f402`) committed 2026-11-04 (`3eaede4`, not pushed). Step 6.3 (link resolution, no migration) committed
   2026-11-04 (`1a364ca`, not pushed). Step 6.4 (start check + dependency override, migration `58425e70286d`)
-  committed 2026-11-04 (not pushed). Next: 6.5 (frontend).**
+  committed 2026-11-04 (`916ebee`, not pushed). Step 6.5 (frontend + small backend additions, no migration) committed
+  2026-11-04 (not pushed). With it **Phase 6 is complete**. Next: Phase 7
+  (client events / signals) — not planned yet; plan it with the user first (the doc has open questions on it).**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
 - **DB:** latest Alembic head is `58425e70286d` (order event DEPENDENCY_OVERRIDE_APPROVED). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
@@ -37,7 +39,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, dependency_start, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 131 passed, ~95–175 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, dependency_start, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 132 passed, ~95–175 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -91,9 +93,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 58 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 58}` to see only newer edits, and
+**Last rev written by me: 60 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 60}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
-The delivery-phase list in the doc carries the build status (phases 1–5 built, rev 52).
+The delivery-phase list in the doc carries the build status (phases 1–6 built, rev 60).
 
 ### Domains (decided: plan and ope stay separate, no merge)
 | Domain | Owns | Status |
@@ -440,7 +442,7 @@ approver / rejecter ≠ the **latest** submitter of that step (`ope_step_repo.la
   (12/07, 3 steps incl. blocking) — preview, release, start, operator / checker actions, four-eyes hiding, reject
   reason, finish, dashboard "3/3": all 14 checks passed. **Not checked: the browser** (layout, the drawer, buttons) —
   the user clicks through.
-6. Dependencies (hard + override, informational). ← **in progress** (branch `feature/ope-dependencies`)
+6. Dependencies (hard + override, informational). **built** (6.1–6.5, branch `feature/ope-dependencies`)
 
 #### Phase 6 decisions (2026-11-04, doc rev 54)
 Matching rules built: **same sheet event** and **same occurrence date** ("latest before due" stays an open question;
@@ -455,8 +457,8 @@ like the rest of biz.
 | 6.1 | biz `biz_dependency` (upstream biz, downstream biz, match_rule, kind HARD / INFORMATIONAL) + API, cycle check on save; migration `2904467fd7b9` | **done** (`8ab5f92`, not pushed) |
 | 6.2 | ope tables `ope_dependency` (upstream order, downstream order, definition, kind) — tables only; migration `cb0ae371f402` | **done** (`3eaede4`, not pushed) |
 | 6.3 | Link resolution: create / refresh concrete links when orders are created or moved (order_sync) and when a definition is added or removed | **done** (`1a364ca`, not pushed) |
-| 6.4 | Start check: hard links need the upstream order finished, else start → 400 listing blockers; force-start (releaser / admin, reason) as an order event; upstream canceled / on hold stays blocked; migration `58425e70286d` | **done** (not pushed) |
-| 6.5 | Frontend: dependency settings for a business, upstream / downstream in the order drawer, "blocked" tag + force-start | **next** |
+| 6.4 | Start check: hard links need the upstream order finished, else start → 400 listing blockers; force-start (releaser / admin, reason) as an order event; upstream canceled / on hold stays blocked; migration `58425e70286d` | **done** (`916ebee`, not pushed) |
+| 6.5 | Frontend: dependency settings for a business, upstream / downstream in the order drawer, "blocked" tag + force-start | **done** (not pushed) |
 
 **6.1 as built** (`src/domain_biz/models.py` end, migration `2904467fd7b9`). `BizDependency`: `upstream_biz_id` /
 `downstream_biz_id` (FK biz_master RESTRICT), `match_rule` (`DependencyMatchRule` SAME_SHEET_EVENT |
@@ -535,6 +537,32 @@ a re-pointed / new link needs a new approval.
   approves an override first. HTTP-checked on `plan_check`: definition 3 (biz 2 → biz 1, deleted afterwards), order
   75: start 400 with the blocker, operator override 403, empty reason 422, releaser override 200, start 200
   (`detail {"early_start": true, "dependency_override": [254]}`).
+
+**6.5 as built** (no migration). User decision 2026-11-04: **a new settings page** `/settings/dependencies?client=`
+(nav 「業務の依存関係」), not a section on the template page.
+- Backend additions: `GET /biz/clients/{client_code}/dependencies` (`biz_dependency_repo.get_for_client`; path chosen
+  because `/biz/dependencies` would hit `GET /biz/{biz_id}`); `OrderDetailResponse.dependents`
+  (`OrderDependentResponse {id, kind, downstream_biz, downstream_order_id, downstream_status,
+  downstream_scheduled_start}`, via `ope_dependency_repo.get_active_by_upstream`); `DailyOrderSummary.blocked`
+  (`links.blocked_order_ids`: not-started orders with an unmet, un-overridden hard link — a few queries for the whole
+  day via `get_active_for_orders` + `ope_order_repo.get_events_of_type`); `links.overridden_link_ids` (services
+  aliases it). Test `test_dashboard_blocked_flag_dependents_and_client_list` in `tests/test_dependency_start.py`.
+- Frontend: `domain/biz/{types (BizDependency…), api/dependencyApi.ts (listForClient / create / remove),
+  lib/dependencies.ts (MATCH_RULE_LABEL 同じシート日付 / 同じ日付 + help, KIND_LABEL 待つ / 参考 + help,
+  canManageDependencies = active admin)}`; `features/dependency-settings/DependencySettingsPage.tsx` (client select in
+  `?client=`, table 上流 → 下流 / 突き合わせ / 種類 / 登録日 / 削除 (admin), 依存関係を追加 modal with upstream /
+  downstream selects of that client's businesses, rule and kind radios with help text, delete confirm).
+  `domain/ope`: types `OrderDependency` / `OrderDependent`, `orderApi.approveDependencyOverride`,
+  `orderActions`: action `approveDependencyOverride` (releaser / admin, reason required; pending / ready while
+  `blockingDependencies(order)` is non-empty), 開始 hidden while blocked, `startBlockedReason` explains it.
+  `OrderDrawer`: section 「依存関係」 (待つ上流のオーダー: biz, #id, status tag, 完了 / 待ち / 承認済み / 未完了, 参考
+  tag; このオーダーを待つ下流のオーダー), override note in the modal. Dashboard rows: orange 「待ち」 tag when `blocked`.
+  CSS `.order-deps`, `.order-dep`.
+- Checked: `npm run build`; esbuild harness `deps_harness.ts` of the real modules against uvicorn 8001 on
+  `plan_check` (order 76): operator create 403 + UI hides, admin create + listForClient, blocking waiting row, override
+  offered to the releaser, 開始 hidden for the operator, blocked reason, dashboard 待ち true → override → false, start,
+  delete — 14/14 passed. **Not checked: the browser** (the new page, the drawer section, the tag) — the user clicks
+  through.
 7. Client events with automatic completion (signals).
 
 ### Open questions (in the doc)

@@ -99,6 +99,13 @@ class OpeOrderRepository:
         stmt = select(OpeOrderEvent).where(OpeOrderEvent.order_id == order_id).order_by(OpeOrderEvent.id)
         return list(db.scalars(stmt).all())
 
+    def get_events_of_type(self, db: Session, *, order_ids: list[int], event_type: OrderEventType) -> list[OpeOrderEvent]:
+        """複数のオーダーの、ある種類の記録（ダッシュボード用。1回のクエリ）"""
+        if not order_ids:
+            return []
+        stmt = select(OpeOrderEvent).where(OpeOrderEvent.order_id.in_(order_ids), OpeOrderEvent.event_type == event_type)
+        return list(db.scalars(stmt).all())
+
     def add_event(
         self,
         db: Session,
@@ -203,6 +210,22 @@ class OpeDependencyRepository:
         if biz_dependency_id is not None:
             stmt = stmt.where(OpeDependency.biz_dependency_id == biz_dependency_id)
         return list(db.scalars(stmt.order_by(OpeDependency.id)).all())
+
+    def get_active_by_upstream(self, db: Session, *, upstream_order_id: int) -> list[OpeDependency]:
+        """このオーダーを上流として待っているつながり"""
+        stmt = select(OpeDependency).where(
+            OpeDependency.upstream_order_id == upstream_order_id, OpeDependency.removed_at.is_(None)
+        )
+        return list(db.scalars(stmt.order_by(OpeDependency.id)).all())
+
+    def get_active_for_orders(self, db: Session, *, downstream_order_ids: list[int]) -> list[OpeDependency]:
+        """複数の下流のオーダーの有効なつながり（ダッシュボード用。1回のクエリ）"""
+        if not downstream_order_ids:
+            return []
+        stmt = select(OpeDependency).where(
+            OpeDependency.downstream_order_id.in_(downstream_order_ids), OpeDependency.removed_at.is_(None)
+        )
+        return list(db.scalars(stmt).all())
 
     def get_active_by_definition(self, db: Session, *, biz_dependency_id: int) -> list[OpeDependency]:
         stmt = select(OpeDependency).where(

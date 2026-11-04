@@ -22,6 +22,17 @@ class BizDependencyRepository:
         )
         return list(db.scalars(stmt).all())
 
+    def get_for_client(self, db: Session, *, client_code: str) -> list[BizDependency]:
+        """顧客の業務どうしの定義（定義は同じ顧客の業務のみを結ぶ。論理削除された業務のものも含む）"""
+        stmt = (
+            select(BizDependency)
+            .join(BizMaster, BizMaster.id == BizDependency.downstream_biz_id)
+            .where(BizMaster.client_code == client_code)
+            .order_by(BizDependency.id)
+            .execution_options(include_deleted=True)
+        )
+        return list(db.scalars(stmt).all())
+
     def get_pair(self, db: Session, *, upstream_biz_id: int, downstream_biz_id: int) -> BizDependency | None:
         stmt = select(BizDependency).where(
             BizDependency.upstream_biz_id == upstream_biz_id, BizDependency.downstream_biz_id == downstream_biz_id

@@ -10,11 +10,12 @@
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
 import uuid
-from datetime import date, time
+from datetime import date, time, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
 
+from src.coordination import services as ops_services
 from src.core.exceptions import BadRequestError, DuplicatedRecordError
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import DependencyKind, DependencyMatchRule
@@ -30,6 +31,8 @@ from src.domain_staff.models import RoleCode, StaffStatus
 from src.domain_staff.schemas import StaffCreate
 from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import biz_master_repo, client_repo
+
+JST = timezone(timedelta(hours=9))
 
 
 @pytest.fixture
@@ -170,3 +173,28 @@ def test_override_needs_something_to_override(db, staff, monkeypatch):
     finish(db, pick(db, up_id, down.occurrence_date).id, staff)
     with pytest.raises(BadRequestError, match="no unmet hard dependency"):
         ope.approve_dependency_override(db, down.id, staff["releaser"], "不要")
+
+
+# ==========================================
+# 画面用（6.5）: ダッシュボードの「待ち」・下流の一覧・顧客ごとの定義の一覧
+# ==========================================
+def test_dashboard_blocked_flag_dependents_and_client_list(db, staff, monkeypatch):
+    up_id, down_id = setup_pair(db)
+    down = ready_down(db, down_id, staff, monkeypatch)
+    up = pick(db, up_id, down.occurrence_date)
+
+    def summary(order_id: int):
+        dash = ops_services.get_daily_dashboard(db, down.scheduled_start.astimezone(JST).date(), "Asia/Tokyo")
+        return next(o.order for c in dash.clients for b in c.businesses for o in b.occurrences if o.order and o.order.id == order_id)
+
+    assert summary(down.id).blocked and not summary(up.id).blocked
+    # 上流側の詳細に、待っている下流のオーダーが出る
+    (dependent,) = ope.get_order(db, up.id).dependents
+    assert (dependent.downstream_order_id, dependent.downstream_status) == (down.id, OrderStatus.READY)
+
+    ope.approve_dependency_override(db, down.id, staff["releaser"], "先行")
+    assert not summary(down.id).blocked  # 承認済みなら「待ち」ではない
+
+    client_code = db.get(OpeOrder, down.id).client_code  # type: ignore[union-attr]
+    (definition,) = biz_services.list_client_dependencies(db, client_code)
+    assert (definition.upstream.id, definition.downstream.id) == (up_id, down_id)

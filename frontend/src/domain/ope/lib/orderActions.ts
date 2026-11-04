@@ -43,7 +43,9 @@ export const CONFLICT_ACTION_LABEL: Record<ConflictAction, string> = {
 
 // ---------------- 操作できるか（バックエンドの @require_roles と同じ組み合わせ。最終判定はバックエンド） ----------------
 
-export type OrderAction = "release" | "approveEarlyStart" | "start" | "hold" | "resume" | "finish" | "cancel" | "resolveConflict";
+export type OrderAction =
+  | "release" | "approveEarlyStart" | "approveDependencyOverride" | "start" | "hold" | "resume" | "finish" | "cancel"
+  | "resolveConflict";
 
 const OPERATOR: RoleCode[] = ["operator"];
 const HOLDERS: RoleCode[] = ["operator", "releaser", "admin"];
@@ -52,6 +54,7 @@ const PRIVILEGED: RoleCode[] = ["releaser", "admin"];
 const ROLES: Record<OrderAction, RoleCode[]> = {
   release: PRIVILEGED,
   approveEarlyStart: ["releaser"],
+  approveDependencyOverride: PRIVILEGED,
   start: OPERATOR,
   hold: HOLDERS,
   resume: HOLDERS,
@@ -63,6 +66,7 @@ const ROLES: Record<OrderAction, RoleCode[]> = {
 export const ORDER_ACTION_LABEL: Record<OrderAction, string> = {
   release: "リリース",
   approveEarlyStart: "予定日前の開始を承認",
+  approveDependencyOverride: "依存関係を待たずに開始を承認",
   start: "開始",
   hold: "保留",
   resume: "再開",
@@ -72,7 +76,11 @@ export const ORDER_ACTION_LABEL: Record<OrderAction, string> = {
 };
 
 /** 理由の入力が必須の操作 */
-export const REASON_REQUIRED: ReadonlySet<OrderAction> = new Set(["hold", "cancel"]);
+export const REASON_REQUIRED: ReadonlySet<OrderAction> = new Set(["hold", "cancel", "approveDependencyOverride"]);
+
+/** 開始を止めている依存関係（hard・上流が未完了・承認なし） */
+export const blockingDependencies = (order: Pick<OrderDetail, "dependencies">) =>
+  order.dependencies.filter((d) => d.kind === "hard" && !d.met && !d.overridden);
 
 /** 予定日（日本時間の日付 YYYY-MM-DD）。today と同じ形式で比べる */
 export const scheduledDay = (order: Pick<OrderDetail, "scheduled_start">, toLocalDate: (iso: string) => string) =>
@@ -89,8 +97,10 @@ export function availableActions(order: OrderDetail, staff: Staff | null | undef
   const s = order.status;
   if (order.conflict) actions.push("resolveConflict");
   if (s === "pending" && !order.conflict) actions.push("release");
+  const blocked = blockingDependencies(order).length > 0;
   if ((s === "pending" || s === "ready") && day > today && !order.early_start_approved) actions.push("approveEarlyStart");
-  if (s === "ready" && !order.conflict && (day <= today || order.early_start_approved)) actions.push("start");
+  if ((s === "pending" || s === "ready") && blocked) actions.push("approveDependencyOverride");
+  if (s === "ready" && !order.conflict && !blocked && (day <= today || order.early_start_approved)) actions.push("start");
   if (s === "pending" || s === "ready" || s === "in_progress") actions.push("hold");
   if (s === "on_hold") actions.push("resume");
   // ステップのあるオーダーは最後の承認で自動で完了する（手動の完了はステップの無いオーダーのみ）
@@ -104,5 +114,6 @@ export function startBlockedReason(order: OrderDetail, today: string, day: strin
   if (order.status !== "ready") return null;
   if (order.conflict) return "矛盾を解決するまで開始できません";
   if (day > today && !order.early_start_approved) return `予定日（${day}）より前の開始には、リリース担当の承認が必要です`;
+  if (blockingDependencies(order).length) return "上流のオーダーが完了するまで開始できません（リリース担当・業務管理者が承認すれば開始できます）";
   return null;
 }

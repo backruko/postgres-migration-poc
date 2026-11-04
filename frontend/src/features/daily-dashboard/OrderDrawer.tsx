@@ -10,7 +10,8 @@ import {
   availableStepActions, describeStepEvent, rejectionReason, STEP_ACTION_LABEL, STEP_REASON_REQUIRED, STEP_STATE_COLOR,
   STEP_STATE_LABEL, stepBlockedReason, stepProgress, type StepAction,
 } from "../../domain/ope/lib/stepActions";
-import type { ConflictAction, OrderDetail, OrderEvent, OrderStep } from "../../domain/ope/types";
+import { KIND_LABEL } from "../../domain/biz/lib/dependencies";
+import type { ConflictAction, OrderDependency, OrderDependent, OrderDetail, OrderEvent, OrderStep } from "../../domain/ope/types";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { ApiError } from "../../shared/api/http";
 import { TIMEZONE } from "../../shared/config";
@@ -87,6 +88,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
     switch (p.action) {
       case "release": return orderApi.release(current.id, text);
       case "approveEarlyStart": return orderApi.approveEarlyStart(current.id, text);
+      case "approveDependencyOverride": return orderApi.approveDependencyOverride(current.id, text ?? "");
       case "start": return orderApi.start(current.id, text);
       case "hold": return orderApi.hold(current.id, text ?? "");
       case "resume": return orderApi.resume(current.id, text);
@@ -170,6 +172,28 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
             {blocked && <div className="muted order-blocked">{blocked}</div>}
           </div>
 
+          {(data.dependencies.length > 0 || data.dependents.length > 0) && (
+            <div>
+              <Typography.Title level={5}>依存関係</Typography.Title>
+              {data.dependencies.length > 0 && (
+                <>
+                  <div className="field-label">待つ上流のオーダー</div>
+                  <ul className="order-deps">
+                    {data.dependencies.map((d) => <UpstreamRow key={d.id} dep={d} />)}
+                  </ul>
+                </>
+              )}
+              {data.dependents.length > 0 && (
+                <>
+                  <div className="field-label">このオーダーを待つ下流のオーダー</div>
+                  <ul className="order-deps">
+                    {data.dependents.map((d) => <DownstreamRow key={d.id} dep={d} />)}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+
           <div>
             <Typography.Title level={5}>
               ステップ {progress && <span className="muted">（承認 {progress}）</span>}
@@ -222,6 +246,11 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
         confirmLoading={submitting}
         destroyOnClose
       >
+        {pending?.kind === "order" && pending.action === "approveDependencyOverride" && (
+          <Typography.Paragraph type="secondary">
+            上流のオーダーが完了していないまま、作業者が開始できるようにします。対象は今満たされていないつながりです（後から増えたものには改めて承認が必要です）。
+          </Typography.Paragraph>
+        )}
         {pending?.kind === "order" && pending.action === "cancel" && (
           <Typography.Paragraph type="secondary">オーダーを取り消すと、予定（カレンダー）からも取り消されます。元に戻せません。</Typography.Paragraph>
         )}
@@ -287,6 +316,44 @@ function StepRow({ step, actions, blocked, onAction }: {
         </Space>
       )}
       {blocked && <div className="muted order-blocked">{blocked}</div>}
+    </li>
+  );
+}
+
+/** 待つ上流のオーダー1件: 業務・オーダー番号・状態・満たしているか（「参考」は開始を止めない） */
+function UpstreamRow({ dep }: { dep: OrderDependency }) {
+  const state = dep.met
+    ? <Tag color="green">完了</Tag>
+    : dep.overridden
+      ? <Tag color="purple">承認済み（待たずに開始可）</Tag>
+      : dep.kind === "hard" ? <Tag color="orange">待ち</Tag> : <Tag>未完了</Tag>;
+  return (
+    <li className="order-dep">
+      <span className="mono">{dep.upstream_biz.business_code}</span> {dep.upstream_biz.name}
+      {dep.upstream_order_id !== null ? (
+        <>
+          <span className="mono muted"> #{dep.upstream_order_id}</span>
+          {dep.upstream_status && <Tag color={ORDER_STATUS_COLOR[dep.upstream_status]}>{ORDER_STATUS_LABEL[dep.upstream_status]}</Tag>}
+          {dep.upstream_scheduled_start && <span className="muted mono">{fmt(dep.upstream_scheduled_start)}</span>}
+        </>
+      ) : (
+        <span className="muted"> 上流のオーダーがありません</span>
+      )}
+      {state}
+      {dep.kind === "informational" && <Tag>{KIND_LABEL.informational}</Tag>}
+    </li>
+  );
+}
+
+/** このオーダーを待つ下流のオーダー1件 */
+function DownstreamRow({ dep }: { dep: OrderDependent }) {
+  return (
+    <li className="order-dep">
+      <span className="mono">{dep.downstream_biz.business_code}</span> {dep.downstream_biz.name}
+      <span className="mono muted"> #{dep.downstream_order_id}</span>
+      <Tag color={ORDER_STATUS_COLOR[dep.downstream_status]}>{ORDER_STATUS_LABEL[dep.downstream_status]}</Tag>
+      <span className="muted mono">{fmt(dep.downstream_scheduled_start)}</span>
+      {dep.kind === "informational" && <Tag>{KIND_LABEL.informational}</Tag>}
     </li>
   );
 }

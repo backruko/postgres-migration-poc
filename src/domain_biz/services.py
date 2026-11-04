@@ -333,6 +333,11 @@ def list_dependencies(db: Session, biz_id: int) -> list[BizDependencyResponse]:
     return [_dependency_response(db, d) for d in biz_dependency_repo.get_for_biz(db, biz_id=biz_id)]
 
 
+def list_client_dependencies(db: Session, client_code: str) -> list[BizDependencyResponse]:
+    """顧客の業務どうしの依存関係すべて（設定画面の一覧用）"""
+    return [_dependency_response(db, d) for d in biz_dependency_repo.get_for_client(db, client_code=client_code.upper())]
+
+
 def _creates_cycle(edges: list[tuple[int, int]], upstream: int, downstream: int) -> bool:
     """upstream → downstream を足すと循環するか（downstream から既存の定義をたどって upstream に着くか）"""
     following: dict[int, list[int]] = {}

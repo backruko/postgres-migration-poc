@@ -239,6 +239,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/biz/clients/{client_code}/dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Client Dependencies Endpoint
+         * @description 顧客の業務どうしの依存関係すべて
+         */
+        get: operations["list_client_dependencies_endpoint_biz_clients__client_code__dependencies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/biz/{biz_id}/dependencies": {
         parameters: {
             query?: never;
@@ -1959,6 +1979,12 @@ export interface components {
              * @default 0
              */
             steps_approved: number;
+            /**
+             * Blocked
+             * @description hard dependencies not met (and not overridden): start is refused
+             * @default false
+             */
+            blocked: boolean;
         };
         /**
          * DailyVoidedItem
@@ -2225,6 +2251,24 @@ export interface components {
              */
             overridden: boolean;
         };
+        /**
+         * OrderDependentResponse
+         * @description このオーダーを上流として待っている下流のオーダー（つながり1件）
+         */
+        OrderDependentResponse: {
+            /** Id */
+            id: number;
+            kind: components["schemas"]["DependencyKind"];
+            downstream_biz: components["schemas"]["DependencyBiz"];
+            /** Downstream Order Id */
+            downstream_order_id: number;
+            downstream_status: components["schemas"]["OrderStatus"];
+            /**
+             * Downstream Scheduled Start
+             * Format: date-time
+             */
+            downstream_scheduled_start: string;
+        };
         /** OrderDetailResponse */
         OrderDetailResponse: {
             /** Id */
@@ -2301,6 +2345,11 @@ export interface components {
              * @description upstream orders this order waits for (active links)
              */
             dependencies: components["schemas"]["OrderDependencyResponse"][];
+            /**
+             * Dependents
+             * @description downstream orders waiting for this order (active links)
+             */
+            dependents: components["schemas"]["OrderDependentResponse"][];
             /**
              * Events
              * @description the order's events, oldest first
@@ -4308,6 +4357,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SOPStepTemplateResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_client_dependencies_endpoint_biz_clients__client_code__dependencies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BizDependencyResponse"][];
                 };
             };
             /** @description Bad Request(リクエスト不正) */
