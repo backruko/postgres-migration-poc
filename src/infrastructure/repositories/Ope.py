@@ -6,9 +6,10 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from src.domain_biz.models import BizMaster, ReleaseMode
+from src.domain_biz.models import BizMaster, DependencyMatchRule, ReleaseMode
 from src.domain_ope.models import (
-    EventSource, OpeOrder, OpeOrderEvent, OpeStep, OpeStepEvent, OrderEventType, OrderStatus, StepEventType, StepState,
+    EventSource, OpeDependency, OpeOrder, OpeOrderEvent, OpeStep, OpeStepEvent, OrderEventType, OrderStatus,
+    StepEventType, StepState,
 )
 
 
@@ -190,7 +191,57 @@ class OpeStepRepository:
 
 
 # ==========================================
+#  OpeDependency Repository
+# ==========================================
+class OpeDependencyRepository:
+
+    def get_active(self, db: Session, *, downstream_order_id: int, biz_dependency_id: int | None = None) -> list[OpeDependency]:
+        """下流のオーダーの有効なつながり（定義を指定すればその定義のものだけ）"""
+        stmt = select(OpeDependency).where(
+            OpeDependency.downstream_order_id == downstream_order_id, OpeDependency.removed_at.is_(None)
+        )
+        if biz_dependency_id is not None:
+            stmt = stmt.where(OpeDependency.biz_dependency_id == biz_dependency_id)
+        return list(db.scalars(stmt.order_by(OpeDependency.id)).all())
+
+    def get_active_by_definition(self, db: Session, *, biz_dependency_id: int) -> list[OpeDependency]:
+        stmt = select(OpeDependency).where(
+            OpeDependency.biz_dependency_id == biz_dependency_id, OpeDependency.removed_at.is_(None)
+        )
+        return list(db.scalars(stmt).all())
+
+    def get_active_downstream_ids(self, db: Session, *, upstream_order_id: int) -> list[int]:
+        """このオーダーを上流として待っている下流のオーダー"""
+        stmt = select(OpeDependency.downstream_order_id).where(
+            OpeDependency.upstream_order_id == upstream_order_id, OpeDependency.removed_at.is_(None)
+        )
+        return list(db.scalars(stmt).all())
+
+    def get_open_orders_of(self, db: Session, *, biz_id: int) -> list[OpeOrder]:
+        """業務の開始前のオーダー（pending / ready / それらから保留）"""
+        not_started = (OrderStatus.PENDING, OrderStatus.READY)
+        stmt = select(OpeOrder).where(
+            OpeOrder.biz_master_id == biz_id,
+            OpeOrder.status.in_(not_started)
+            | ((OpeOrder.status == OrderStatus.ON_HOLD) & OpeOrder.status_before_hold.in_(not_started)),
+        )
+        return list(db.scalars(stmt.order_by(OpeOrder.id)).all())
+
+    def get_orders_matching(
+        self, db: Session, *, biz_id: int, rule: DependencyMatchRule, key: int | date,
+    ) -> list[OpeOrder]:
+        """業務のオーダーのうち、突き合わせのキー（シート日付 / ルール上の日付）が同じもの（取消済みも含む。古い順）"""
+        stmt = select(OpeOrder).where(OpeOrder.biz_master_id == biz_id)
+        if rule == DependencyMatchRule.SAME_SHEET_EVENT:
+            stmt = stmt.where(OpeOrder.source_sheet_event_id == key)
+        else:
+            stmt = stmt.where(OpeOrder.occurrence_date == key)
+        return list(db.scalars(stmt.order_by(OpeOrder.id)).all())
+
+
+# ==========================================
 #  インスタンス化とエクスポート
 # ==========================================
 ope_order_repo = OpeOrderRepository()
 ope_step_repo = OpeStepRepository()
+ope_dependency_repo = OpeDependencyRepository()

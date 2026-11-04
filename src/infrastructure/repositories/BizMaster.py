@@ -28,6 +28,16 @@ class BizDependencyRepository:
         )
         return db.scalars(stmt).first()
 
+    def get_by_downstream(self, db: Session, *, biz_id: int) -> list[BizDependency]:
+        """その業務が下流（待つ側）になっている定義"""
+        stmt = select(BizDependency).where(BizDependency.downstream_biz_id == biz_id).order_by(BizDependency.id)
+        return list(db.scalars(stmt).all())
+
+    def get_by_upstream(self, db: Session, *, biz_id: int) -> list[BizDependency]:
+        """その業務が上流（待たれる側）になっている定義"""
+        stmt = select(BizDependency).where(BizDependency.upstream_biz_id == biz_id).order_by(BizDependency.id)
+        return list(db.scalars(stmt).all())
+
     def get_edges(self, db: Session) -> list[tuple[int, int]]:
         """すべての定義の (上流, 下流)（循環の確認用）"""
         return [(row[0], row[1]) for row in db.execute(select(BizDependency.upstream_biz_id, BizDependency.downstream_biz_id))]

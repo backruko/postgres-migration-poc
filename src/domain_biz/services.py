@@ -10,6 +10,7 @@ from src.domain_biz.schemas import (
     SOPStepTemplateCreate,
 )
 from src.core.exceptions import BadRequestError, NotFoundError, DuplicatedRecordError
+from src.domain_biz import dependency_events
 
 # ==========================================
 # BizMaster Service
@@ -372,6 +373,8 @@ def create_dependency(db: Session, downstream_biz_id: int, dep_in: BizDependency
         upstream_biz_id=upstream.id, downstream_biz_id=downstream.id, match_rule=dep_in.match_rule, kind=dep_in.kind,
     )
     db.add(dep)
+    db.flush()
+    dependency_events.notify(db, "created", dep)  # 受け手（coordination）が既存のオーダーにつながりを作る
     db.commit()
     db.refresh(dep)
     return _dependency_response(db, dep)
@@ -382,6 +385,7 @@ def delete_dependency(db: Session, dependency_id: int) -> BizDependencyResponse:
     if dep is None:
         raise NotFoundError(f"BizDependency(id={dependency_id}) not found.")
     response = _dependency_response(db, dep)
+    dependency_events.notify(db, "deleted", dep)  # 受け手がつながりに「外れた」を付ける（行は残る）
     db.delete(dep)
     db.commit()
     return response

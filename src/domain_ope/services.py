@@ -24,7 +24,7 @@ from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
 from src.domain_biz.models import BizMaster, SOPStatus, SOPVersion
 from src.domain_ope.models import EventSource, OpeOrder, OpeStep, OrderEventType, OrderStatus, StepState
-from src.domain_ope import steps
+from src.domain_ope import links, steps
 from src.domain_ope.schemas import (
     AutoReleaseResult, ConflictAction, ConflictResolveIn, OrderDetailResponse, OrderEventResponse, OrderSopVersion,
     OrderStepResponse, StepEventResponse,
@@ -420,6 +420,7 @@ def cancel_order(db: Session, order_id: int, actor_staff_id: int, reason: str) -
     order.conflict = False
     order.conflict_reason = None
     _transition(db, order, OrderStatus.CANCELED, actor_staff_id, reason)
+    links.refresh_order(db, order)  # このオーダーを待つ下流のつながりを直す
     db.flush()
     if not _cancel_plan_instance(db, order, actor_staff_id, reason):
         db.commit()
@@ -484,6 +485,7 @@ def resolve_conflict(db: Session, order_id: int, actor_staff_id: int, resolve_in
     if not cancel:
         db.flush()
         _finish_if_complete(db, order)  # 矛盾の間に最後のステップが承認されていた → ここで完了
+    links.refresh_order(db, order)  # 取消・日時の採用で、依存関係のつながりが変わりうる
     db.flush()
     if not (cancel and _cancel_plan_instance(db, order, actor_staff_id, resolve_in.reason or "conflict resolved")):
         db.commit()

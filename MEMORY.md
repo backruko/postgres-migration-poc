@@ -23,7 +23,8 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   2026-11-04 as `074840f` (not pushed). Step 5.5 (frontend: steps in the order drawer, "3/5" on dashboard rows;
   small backend addition, no migration) committed 2026-11-04 (by the user, `75cc109`). With it **Phase 5 is complete**. Phase 6 (dependencies)
   planned 2026-11-04 (§2 "Phase 6 step plan"); step 6.1 committed 2026-11-04 (`8ab5f92`, not pushed). Step 6.2 (ope_dependency table, migration
-  `cb0ae371f402`) committed 2026-11-04 (not pushed). Next: 6.3.**
+  `cb0ae371f402`) committed 2026-11-04 (`3eaede4`, not pushed). Step 6.3 (link resolution, no migration) committed
+  2026-11-04 (not pushed). Next: 6.4.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
 - **DB:** latest Alembic head is `cb0ae371f402` (ope_dependency). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
@@ -35,7 +36,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 121 passed, ~75–115 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 126 passed, ~95–160 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -89,7 +90,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 56 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 56}` to see only newer edits, and
+**Last rev written by me: 57 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 57}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–5 built, rev 52).
 
@@ -451,9 +452,9 @@ like the rest of biz.
 | # | Step | Status |
 |---|---|---|
 | 6.1 | biz `biz_dependency` (upstream biz, downstream biz, match_rule, kind HARD / INFORMATIONAL) + API, cycle check on save; migration `2904467fd7b9` | **done** (`8ab5f92`, not pushed) |
-| 6.2 | ope tables `ope_dependency` (upstream order, downstream order, definition, kind) — tables only; migration `cb0ae371f402` | **done** (not pushed) |
-| 6.3 | Link resolution: create / refresh concrete links when orders are created or moved (order_sync) and when a definition is added or removed | **next** |
-| 6.4 | Start check: hard links need the upstream order finished, else start → 400 listing blockers; force-start (releaser / admin, reason) as an order event; upstream canceled / on hold stays blocked | |
+| 6.2 | ope tables `ope_dependency` (upstream order, downstream order, definition, kind) — tables only; migration `cb0ae371f402` | **done** (`3eaede4`, not pushed) |
+| 6.3 | Link resolution: create / refresh concrete links when orders are created or moved (order_sync) and when a definition is added or removed | **done** (not pushed) |
+| 6.4 | Start check: hard links need the upstream order finished, else start → 400 listing blockers; force-start (releaser / admin, reason) as an order event; upstream canceled / on hold stays blocked | **next** |
 | 6.5 | Frontend: dependency settings for a business, upstream / downstream in the order drawer, "blocked" tag + force-start | |
 
 **6.1 as built** (`src/domain_biz/models.py` end, migration `2904467fd7b9`). `BizDependency`: `upstream_biz_id` /
@@ -487,6 +488,29 @@ uses `postgresql.ENUM(..., create_type=False)` and its downgrade leaves them to 
 - **For 6.3:** biz must not import ope, so marking links removed on a definition delete needs the coordination
   layer (e.g. the delete endpoint calling a coordination use case, or a hook like plan's slot listener).
 - Tests `tests/test_ope_dependency.py` (3; client prefix `"L"`; listener off like `test_ope.py`).
+
+**6.3 as built** (`src/domain_ope/links.py`, `src/domain_biz/dependency_events.py`; no migration). User decisions
+2026-11-04 (all as I recommended, doc rev 57): **definition changes reach ope through a biz listener**
+(`dependency_events.register_dependency_listener`, registered in `order_sync.register()` → `apply_dependency_change`;
+`create_dependency` notifies "created" after flush, `delete_dependency` notifies "deleted" before the delete);
+**only not-started downstream orders are (re)resolved** (pending / ready / on_hold from those); **a canceled upstream
+stays linked** (live matches preferred, else the latest canceled; a returning slot's new order takes over — old row
+removed with `REASON_UPSTREAM_CHANGED`); **no key → no link** (e.g. sheet rule on a non-sheet order).
+- `links.resolve(db, order, dep)`: targets = `_upstream_targets` (upstream biz's orders with the same key via
+  `ope_dependency_repo.get_orders_matching`); stale links removed, waiting rows filled with a found upstream (same
+  row) or removed when others cover it, new rows for the rest, one waiting row when nothing matches.
+- `links.refresh_order(db, order)`: one `biz_dependency_repo.get_for_biz` lookup first (returns at once for businesses
+  without definitions — order creation is hot), then resolves the order as downstream and re-resolves downstream
+  orders linked to it or matching its key. Called from `order_sync.create_order`, `_cancel`, `_slot_moved` (only when
+  `occurrence_date` changes — one-offs), `ope.cancel_order`, `ope.resolve_conflict`.
+- `links.definition_created` → all open orders of the downstream biz (`ope_dependency_repo.get_open_orders_of`);
+  `definition_deleted` → every active link of it gets `REASON_DEFINITION_DELETED` (started orders' links too).
+- Reasons (Japanese, stored): `依存関係の定義が削除されました` / `待つ上流のオーダーが変わりました` /
+  `定義の突き合わせの条件に当てはまらなくなりました`.
+- Tests `tests/test_order_links.py` (5; client prefix `"N"`; sheet case uses the mock sheet, marker 本締, offsets 0 / 1).
+  HTTP-checked on `plan_check`: definition biz 2 → biz 1 (same date) gave 184 waiting rows (biz 2 has no orders);
+  delete → 184 removed with the reason. Links aren't in any API response yet (6.4 / 6.5).
+- Known flake seen again: `test_plan.py:69` client code collision (`uq_client_id`) ~1 run in 4.
 7. Client events with automatic completion (signals).
 
 ### Open questions (in the doc)
