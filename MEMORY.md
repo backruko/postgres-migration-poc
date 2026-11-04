@@ -18,8 +18,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   migration `966b78ff950f`) committed 2026-11-04 as `fc58dd0` (not pushed). Step 5.3 (build steps, migration
   `6c8cc87274c8`) committed 2026-11-04 as `abe6281` (not pushed). Step 5.4 (step actions, no migration) committed
   2026-11-04 as `074840f` (not pushed). Step 5.5 (frontend: steps in the order drawer, "3/5" on dashboard rows;
-  small backend addition, no migration) built 2026-11-04, **uncommitted, waiting for the user's review**. With it
-  **Phase 5 is complete**. Next: Phase 6 (dependencies) — not planned yet; plan its steps with the user first.**
+  small backend addition, no migration) committed 2026-11-04. With it **Phase 5 is complete**. Next: Phase 6 (dependencies) — not planned yet; plan its steps with the user first.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
 - **DB:** latest Alembic head is `6c8cc87274c8` (ope step retired). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
@@ -339,7 +338,7 @@ when the last step is approved; a ready order whose step conditions change after
 | 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event`; migration `966b78ff950f` | **done** (`fc58dd0`, not pushed) |
 | 5.3 | Build steps: live preview while pending (in the order detail), create + freeze at release, conflict flag when a system move changes a ready order's step set; migration `6c8cc87274c8` | **done** (`abe6281`, not pushed) |
 | 5.4 | Step actions: submit (operator) / approve / reject (checker, four-eyes, reason for reject), unlock rules, start opens step 1, auto-finish on the last approval; manual finish only for zero-step orders | **done** (`074840f`, not pushed) |
-| 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | **built, uncommitted** (2026-11-04) |
+| 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | **done** (not pushed) |
 
 **5.2 as built** (`src/domain_ope/models.py`, migration `966b78ff950f`). User decisions 2026-11-04 (all four as I
 recommended): **events shaped like order events** (`StepEventType` CREATED | STATE_CHANGED, from / to required for a
