@@ -5,7 +5,11 @@ from sqlalchemy.orm import Session
 
 from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
 from src.infrastructure.database import get_db
-from src.domain_ope.schemas import ConflictResolveIn, OrderCommentIn, OrderDetailResponse, OrderReasonIn, PinSopVersionIn
+from src.domain_ope import signals
+from src.domain_ope.schemas import (
+    ConflictResolveIn, OrderCommentIn, OrderDetailResponse, OrderReasonIn, PinSopVersionIn, SignalHandleIn, SignalIn,
+    SignalResponse,
+)
 from src.domain_ope.services import (
     approve_dependency_override, approve_early_start, approve_step, cancel_order, finish_order, get_order, hold_order, pin_sop_version, reject_step,
     release_order, resolve_conflict, resume_order, start_order, submit_step, unpin_sop_version,
@@ -97,7 +101,8 @@ def resume_order_endpoint(
 def finish_order_endpoint(
     order_id: int, body: OrderCommentIn | None = None, db: Session = Depends(get_db), current_staff: StaffUser = STAFF,
 ):
-    """in_progress → finished（ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了します）"""
+    """in_progress → finished（ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了します）。
+    顧客側の出来事（LIGHTWEIGHT）は ready からも完了（受領）にでき、信号で完了する業務は理由が必須です。"""
     return finish_order(db=db, order_id=order_id, actor_staff_id=current_staff.id, comment=(body or OrderCommentIn()).comment)
 
 @router.post("/orders/{order_id}/cancel", response_model=OrderDetailResponse, responses=RESPONSES)
@@ -140,3 +145,23 @@ def approve_step_endpoint(
 def reject_step_endpoint(step_id: int, body: OrderReasonIn, db: Session = Depends(get_db), current_staff: StaffUser = STAFF):
     """submitted → todo（提出者以外・理由必須）。そのステップだけが戻り、後のステップはそのままです。"""
     return reject_step(db=db, step_id=step_id, actor_staff_id=current_staff.id, reason=body.reason)
+
+
+# ==========================================
+# Signal（顧客側の出来事の信号。Phase 7）
+# ==========================================
+
+@router.post("/signals", response_model=SignalResponse, status_code=201, responses=RESPONSES)
+@require_roles([RoleCode.SIGNAL_SENDER])
+def receive_signal_endpoint(body: SignalIn, db: Session = Depends(get_db), current_staff: StaffUser = STAFF):
+    """
+    信号を受け取ります（信号の送信のロール）。すべて記録し、照合できればオーダーを完了にします。
+    result: matched（完了にした）/ duplicate（すでに完了）/ unmatched・ambiguous（人が対応する。result_note に理由）。
+    """
+    return signals.receive_signal(db=db, signal_in=body, sender_staff_id=current_staff.id)
+
+@router.post("/signals/{signal_id}/handle", response_model=SignalResponse, responses=RESPONSES)
+@require_roles(HOLDERS)
+def handle_signal_endpoint(signal_id: int, body: SignalHandleIn, db: Session = Depends(get_db), current_staff: StaffUser = STAFF):
+    """照合できなかった信号に対応します（order_id を指定すると、そのオーダーを完了にしてから対応済みにします）。"""
+    return signals.handle_signal(db=db, signal_id=signal_id, actor_staff_id=current_staff.id, handle_in=body)

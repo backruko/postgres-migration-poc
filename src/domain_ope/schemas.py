@@ -1,11 +1,12 @@
 import enum
+import json
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.domain_biz.models import DependencyKind, DependencyMatchRule
-from src.domain_ope.models import EventSource, OrderEventType, OrderStatus, StepEventType, StepState
+from src.domain_ope.models import EventSource, OrderEventType, OrderStatus, SignalResult, StepEventType, StepState
 
 
 # ==========================================
@@ -167,3 +168,61 @@ class OrderDetailResponse(OrderResponse):
     dependencies: list[OrderDependencyResponse] = Field(description="upstream orders this order waits for (active links)")
     dependents: list[OrderDependentResponse] = Field(description="downstream orders waiting for this order (active links)")
     events: list[OrderEventResponse] = Field(description="the order's events, oldest first")
+
+
+# ==========================================
+# 信号（Phase 7）
+# ==========================================
+PAYLOAD_MAX_BYTES = 10_000
+
+
+class SignalIn(BaseModel):
+    """顧客側の出来事の信号（POST /ope/signals）。照合できなくても捨てずに残す"""
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    type: str = Field(..., min_length=1, max_length=50, description="signal type (the business's signal_type)")
+    client_code: str = Field(..., min_length=1, max_length=10)
+    key: str = Field(..., min_length=1, max_length=100, description="the order's rule date, YYYY-MM-DD")
+    received_at: datetime = Field(..., description="when the sender received it (with a timezone offset)")
+    payload: dict[str, Any] | None = Field(default=None, description="extra data for the record (never used for matching)")
+
+    @field_validator("received_at")
+    @classmethod
+    def require_timezone(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("received_at must include a timezone offset")
+        return v
+
+    @field_validator("payload")
+    @classmethod
+    def limit_payload(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is not None and len(json.dumps(v, ensure_ascii=False).encode("utf-8")) > PAYLOAD_MAX_BYTES:
+            raise ValueError(f"payload must be at most {PAYLOAD_MAX_BYTES} bytes as JSON")
+        return v
+
+
+class SignalHandleIn(BaseModel):
+    """照合できなかった信号への人の対応（order_id があれば、そのオーダーを完了にしてから対応済みにする）"""
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    note: str = Field(..., min_length=1, max_length=500)
+    order_id: int | None = Field(default=None, description="a ready / in-progress order of the signal's client to finish")
+
+
+class SignalResponse(BaseModel):
+    id: int
+    signal_type: str
+    client_code: str
+    key: str
+    received_at: datetime
+    recorded_at: datetime
+    sender_staff_id: int
+    payload: dict[str, Any] | None
+    result: SignalResult
+    matched_order_id: int | None
+    result_note: str | None
+    handled_at: datetime | None
+    handled_by_staff_id: int | None
+    handled_note: str | None
+
+    model_config = ConfigDict(from_attributes=True)

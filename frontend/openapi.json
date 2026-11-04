@@ -7674,7 +7674,7 @@
           "ope"
         ],
         "summary": "Finish Order Endpoint",
-        "description": "in_progress → finished（ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了します）",
+        "description": "in_progress → finished（ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了します）。\n顧客側の出来事（LIGHTWEIGHT）は ready からも完了（受領）にでき、信号で完了する業務は理由が必須です。",
         "operationId": "finish_order_endpoint_ope_orders__order_id__finish_post",
         "parameters": [
           {
@@ -8398,6 +8398,259 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrderDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/signals": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Receive Signal Endpoint",
+        "description": "信号を受け取ります（信号の送信のロール）。すべて記録し、照合できればオーダーを完了にします。\nresult: matched（完了にした）/ duplicate（すでに完了）/ unmatched・ambiguous（人が対応する。result_note に理由）。",
+        "operationId": "receive_signal_endpoint_ope_signals_post",
+        "parameters": [
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignalIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ope/signals/{signal_id}/handle": {
+      "post": {
+        "tags": [
+          "ope"
+        ],
+        "summary": "Handle Signal Endpoint",
+        "description": "照合できなかった信号に対応します（order_id を指定すると、そのオーダーを完了にしてから対応済みにします）。",
+        "operationId": "handle_signal_endpoint_ope_signals__signal_id__handle_post",
+        "parameters": [
+          {
+            "name": "signal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Signal Id"
+            }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignalHandleIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalResponse"
                 }
               }
             }
@@ -12702,6 +12955,219 @@
         ],
         "title": "SOPVersionScheduleIn",
         "description": "【権限者承認用】未来実装(FUTURE)へ昇格させる際の発効日指定スキーマ"
+      },
+      "SignalHandleIn": {
+        "properties": {
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Note"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id",
+            "description": "a ready / in-progress order of the signal's client to finish"
+          }
+        },
+        "type": "object",
+        "required": [
+          "note"
+        ],
+        "title": "SignalHandleIn",
+        "description": "照合できなかった信号への人の対応（order_id があれば、そのオーダーを完了にしてから対応済みにする）"
+      },
+      "SignalIn": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Type",
+            "description": "signal type (the business's signal_type)"
+          },
+          "client_code": {
+            "type": "string",
+            "maxLength": 10,
+            "minLength": 1,
+            "title": "Client Code"
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Key",
+            "description": "the order's rule date, YYYY-MM-DD"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Received At",
+            "description": "when the sender received it (with a timezone offset)"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload",
+            "description": "extra data for the record (never used for matching)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "client_code",
+          "key",
+          "received_at"
+        ],
+        "title": "SignalIn",
+        "description": "顧客側の出来事の信号（POST /ope/signals）。照合できなくても捨てずに残す"
+      },
+      "SignalResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "signal_type": {
+            "type": "string",
+            "title": "Signal Type"
+          },
+          "client_code": {
+            "type": "string",
+            "title": "Client Code"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Received At"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "sender_staff_id": {
+            "type": "integer",
+            "title": "Sender Staff Id"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "result": {
+            "$ref": "#/components/schemas/SignalResult"
+          },
+          "matched_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Order Id"
+          },
+          "result_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Note"
+          },
+          "handled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handled At"
+          },
+          "handled_by_staff_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handled By Staff Id"
+          },
+          "handled_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handled Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "signal_type",
+          "client_code",
+          "key",
+          "received_at",
+          "recorded_at",
+          "sender_staff_id",
+          "payload",
+          "result",
+          "matched_order_id",
+          "result_note",
+          "handled_at",
+          "handled_by_staff_id",
+          "handled_note"
+        ],
+        "title": "SignalResponse"
+      },
+      "SignalResult": {
+        "type": "string",
+        "enum": [
+          "matched",
+          "duplicate",
+          "unmatched",
+          "ambiguous"
+        ],
+        "title": "SignalResult"
       },
       "StaffCreate": {
         "properties": {

@@ -30,7 +30,8 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   2026-11-04 (`3669528`, not pushed). With it **Phase 6 is complete** (merged into `main`). Phase 7 (client
   events / signals) planned 2026-11-04 (§2 "Phase 7 step plan"). Step 7.1 (biz client-event settings, migration
   `6a7849dbf2ec`) committed 2026-11-04 (`0ff76dd`, not pushed). Step 7.2 (ope_signal table + role signal_sender,
-  migration `3242f180527a`) committed 2026-11-04 (not pushed). Next: 7.3.**
+  migration `3242f180527a`) committed 2026-11-04 (`a9f8fc3`, not pushed). Step 7.3 (receiving / matching signals, no
+  migration) committed 2026-11-04 (not pushed). Next: 7.4.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
 - **DB:** latest Alembic head is `3242f180527a` (ope_signal + role signal_sender). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
@@ -42,7 +43,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, dependency_start, client_events, ope_signal, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 139 passed, ~95–175 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, dependency_start, client_events, ope_signal, signals, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 145 passed, ~95–180 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -96,7 +97,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 64 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 64}` to see only newer edits, and
+**Last rev written by me: 65 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 65}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–6 built, rev 60).
 
@@ -579,9 +580,9 @@ until real login; watchers later = scripts posting the same signal); **match = s
 | # | Step | Status |
 |---|---|---|
 | 7.1 | biz `execution_type` (SOP / LIGHTWEIGHT), `completion_mode` (MANUAL / AUTOMATIC), `signal_type` (required for AUTOMATIC); biz PATCH; migration; LIGHTWEIGHT orders get no steps at release; migration `6a7849dbf2ec` | **done** (`0ff76dd`, not pushed) |
-| 7.2 | `ope_signal` table (append-only: type, client_code, key, received_at, sender, match result + order) + role `signal_sender` — tables / role only; migration `3242f180527a` | **done** (not pushed) |
-| 7.3 | `POST /ope/signals` (signal_sender): store every signal, match, finish the order (system event); unmatched / ambiguous kept; manual way out (finish with reason) for AUTOMATIC | **next** |
-| 7.4 | Read side: "late" computed on the dashboard, unmatched signals listed (`GET /ope/signals`) | |
+| 7.2 | `ope_signal` table (append-only: type, client_code, key, received_at, sender, match result + order) + role `signal_sender` — tables / role only; migration `3242f180527a` | **done** (`a9f8fc3`, not pushed) |
+| 7.3 | `POST /ope/signals` (signal_sender): store every signal, match, finish the order (system event); unmatched / ambiguous kept; manual way out (finish with reason) for AUTOMATIC | **done** (not pushed) |
+| 7.4 | Read side: "late" computed on the dashboard, unmatched signals listed (`GET /ope/signals`) | **next** |
 | 7.5 | Frontend: client-event settings on a business, 受領 (mark received) in the drawer, late tag, unmatched signals panel | |
 
 **7.1 as built** (migration `6a7849dbf2ec`). User decisions 2026-11-04 (both as I recommended, doc rev 63): **signal
@@ -618,6 +619,27 @@ not null and `deleted_at IS NULL`); **AUTOMATIC only for LIGHTWEIGHT**.
 - Role `signal_sender` (信号の送信): `RoleCode.SIGNAL_SENDER`, `ROLE_SEED`, migration INSERT … ON CONFLICT DO NOTHING
   (downgrade deletes it; fails if a staff still holds it). `test_staff.py::test_roles_are_seeded` updated.
 - Tests `tests/test_ope_signal.py` (3; client prefix `"H"`). Frontend types regenerated.
+
+**7.3 as built** (`src/domain_ope/signals.py`; no migration). User decisions 2026-11-04 (all as I recommended, doc rev
+65): **a signal finishes only ready / in-progress orders** (pending → unmatched "not released yet"); **on hold /
+conflict → unmatched** with the reason; **handle endpoint** for people. My call: **LIGHTWEIGHT orders can be finished
+from ready** (受領 = mark received; no start, so no day / dependency check for them).
+- `POST /ope/signals` (`@require_roles([SIGNAL_SENDER])`, `SignalIn {type, client_code, key, received_at (tz
+  required), payload? (≤ 10 000 bytes JSON)}`, 201 → `SignalResponse`): client code upper-cased; `_match` = AUTOMATIC
+  business with (client, signal_type) → `date.fromisoformat(key)` → non-canceled orders of that business on that
+  `occurrence_date` (FOR UPDATE): none → unmatched; all finished → DUPLICATE (latest finished order); >1 open →
+  AMBIGUOUS; the one open order: conflict / on hold / pending → unmatched, else MATCHED → `finish_by_signal`
+  (STATUS_CHANGED → FINISHED, SYSTEM, `detail {"cause": "signal", "signal_id"}`). The signal row is flushed first so
+  the event can carry its id.
+- `POST /ope/signals/{id}/handle` (operator / releaser / admin, `SignalHandleIn {note, order_id?}`): only unmatched /
+  ambiguous, once (400 otherwise); with `order_id` the order must be the signal's client's (404) and ready / in
+  progress (400) → finished as HUMAN with `detail {"cause": "signal handled", "signal_id"}` and `reason` = note.
+- `finish_order`: LIGHTWEIGHT allowed from READY or IN_PROGRESS; AUTOMATIC businesses need a non-empty comment (400).
+- Tests `tests/test_signals.py` (6; client prefix `"J"`). HTTP-checked on `plan_check`: new signal_sender staff 9 / 10,
+  **biz 2 `MOCK0002` is now LIGHTWEIGHT + AUTOMATIC `data_received` with daily template 23** (left that way for 7.4 /
+  7.5); order 194 (11/07): signal before release unmatched, operator 403, after release matched → finished (SYSTEM,
+  signal 2), resend duplicate, handle once 200 / again 400.
+- Gotcha: plan template API wants `template_type: "rrule"` (lowercase value).
 
 ### Open questions (in the doc)
 Client event scope (per business or per client) · reset later steps on rejection (proposed no) · "latest before due"
