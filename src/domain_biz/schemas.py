@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.domain_biz.models import ReleaseMode, SOPStatus
+from src.domain_biz.models import DependencyKind, DependencyMatchRule, ReleaseMode, SOPStatus
 
 RELEASE_FIELDS = ("release_mode", "release_time", "release_days_before")
 
@@ -149,3 +149,30 @@ class SOPStepTemplateResponse(BaseModel):
 class SOPStepTemplateUpdate(BaseModel):
     """リポジトリの型定義(CRUDBase)を通過させるためだけの空スキーマ（実際には使いません）"""
     pass
+
+
+# ==========================================
+# 業務間の依存関係（Phase 6）
+# ==========================================
+class BizDependencyCreate(BaseModel):
+    """この業務（下流）が、upstream_biz_id の業務（上流）を待つ"""
+    upstream_biz_id: int
+    match_rule: DependencyMatchRule
+    kind: DependencyKind = DependencyKind.HARD
+
+
+class BizRef(BaseModel):
+    id: int
+    business_code: str
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BizDependencyResponse(BaseModel):
+    id: int
+    upstream: BizRef
+    downstream: BizRef
+    match_rule: DependencyMatchRule
+    kind: DependencyKind
+    created_at: datetime

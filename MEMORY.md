@@ -5,8 +5,11 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 
 ## 1. Current status
 
-- **Branches:** `main` = Plan MVP + Phases 1–3 (merged 2026-10-28, merge `23767b8`, pushed by the user).
-  **Current work: `feature/ope-orders`** (from `main`), Phase 4. The user pushes; I never do.
+- **Branches:** `main` = Plan MVP + Phases 1–5. Phases 1–3 merged 2026-10-28 (`23767b8`); **Phases 4–5 merged
+  locally 2026-11-04 at the user's request (`71de514`, --no-ff, not pushed — the user pushes `main` and
+  `feature/ope-orders`)**. **Current work: `feature/ope-dependencies`** (from `main` after that merge), Phase 6.
+  The user pushes; I never do. (The user committed + pushed 5.5 themselves as `75cc109 phase5`; my MEMORY-only
+  commit on top is `6a37fee`.)
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
   next-occurrence guarantee) and 3 (staff: backend + screen) are done. Phase 4 (ope orders): step 4.1 (release
   settings on businesses), 4.2 (ope tables, `0552e9f`, pushed), 4.3 (order sync, `7d94be7`) and 4.4 (status API,
@@ -18,19 +21,20 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   migration `966b78ff950f`) committed 2026-11-04 as `fc58dd0` (not pushed). Step 5.3 (build steps, migration
   `6c8cc87274c8`) committed 2026-11-04 as `abe6281` (not pushed). Step 5.4 (step actions, no migration) committed
   2026-11-04 as `074840f` (not pushed). Step 5.5 (frontend: steps in the order drawer, "3/5" on dashboard rows;
-  small backend addition, no migration) committed 2026-11-04. With it **Phase 5 is complete**. Next: Phase 6 (dependencies) — not planned yet; plan its steps with the user first.**
+  small backend addition, no migration) committed 2026-11-04 (by the user, `75cc109`). With it **Phase 5 is complete**. Phase 6 (dependencies)
+  planned 2026-11-04 (§2 "Phase 6 step plan"); step 6.1 committed 2026-11-04 (not pushed). Next: 6.2.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
-- **DB:** latest Alembic head is `6c8cc87274c8` (ope step retired). Migrations: `ceee1634d6a7`
+- **DB:** latest Alembic head is `2904467fd7b9` (biz_dependency). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
   `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` →
-  `971958268657` (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at, RETIRED).
+  `971958268657` (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at, RETIRED) → `2904467fd7b9` (biz_dependency).
   The user's dev DB: at `6c8cc87274c8` (upgraded by the user 2026-11-04); earlier, at `5eede5808433` on 2026-10-30 (staff id 1, login `system`, system_admin; biz 1 has SOP
-  version 1 `v1.1.0`); `971958268657`, `966b78ff950f` and `6c8cc87274c8` handed over.
-  `plan_check` is at `6c8cc87274c8`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
+  version 1 `v1.1.0`); `971958268657`, `966b78ff950f` and `6c8cc87274c8` handed over; `2904467fd7b9` handed over 2026-11-04.
+  `plan_check` is at `2904467fd7b9`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, ope, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 114 passed, ~70–115 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 118 passed, ~70–115 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -84,7 +88,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 52 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 52}` to see only newer edits, and
+**Last rev written by me: 54 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 54}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–5 built, rev 52).
 
@@ -338,7 +342,7 @@ when the last step is approved; a ready order whose step conditions change after
 | 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event`; migration `966b78ff950f` | **done** (`fc58dd0`, not pushed) |
 | 5.3 | Build steps: live preview while pending (in the order detail), create + freeze at release, conflict flag when a system move changes a ready order's step set; migration `6c8cc87274c8` | **done** (`abe6281`, not pushed) |
 | 5.4 | Step actions: submit (operator) / approve / reject (checker, four-eyes, reason for reject), unlock rules, start opens step 1, auto-finish on the last approval; manual finish only for zero-step orders | **done** (`074840f`, not pushed) |
-| 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | **done** (not pushed) |
+| 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | **done** (`75cc109`, committed + pushed by the user) |
 
 **5.2 as built** (`src/domain_ope/models.py`, migration `966b78ff950f`). User decisions 2026-11-04 (all four as I
 recommended): **events shaped like order events** (`StepEventType` CREATED | STATE_CHANGED, from / to required for a
@@ -433,7 +437,40 @@ approver / rejecter ≠ the **latest** submitter of that step (`ope_step_repo.la
   (12/07, 3 steps incl. blocking) — preview, release, start, operator / checker actions, four-eyes hiding, reject
   reason, finish, dashboard "3/3": all 14 checks passed. **Not checked: the browser** (layout, the drawer, buttons) —
   the user clicks through.
-6. Dependencies (hard + override, informational).
+6. Dependencies (hard + override, informational). ← **in progress** (branch `feature/ope-dependencies`)
+
+#### Phase 6 decisions (2026-11-04, doc rev 54)
+Matching rules built: **same sheet event** and **same occurrence date** ("latest before due" stays an open question;
+add later as a new `match_rule` value). **A hard link whose upstream order can't be found = not met** (start refused;
+releaser / admin force-start with reason). **Same client only** (doc open question ticked). Concrete links stored in
+ope (`ope_dependency`), as the doc says. My call: definition writes need **admin** (業務管理者 = 業務の設定); reads open
+like the rest of biz.
+
+#### Phase 6 step plan (approved 2026-11-04)
+| # | Step | Status |
+|---|---|---|
+| 6.1 | biz `biz_dependency` (upstream biz, downstream biz, match_rule, kind HARD / INFORMATIONAL) + API, cycle check on save; migration `2904467fd7b9` | **done** (not pushed) |
+| 6.2 | ope tables `ope_dependency` (upstream order, downstream order, definition, kind) — tables only | **next** |
+| 6.3 | Link resolution: create / refresh concrete links when orders are created or moved (order_sync) and when a definition is added or removed | |
+| 6.4 | Start check: hard links need the upstream order finished, else start → 400 listing blockers; force-start (releaser / admin, reason) as an order event; upstream canceled / on hold stays blocked | |
+| 6.5 | Frontend: dependency settings for a business, upstream / downstream in the order drawer, "blocked" tag + force-start | |
+
+**6.1 as built** (`src/domain_biz/models.py` end, migration `2904467fd7b9`). `BizDependency`: `upstream_biz_id` /
+`downstream_biz_id` (FK biz_master RESTRICT), `match_rule` (`DependencyMatchRule` SAME_SHEET_EVENT |
+SAME_OCCURRENCE_DATE), `kind` (`DependencyKind` HARD default | INFORMATIONAL), `created_at`; CHECK
+`ck_biz_dependency_not_self`, unique `uq_biz_dependency_pair` (one definition per pair, whatever the rule).
+- API: `GET /biz/{biz_id}/dependencies` (both directions, open) · `POST /biz/{biz_id}/dependencies`
+  `{upstream_biz_id, match_rule, kind?}` (this biz = downstream; `@require_roles([ADMIN])`) · `DELETE
+  /biz/dependencies/{id}` (admin; hard delete). Response `BizDependencyResponse {id, upstream, downstream: BizRef{id,
+  business_code, name}, match_rule, kind, created_at}` (refs read with `include_deleted`).
+- Service checks: self 400, other client 400, deleted / unknown biz 404 (`get_biz`), duplicate pair 409, cycle 400
+  (`_creates_cycle`: DFS from downstream over all definitions, hard and informational). Created via the ORM (not
+  `CRUDBase.create`: enums). No PATCH (change = delete + create) — mention if the UI needs it.
+- `biz_dependency_repo` (`BizMaster.py`): `get_for_biz`, `get_pair`, `get_edges`. Migration drops the two enum types
+  on downgrade.
+- Tests `tests/test_biz_dependency.py` (4; client prefix `"G"`; guard checked via the OpenAPI x-staff-id param like
+  `test_staff.py`). HTTP-checked on `plan_check`: new admin staff 8, new biz 2 `MOCK0002`; no staff 401, operator 403,
+  admin 201, duplicate 409, cycle 400, delete 200.
 7. Client events with automatic completion (signals).
 
 ### Open questions (in the doc)

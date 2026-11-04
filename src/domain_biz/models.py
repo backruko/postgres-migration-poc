@@ -328,3 +328,40 @@ class SOPStepTemplate(Base):
         # 同一のSOPバージョン内では、同じステップ番号を二重に登録させない
         Index("uq_sop_version_step_num", "sop_version_id", "step_num", unique=True),
     )
+
+
+# ==========================================
+# 業務間の依存関係の定義（Phase 6）
+# 「下流の業務のオーダーは、上流の業務の対応するオーダーが終わってから」。オーダー同士の具体的なつながりは ope が作る。
+# ==========================================
+class DependencyMatchRule(str, enum.Enum):
+    """下流のオーダーが、どの上流のオーダーを待つか"""
+    SAME_SHEET_EVENT = "same_sheet_event"          # 同じシート日付（例: 同じ振込日から算出した受領と本処理）
+    SAME_OCCURRENCE_DATE = "same_occurrence_date"  # 同じルール上の日付（例: 毎日の2つの業務）
+
+
+class DependencyKind(str, enum.Enum):
+    HARD = "hard"                    # 上流が終わるまで開始できない（リリース担当・業務管理者が理由付きで強制開始できる）
+    INFORMATIONAL = "informational"  # 表示だけ（開始を止めない）
+
+
+class BizDependency(Base):
+    __tablename__ = "biz_dependency"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    upstream_biz_id: Mapped[int] = mapped_column(ForeignKey("biz_master.id", ondelete="RESTRICT"), index=True)
+    downstream_biz_id: Mapped[int] = mapped_column(ForeignKey("biz_master.id", ondelete="RESTRICT"), index=True)
+    match_rule: Mapped[DependencyMatchRule] = mapped_column(
+        Enum(DependencyMatchRule, name="biz_dependency_match_rule_enum"), nullable=False
+    )
+    kind: Mapped[DependencyKind] = mapped_column(
+        Enum(DependencyKind, name="biz_dependency_kind_enum"), nullable=False, default=DependencyKind.HARD,
+        server_default=text("'HARD'"),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("upstream_biz_id <> downstream_biz_id", name="ck_biz_dependency_not_self"),
+        # 同じ組み合わせの定義は1件（循環は保存時にサービスで確かめる）
+        Index("uq_biz_dependency_pair", "upstream_biz_id", "downstream_biz_id", unique=True),
+    )

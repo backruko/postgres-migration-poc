@@ -7,12 +7,16 @@ from src.infrastructure.database import get_db
 from src.domain_biz.services import (
     create_biz, get_biz, get_bizes, update_biz, delete_biz, restore_biz, clone_active_to_draft, 
     create_step_template, approve_and_schedule_version, cancel_future_version,
-    get_current_active_version, create_new_sop_version
+    get_current_active_version, create_new_sop_version, list_dependencies, create_dependency, delete_dependency,
 )
 from src.domain_biz.schemas import (
     BizMasterCreate, BizMasterUpdate, BizMasterResponse, SOPVersionCreate, 
-    SOPVersionResponse, SOPVersionScheduleIn, SOPStepTemplateCreate, SOPStepTemplateResponse
+    SOPVersionResponse, SOPVersionScheduleIn, SOPStepTemplateCreate, SOPStepTemplateResponse,
+    BizDependencyCreate, BizDependencyResponse,
 )
+from src.core.schemas.error import AUTH_ERRORS
+from src.domain_staff.auth import require_roles
+from src.domain_staff.models import RoleCode
 
 router = APIRouter(prefix="/biz", tags=["biz"])
 
@@ -106,3 +110,25 @@ def create_step_template_endpoint(version_id: int, step_in: SOPStepTemplateCreat
     ※対象のバージョンがすでに現行(ACTIVE)または予約済(FUTURE)の場合はエラーになります。
     """
     return create_step_template(db=db, version_id=version_id, step_in=step_in)
+
+
+# ==========================================
+# 業務間の依存関係（Phase 6）。定義の変更は業務管理者のみ（参照は他の biz エンドポイントと同じく制限なし）
+# ==========================================
+
+@router.get("/{biz_id}/dependencies", response_model=list[BizDependencyResponse], responses={**COMMON_ERRORS})
+def list_dependencies_endpoint(biz_id: int, db: Session = Depends(get_db)):
+    """この業務が上流または下流になっている依存関係"""
+    return list_dependencies(db=db, biz_id=biz_id)
+
+@router.post("/{biz_id}/dependencies", response_model=BizDependencyResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+def create_dependency_endpoint(biz_id: int, body: BizDependencyCreate, db: Session = Depends(get_db)):
+    """この業務（下流）が上流の業務を待つ定義を作ります（同じ顧客の業務のみ。循環・二重登録は不可）。"""
+    return create_dependency(db=db, downstream_biz_id=biz_id, dep_in=body)
+
+@router.delete("/dependencies/{dependency_id}", response_model=BizDependencyResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+def delete_dependency_endpoint(dependency_id: int, db: Session = Depends(get_db)):
+    """依存関係の定義を削除します。"""
+    return delete_dependency(db=db, dependency_id=dependency_id)

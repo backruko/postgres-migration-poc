@@ -3,9 +3,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, or_
 from sqlalchemy.exc import IntegrityError
 
-from src.infrastructure.repositories import biz_master_repo, client_repo, sop_version_repo, sop_step_repo
-from src.domain_biz.models import BizMaster, SOPVersion, SOPStepTemplate, SOPStatus
-from src.domain_biz.schemas import BizMasterCreate, BizMasterUpdate, SOPVersionCreate, SOPStepTemplateCreate
+from src.infrastructure.repositories import biz_dependency_repo, biz_master_repo, client_repo, sop_version_repo, sop_step_repo
+from src.domain_biz.models import BizDependency, BizMaster, SOPVersion, SOPStepTemplate, SOPStatus
+from src.domain_biz.schemas import (
+    BizDependencyCreate, BizDependencyResponse, BizMasterCreate, BizMasterUpdate, BizRef, SOPVersionCreate,
+    SOPStepTemplateCreate,
+)
 from src.core.exceptions import BadRequestError, NotFoundError, DuplicatedRecordError
 
 # ==========================================
@@ -305,3 +308,80 @@ def cancel_future_version(db: Session, biz_id: int, future_version_id: int) -> S
     db.refresh(future_version)
     return future_version
 
+
+# ==========================================
+# 業務間の依存関係（Phase 6）
+# ==========================================
+def _dependency_response(db: Session, dep: BizDependency) -> BizDependencyResponse:
+    # 論理削除された業務も表示できるよう、全局の論理削除フィルタを外して読む
+    def ref(biz_id: int) -> BizRef:
+        biz = db.scalars(
+            select(BizMaster).where(BizMaster.id == biz_id).execution_options(include_deleted=True)
+        ).one()
+        return BizRef.model_validate(biz)
+
+    return BizDependencyResponse(
+        id=dep.id, upstream=ref(dep.upstream_biz_id), downstream=ref(dep.downstream_biz_id),
+        match_rule=dep.match_rule, kind=dep.kind, created_at=dep.created_at,
+    )
+
+
+def list_dependencies(db: Session, biz_id: int) -> list[BizDependencyResponse]:
+    """その業務が上流または下流になっている依存関係"""
+    get_biz(db, biz_id)
+    return [_dependency_response(db, d) for d in biz_dependency_repo.get_for_biz(db, biz_id=biz_id)]
+
+
+def _creates_cycle(edges: list[tuple[int, int]], upstream: int, downstream: int) -> bool:
+    """upstream → downstream を足すと循環するか（downstream から既存の定義をたどって upstream に着くか）"""
+    following: dict[int, list[int]] = {}
+    for up, down in edges:
+        following.setdefault(up, []).append(down)
+    seen, stack = set(), [downstream]
+    while stack:
+        node = stack.pop()
+        if node == upstream:
+            return True
+        if node not in seen:
+            seen.add(node)
+            stack.extend(following.get(node, []))
+    return False
+
+
+def create_dependency(db: Session, downstream_biz_id: int, dep_in: BizDependencyCreate) -> BizDependencyResponse:
+    """
+    この業務（下流）が上流の業務を待つ定義を作ります。同じ顧客の業務どうしのみ（2026-11-04 の決定）。
+    自分自身・同じ組み合わせの二重登録・循環（A → B → A など）は保存しない。
+    """
+    downstream = get_biz(db, downstream_biz_id)
+    if dep_in.upstream_biz_id == downstream_biz_id:
+        raise BadRequestError("A business cannot depend on itself.")
+    upstream = get_biz(db, dep_in.upstream_biz_id)
+    if upstream.client_code != downstream.client_code:
+        raise BadRequestError(
+            f"Dependencies link businesses of the same client only ({upstream.business_code} is {upstream.client_code}, "
+            f"{downstream.business_code} is {downstream.client_code})."
+        )
+    if biz_dependency_repo.get_pair(db, upstream_biz_id=upstream.id, downstream_biz_id=downstream.id):
+        raise DuplicatedRecordError(f"{downstream.business_code} already depends on {upstream.business_code}.")
+    if _creates_cycle(biz_dependency_repo.get_edges(db), upstream.id, downstream.id):
+        raise BadRequestError(
+            f"{downstream.business_code} → {upstream.business_code} would create a cycle of dependencies."
+        )
+    dep = BizDependency(
+        upstream_biz_id=upstream.id, downstream_biz_id=downstream.id, match_rule=dep_in.match_rule, kind=dep_in.kind,
+    )
+    db.add(dep)
+    db.commit()
+    db.refresh(dep)
+    return _dependency_response(db, dep)
+
+
+def delete_dependency(db: Session, dependency_id: int) -> BizDependencyResponse:
+    dep = db.get(BizDependency, dependency_id)
+    if dep is None:
+        raise NotFoundError(f"BizDependency(id={dependency_id}) not found.")
+    response = _dependency_response(db, dep)
+    db.delete(dep)
+    db.commit()
+    return response
