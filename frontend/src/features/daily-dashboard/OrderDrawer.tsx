@@ -6,7 +6,11 @@ import {
   availableActions, CONFLICT_ACTION_LABEL, ORDER_ACTION_LABEL, ORDER_EVENT_LABEL, ORDER_STATUS_COLOR, ORDER_STATUS_LABEL,
   REASON_REQUIRED, SOP_SOURCE_LABEL, startBlockedReason, type OrderAction,
 } from "../../domain/ope/lib/orderActions";
-import type { ConflictAction, OrderDetail, OrderEvent } from "../../domain/ope/types";
+import {
+  availableStepActions, describeStepEvent, rejectionReason, STEP_ACTION_LABEL, STEP_REASON_REQUIRED, STEP_STATE_COLOR,
+  STEP_STATE_LABEL, stepBlockedReason, stepProgress, type StepAction,
+} from "../../domain/ope/lib/stepActions";
+import type { ConflictAction, OrderDetail, OrderEvent, OrderStep } from "../../domain/ope/types";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { ApiError } from "../../shared/api/http";
 import { TIMEZONE } from "../../shared/config";
@@ -38,16 +42,22 @@ interface ActionValues {
   conflictAction?: ConflictAction;
 }
 
+/** 確認中の操作（オーダーの操作か、ステップの操作か） */
+type PendingAction = { kind: "order"; action: OrderAction } | { kind: "step"; action: StepAction; step: OrderStep };
+
+const pendingLabel = (p: PendingAction) =>
+  p.kind === "order" ? ORDER_ACTION_LABEL[p.action] : `ステップ ${p.step.step_num} を${STEP_ACTION_LABEL[p.action]}`;
+
 /**
- * オーダーの詳細（右から開くドロワー）。状態・SOP バージョン・記録と、操作する職員のロールで使える操作を表示する。
- * 操作の可否の最終判定はバックエンド（ここではボタンの出し分けのみ）。
+ * オーダーの詳細（右から開くドロワー）。状態・SOP バージョン・ステップ・記録と、操作する職員のロールで使える操作を表示する。
+ * ステップはリリース前はプレビュー（リリース時に確定）。操作の可否の最終判定はバックエンド（ここではボタンの出し分けのみ）。
  */
 export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
   const { message } = App.useApp();
   const order = useOrder(orderId);
   const me = useCurrentStaff();
   const [form] = Form.useForm<ActionValues>();
-  const [pending, setPending] = useState<OrderAction | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,16 +67,24 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
   const actions = data ? availableActions(data, me.data, today, day) : [];
   const blocked = data ? startBlockedReason(data, today, day) : null;
 
-  const openAction = (action: OrderAction) => {
+  const openAction = (next: PendingAction) => {
     form.resetFields();
     form.setFieldsValue({ conflictAction: "accept_plan" });
     setError(null);
-    setPending(action);
+    setPending(next);
   };
 
-  const run = async (action: OrderAction, v: ActionValues, current: OrderDetail): Promise<OrderDetail> => {
+  const run = async (p: PendingAction, v: ActionValues, current: OrderDetail): Promise<OrderDetail> => {
     const text = v.text?.trim() || undefined;
-    switch (action) {
+    if (p.kind === "step") {
+      const stepId = p.step.id as number;
+      switch (p.action) {
+        case "submit": return orderApi.submitStep(stepId, text);
+        case "approve": return orderApi.approveStep(stepId, text);
+        case "reject": return orderApi.rejectStep(stepId, text ?? "");
+      }
+    }
+    switch (p.action) {
       case "release": return orderApi.release(current.id, text);
       case "approveEarlyStart": return orderApi.approveEarlyStart(current.id, text);
       case "start": return orderApi.start(current.id, text);
@@ -84,7 +102,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
     setError(null);
     try {
       const updated = await run(pending, v, data);
-      message.success(`${ORDER_ACTION_LABEL[pending]}しました（${ORDER_STATUS_LABEL[updated.status]}）`);
+      message.success(`${pendingLabel(pending)}しました（${ORDER_STATUS_LABEL[updated.status]}）`);
       setPending(null);
       order.reload();
       onChanged();
@@ -96,7 +114,13 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
   };
 
   const conflictAction = Form.useWatch("conflictAction", form);
-  const reasonRequired = pending !== null && (REASON_REQUIRED.has(pending) || (pending === "resolveConflict" && conflictAction === "cancel"));
+  const reasonRequired = pending !== null && (
+    pending.kind === "step"
+      ? STEP_REASON_REQUIRED.has(pending.action)
+      : REASON_REQUIRED.has(pending.action) || (pending.action === "resolveConflict" && conflictAction === "cancel")
+  );
+  const approvedCount = data ? data.steps.filter((st) => st.state === "approved").length : 0;
+  const progress = data && !data.steps_preview ? stepProgress(data.steps.length, approvedCount) : null;
 
   return (
     <Drawer open={orderId !== null} onClose={onClose} title={title} width={520} destroyOnClose>
@@ -135,7 +159,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
             ) : actions.length ? (
               <Space wrap>
                 {actions.map((a) => (
-                  <Button key={a} type={a === "cancel" ? "default" : "primary"} danger={a === "cancel"} ghost={a !== "cancel" && a !== actions[0]} onClick={() => openAction(a)}>
+                  <Button key={a} type={a === "cancel" ? "default" : "primary"} danger={a === "cancel"} ghost={a !== "cancel" && a !== actions[0]} onClick={() => openAction({ kind: "order", action: a })}>
                     {ORDER_ACTION_LABEL[a]}
                   </Button>
                 ))}
@@ -144,6 +168,30 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
               <Typography.Text type="secondary">この職員のロールで行える操作はありません。</Typography.Text>
             )}
             {blocked && <div className="muted order-blocked">{blocked}</div>}
+          </div>
+
+          <div>
+            <Typography.Title level={5}>
+              ステップ {progress && <span className="muted">（承認 {progress}）</span>}
+            </Typography.Title>
+            {data.steps_preview && data.steps.length > 0 && (
+              <Typography.Paragraph type="secondary">リリース前のプレビューです（予定日の条件で決まり、リリース時に確定します）。</Typography.Paragraph>
+            )}
+            {data.steps.length === 0 ? (
+              <span className="muted">ステップはありません{data.released_at ? "（作業者が完了にします）" : ""}</span>
+            ) : (
+              <ol className="order-steps">
+                {data.steps.map((st) => (
+                  <StepRow
+                    key={st.step_template_id}
+                    step={st}
+                    actions={availableStepActions(data, st, me.data)}
+                    blocked={stepBlockedReason(data, st, me.data)}
+                    onAction={(a) => openAction({ kind: "step", action: a, step: st })}
+                  />
+                ))}
+              </ol>
+            )}
           </div>
 
           <div>
@@ -165,21 +213,21 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
 
       <Modal
         open={pending !== null}
-        title={pending ? ORDER_ACTION_LABEL[pending] : ""}
-        okText={pending ? ORDER_ACTION_LABEL[pending] : ""}
-        okButtonProps={{ danger: pending === "cancel" }}
+        title={pending ? pendingLabel(pending) : ""}
+        okText={pending ? (pending.kind === "order" ? ORDER_ACTION_LABEL[pending.action] : STEP_ACTION_LABEL[pending.action]) : ""}
+        okButtonProps={{ danger: pending?.kind === "order" && pending.action === "cancel" }}
         cancelText="キャンセル"
         onOk={() => form.submit()}
         onCancel={() => setPending(null)}
         confirmLoading={submitting}
         destroyOnClose
       >
-        {pending === "cancel" && (
+        {pending?.kind === "order" && pending.action === "cancel" && (
           <Typography.Paragraph type="secondary">オーダーを取り消すと、予定（カレンダー）からも取り消されます。元に戻せません。</Typography.Paragraph>
         )}
         {error && <Alert type="error" showIcon message={error} className="modal-alert" />}
         <Form form={form} layout="vertical" onFinish={submit} disabled={submitting}>
-          {pending === "resolveConflict" && (
+          {pending?.kind === "order" && pending.action === "resolveConflict" && (
             <Form.Item name="conflictAction" label="解決方法">
               <Radio.Group onChange={() => form.validateFields(["text"]).catch(() => undefined)}>
                 <Space direction="vertical">
@@ -201,5 +249,44 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
         </Form>
       </Modal>
     </Drawer>
+  );
+}
+
+/** ステップ1件: 番号・タイトル・状態・内容・最後の人の操作・差し戻しの理由と、使える操作 */
+function StepRow({ step, actions, blocked, onAction }: {
+  step: OrderStep;
+  actions: StepAction[];
+  blocked: string | null;
+  onAction: (a: StepAction) => void;
+}) {
+  const humans = step.events.filter((e) => e.source === "human");
+  const last = humans[humans.length - 1];
+  const rejected = rejectionReason(step);
+  return (
+    <li className={`order-step ${step.state ?? "preview"}`}>
+      <div className="order-step-head">
+        <span className="mono order-step-num">{step.step_num}</span>
+        <b>{step.title}</b>
+        {step.state && <Tag color={STEP_STATE_COLOR[step.state]}>{STEP_STATE_LABEL[step.state]}</Tag>}
+        {step.is_blocking && <Tag title="承認されるまで次のステップは開きません">承認で次へ</Tag>}
+      </div>
+      {step.content && <div className="muted order-step-content">{step.content}</div>}
+      {rejected && <Alert type="warning" showIcon message={`差し戻し: ${rejected}`} className="order-step-alert" />}
+      {last && !rejected && (
+        <div className="muted order-step-last">
+          {describeStepEvent(last)}: 職員 #{last.actor_staff_id} ・ {fmt(last.occurred_at)}{last.reason ? ` ・ ${last.reason}` : ""}
+        </div>
+      )}
+      {actions.length > 0 && (
+        <Space size={6} className="order-step-actions">
+          {actions.map((a) => (
+            <Button key={a} size="small" type={a === "reject" ? "default" : "primary"} onClick={() => onAction(a)}>
+              {STEP_ACTION_LABEL[a]}
+            </Button>
+          ))}
+        </Space>
+      )}
+      {blocked && <div className="muted order-blocked">{blocked}</div>}
+    </li>
   );
 }

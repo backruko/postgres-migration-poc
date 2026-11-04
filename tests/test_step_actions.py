@@ -15,6 +15,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
+from src.coordination import services as ops_services
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, ForbiddenError
 from src.domain_biz.models import SOPStatus, SOPStepTemplate, SOPVersion
@@ -207,3 +208,17 @@ def test_last_approval_waits_for_an_open_conflict(db, started, staff):
     r = ope.resolve_conflict(db, started.id, staff["releaser"], ConflictResolveIn(action=ConflictAction.KEEP))
     assert r.status == OrderStatus.FINISHED and not r.conflict
     assert [e.event_type for e in r.events[-2:]] == [OrderEventType.CONFLICT_RESOLVED, OrderEventType.STATUS_CHANGED]
+
+
+# ==========================================
+# ダッシュボードの進み具合（5.5）
+# ==========================================
+def test_dashboard_rows_carry_the_step_progress(db, started, staff):
+    ope.submit_step(db, step_id(started, 1), staff["operator"])
+    ope.approve_step(db, step_id(started, 1), staff["checker"])
+    day = started.scheduled_start.astimezone(JST).date()
+    dash = ops_services.get_daily_dashboard(db, day, "Asia/Tokyo")
+    summaries = [
+        o.order for c in dash.clients for b in c.businesses for o in b.occurrences if o.order and o.order.id == started.id
+    ]
+    assert len(summaries) == 1 and (summaries[0].steps_total, summaries[0].steps_approved) == (3, 1)

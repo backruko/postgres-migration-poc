@@ -22,6 +22,7 @@ from src.infrastructure.repositories import (
     business_calendar_repo,
     client_repo,
     ope_order_repo,
+    ope_step_repo,
     plan_cache_repo,
     plan_instance_repo,
     reference_sheet_repo,
@@ -65,6 +66,7 @@ def get_daily_dashboard(db: Session, target_date: date | None, tz_name: str) -> 
     occurrences = plan_cache_repo.query_starting_in(db, start=start, end=end)
     # 予定ごとのオーダー（1回のクエリで取得。取消済みのオーダーは除く）
     orders = ope_order_repo.get_active_by_instances(db, instance_ids=[cache.instance_id for cache, _, _ in occurrences])
+    progress = ope_step_repo.progress_by_orders(db, order_ids=[o.id for o in orders.values()])
     for cache, instance, biz in occurrences:
         order = orders.get(cache.instance_id)
         business(biz).occurrences.append(DailyOccurrence(
@@ -80,6 +82,7 @@ def get_daily_dashboard(db: Session, target_date: date | None, tz_name: str) -> 
             ui_metadata=cache.ui_metadata,
             order=DailyOrderSummary(
                 id=order.id, status=order.status, conflict=order.conflict, conflict_reason=order.conflict_reason,
+                steps_total=progress.get(order.id, (0, 0))[0], steps_approved=progress.get(order.id, (0, 0))[1],
             ) if order else None,
         ))
 

@@ -1,6 +1,7 @@
 import { Tag } from "antd";
 import { Link } from "react-router-dom";
 import { ORDER_STATUS_COLOR, ORDER_STATUS_LABEL } from "../../domain/ope/lib/orderActions";
+import { stepProgress } from "../../domain/ope/lib/stepActions";
 import type { DailyClient } from "../../domain/ops/types";
 import { timeIn } from "../../shared/lib/datetime";
 import { Icon } from "../calendar/components/Icon";
@@ -55,6 +56,7 @@ export function DailyClientSection({ client, date, timezone, onOpenOrder }: Prop
               const style = chipStyle(o.ui_metadata);
               const order = o.order;
               const open = order ? () => onOpenOrder(order.id, `${b.biz_code} ${o.title}`) : undefined;
+              const progress = order ? stepProgress(order.steps_total, order.steps_approved) : null;
               return (
                 <li
                   key={o.instance_id}
@@ -78,6 +80,7 @@ export function DailyClientSection({ client, date, timezone, onOpenOrder }: Prop
                   {o.is_override && <Tag>人が変更</Tag>}
                   {o.origin === "one_off" && <Tag>臨時</Tag>}
                   {o.occurrence_date !== date && <span className="muted">元の日付 {shortDate(o.occurrence_date)}</span>}
+                  {progress && <span className="mono muted order-progress" title="承認済みのステップ / ステップ数">{progress}</span>}
                   {order?.conflict && <Tag color="warning" title={order.conflict_reason ?? undefined}>矛盾</Tag>}
                 </li>
               );

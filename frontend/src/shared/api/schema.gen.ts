@@ -1848,6 +1848,18 @@ export interface components {
             conflict: boolean;
             /** Conflict Reason */
             conflict_reason?: string | null;
+            /**
+             * Steps Total
+             * @description the order's steps (0: not released yet, or no steps)
+             * @default 0
+             */
+            steps_total: number;
+            /**
+             * Steps Approved
+             * @description steps approved so far
+             * @default 0
+             */
+            steps_approved: number;
         };
         /**
          * DailyVoidedItem
@@ -2130,11 +2142,10 @@ export interface components {
              * Steps
              * @description released: the order's steps; not released: a live preview from the SOP version it would run
              */
-            steps?: components["schemas"]["OrderStepResponse"][];
+            steps: components["schemas"]["OrderStepResponse"][];
             /**
              * Steps Preview
              * @description true while the steps are only a preview (not released yet)
-             * @default false
              */
             steps_preview: boolean;
             /**
@@ -2229,7 +2240,7 @@ export interface components {
              * Events
              * @description the step's events, oldest first (empty in a preview)
              */
-            events?: components["schemas"]["StepEventResponse"][];
+            events: components["schemas"]["StepEventResponse"][];
         };
         /** PinSopVersionIn */
         PinSopVersionIn: {

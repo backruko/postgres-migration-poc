@@ -85,7 +85,7 @@ class OrderStepResponse(BaseModel):
     content: str | None
     is_blocking: bool
     state: StepState | None = Field(description="null in a preview")
-    events: list[StepEventResponse] = Field(default_factory=list, description="the step's events, oldest first (empty in a preview)")
+    events: list[StepEventResponse] = Field(description="the step's events, oldest first (empty in a preview)")
 
 
 class OrderSopVersion(BaseModel):
@@ -131,8 +131,7 @@ class AutoReleaseResult(BaseModel):
 
 class OrderDetailResponse(OrderResponse):
     steps: list[OrderStepResponse] = Field(
-        default_factory=list,
         description="released: the order's steps; not released: a live preview from the SOP version it would run",
     )
-    steps_preview: bool = Field(default=False, description="true while the steps are only a preview (not released yet)")
+    steps_preview: bool = Field(description="true while the steps are only a preview (not released yet)")
     events: list[OrderEventResponse] = Field(description="the order's events, oldest first")

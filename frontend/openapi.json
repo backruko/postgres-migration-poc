@@ -9242,6 +9242,18 @@
               }
             ],
             "title": "Conflict Reason"
+          },
+          "steps_total": {
+            "type": "integer",
+            "title": "Steps Total",
+            "description": "the order's steps (0: not released yet, or no steps)",
+            "default": 0
+          },
+          "steps_approved": {
+            "type": "integer",
+            "title": "Steps Approved",
+            "description": "steps approved so far",
+            "default": 0
           }
         },
         "type": "object",
@@ -9835,8 +9847,7 @@
           "steps_preview": {
             "type": "boolean",
             "title": "Steps Preview",
-            "description": "true while the steps are only a preview (not released yet)",
-            "default": false
+            "description": "true while the steps are only a preview (not released yet)"
           },
           "events": {
             "items": {
@@ -9868,6 +9879,8 @@
           "conflict_reason",
           "created_at",
           "updated_at",
+          "steps",
+          "steps_preview",
           "events"
         ],
         "title": "OrderDetailResponse"
@@ -10101,7 +10114,8 @@
           "title",
           "content",
           "is_blocking",
-          "state"
+          "state",
+          "events"
         ],
         "title": "OrderStepResponse",
         "description": "オーダーのステップ（リリース前はプレビュー: id と state は null）"

@@ -17,7 +17,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   by the user as `05850c1 phase4(compelete)` (with `5dbbe0f phase4`). Step 5.2 (ope_step / ope_step_event tables,
   migration `966b78ff950f`) committed 2026-11-04 as `fc58dd0` (not pushed). Step 5.3 (build steps, migration
   `6c8cc87274c8`) committed 2026-11-04 as `abe6281` (not pushed). Step 5.4 (step actions, no migration) committed
-  2026-11-04 (not pushed). Next: step 5.5 (frontend).**
+  2026-11-04 as `074840f` (not pushed). Step 5.5 (frontend: steps in the order drawer, "3/5" on dashboard rows;
+  small backend addition, no migration) built 2026-11-04, **uncommitted, waiting for the user's review**. With it
+  **Phase 5 is complete**. Next: Phase 6 (dependencies) — not planned yet; plan its steps with the user first.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
 - **DB:** latest Alembic head is `6c8cc87274c8` (ope step retired). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
@@ -29,7 +31,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, ope, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 113 passed, ~70–115 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, ope, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 114 passed, ~70–115 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -83,9 +85,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 50 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 50}` to see only newer edits, and
+**Last rev written by me: 52 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 52}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
-The delivery-phase list in the doc carries the build status (phases 1–4 built, 5 in progress).
+The delivery-phase list in the doc carries the build status (phases 1–5 built, rev 52).
 
 ### Domains (decided: plan and ope stay separate, no merge)
 | Domain | Owns | Status |
@@ -319,7 +321,7 @@ staff may use with a reason / memo modal — reason required for hold, cancel, r
 timeline, newest first; actors shown as 職員 #id). **Not in the UI:** pin / unpin (biz has no endpoint listing a
 business's SOP versions to pick from; API only), staff names in the timeline, the SOP "impact before approval" list.
 Harness-checked through Vite on `plan_check` (10 checks). Frontend types regenerated (includes 4.3–4.6 changes).
-5. Steps: conditions, maker-checker, `is_blocking`. ← **in progress** (branch `feature/ope-orders`)
+5. Steps: conditions, maker-checker, `is_blocking`. **built** (5.1–5.5, branch `feature/ope-orders`)
 
 #### Phase 5 decisions (2026-10-30, doc rev 41)
 Rejecting a non-blocking step returns **only that step** to todo (later steps keep their state; the order can't
@@ -336,8 +338,8 @@ when the last step is approved; a ready order whose step conditions change after
 | 5.1 | biz `sop_step_template.condition` (JSONB, default `{"type": "always"}`) + `is_blocking` (default false); migration `971958268657`; schemas `StepCondition` = discriminated union `AlwaysCondition` / `MonthInCondition(months 1–12, deduped + sorted)` / `FirstInWeekCondition`; `clone_active_to_draft` copies both; tests in `tests/test_biz.py` | **done** (`05850c1`, pushed by the user) |
 | 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event`; migration `966b78ff950f` | **done** (`fc58dd0`, not pushed) |
 | 5.3 | Build steps: live preview while pending (in the order detail), create + freeze at release, conflict flag when a system move changes a ready order's step set; migration `6c8cc87274c8` | **done** (`abe6281`, not pushed) |
-| 5.4 | Step actions: submit (operator) / approve / reject (checker, four-eyes, reason for reject), unlock rules, start opens step 1, auto-finish on the last approval; manual finish only for zero-step orders | **done** (not pushed) |
-| 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | **next** |
+| 5.4 | Step actions: submit (operator) / approve / reject (checker, four-eyes, reason for reject), unlock rules, start opens step 1, auto-finish on the last approval; manual finish only for zero-step orders | **done** (`074840f`, not pushed) |
+| 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | **built, uncommitted** (2026-11-04) |
 
 **5.2 as built** (`src/domain_ope/models.py`, migration `966b78ff950f`). User decisions 2026-11-04 (all four as I
 recommended): **events shaped like order events** (`StepEventType` CREATED | STATE_CHANGED, from / to required for a
@@ -408,8 +410,30 @@ approver / rejecter ≠ the **latest** submitter of that step (`ope_step_repo.la
   approved by 5, started by 4 → step 1 todo; manual finish 400; operator approve / checker submit 403; empty reject
   reason 422; reject → resubmit; all approved → finished (SYSTEM "all steps approved"). Four-eyes over HTTP not checked
   (no plan_check staff is operator + checker); covered by the unit test.
-- **Frontend gap until 5.5:** `lib/orderActions.ts` still offers 完了 for every in_progress order (now 400 when it
-  has steps), and the drawer shows no steps. Frontend types regenerated.
+- Frontend gap closed by 5.5 (完了 only for zero-step orders, steps in the drawer).
+
+**5.5 as built** (no migration; no user decisions needed — my UI calls, listed here).
+- Backend: `/ops/daily` `DailyOrderSummary.steps_total` / `steps_approved` (`ope_step_repo.progress_by_orders`, one
+  grouped query, retired steps excluded); `OrderDetailResponse.steps` / `steps_preview` and
+  `OrderStepResponse.events` are now **required** in the schema (openapi-typescript made `default_factory` fields
+  optional). Test `test_dashboard_rows_carry_the_step_progress` in `tests/test_step_actions.py`.
+- Frontend: `domain/ope/types` (StepState, StepEventType, OrderStep, StepEvent); `orderApi.submitStep / approveStep /
+  rejectStep`; new `domain/ope/lib/stepActions.ts` (labels 待機 / 未提出 / 確認待ち / 承認済 — not 作業中, which is
+  the order's; `describeStepEvent`, `latestSubmitter`, `rejectionReason`, `availableStepActions` mirroring the
+  backend: in_progress only, submit = operator on todo, approve / reject = checker on submitted and not the latest
+  submitter; `stepBlockedReason` explains the four-eyes case; `stepProgress`). `availableActions` offers 完了 only
+  when `order.steps` is empty.
+- `OrderDrawer`: section 「ステップ」 (承認 x/y; preview note before release) with `StepRow` per step (number, title,
+  state tag, 承認で次へ tag for blocking, content pre-wrap, 差し戻し alert with the reason, last human action line,
+  small 提出 / 承認 / 差し戻し buttons); the existing modal handles step actions too (`PendingAction` union; reason
+  required for 差し戻し). Dashboard rows show `x/y` (mono, muted) after the title when the order has steps.
+  CSS `.order-steps`, `.order-step*`, `.order-progress` (uses `--rule` / `--sheet`; there is no `--border`).
+- Checked: `npm run build`; esbuild harness of the real modules (orderApi, stepActions, orderActions, dashboardApi,
+  staffApi, actingStaff) in node **directly against uvicorn 8001** (`VITE_API_BASE_URL=http://127.0.0.1:8001`; the
+  Vite proxy only strips `/api`, so Vite isn't needed for API checks) on `plan_check`: orders 74 (1 step) and 104
+  (12/07, 3 steps incl. blocking) — preview, release, start, operator / checker actions, four-eyes hiding, reject
+  reason, finish, dashboard "3/3": all 14 checks passed. **Not checked: the browser** (layout, the drawer, buttons) —
+  the user clicks through.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
 
@@ -470,8 +494,8 @@ home PC. Their office `.env` (dev DB) is not available there.
   user does that).
 - **Design work** (cross-domain, for the team) goes into a Claude Docs document, not chat.
 - Code comments in the repo are Japanese; UI text is Japanese; replies to the user in English.
-- Windows line endings: frontend files are CRLF in the working tree; backend Python files, migrations and MEMORY.md are
-  LF. Match the file you edit. Japanese in shell arguments gets mangled (cp932): pass JSON via files and run Python with
+- Line endings: the ope / dashboard frontend files and `styles.css` are LF in the working tree (checked 2026-11-04;
+  older notes said CRLF); backend Python files, migrations and MEMORY.md are LF. Match the file you edit. Japanese in shell arguments gets mangled (cp932): pass JSON via files and run Python with
   `PYTHONUTF8=1`; long inline Python heredocs can break bash parsing → write the script to the scratchpad and run it.
   `.env`/`.env.*` are git-ignored.
 

@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.domain_biz.models import BizMaster, ReleaseMode
@@ -135,6 +135,21 @@ class OpeStepRepository:
             .order_by(OpeStep.step_num)
         )
         return list(db.scalars(stmt).all())
+
+    def progress_by_orders(self, db: Session, *, order_ids: list[int]) -> dict[int, tuple[int, int]]:
+        """オーダーごとの (ステップ数, 承認済みの数)（外れたステップを除く。ステップの無いオーダーは含めない。1回のクエリ）"""
+        if not order_ids:
+            return {}
+        stmt = (
+            select(
+                OpeStep.order_id,
+                func.count(OpeStep.id),
+                func.count(OpeStep.id).filter(OpeStep.state == StepState.APPROVED),
+            )
+            .where(OpeStep.order_id.in_(order_ids), OpeStep.retired_at.is_(None))
+            .group_by(OpeStep.order_id)
+        )
+        return {row[0]: (row[1], row[2]) for row in db.execute(stmt)}
 
     def get_events(self, db: Session, *, step_ids: list[int]) -> list[OpeStepEvent]:
         """ステップの記録（古い順）"""

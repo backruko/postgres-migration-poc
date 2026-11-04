@@ -6,6 +6,7 @@ import type { ConflictAction, OrderDetail } from "../types";
  * 誰が何をできるかはバックエンドが判定する（画面の出し分けは domain/ope/lib/orderActions.ts）。
  */
 const path = (orderId: number) => ({ params: { path: { order_id: orderId } } });
+const stepPath = (stepId: number) => ({ params: { path: { step_id: stepId } } });
 
 export const orderApi = {
   /** オーダーと、その記録（古い順）（GET /ope/orders/{id}） */
@@ -51,5 +52,22 @@ export const orderApi = {
   /** 矛盾の解決（cancel は理由必須）（POST /ope/orders/{id}/resolve-conflict） */
   resolveConflict(orderId: number, action: ConflictAction, reason?: string): Promise<OrderDetail> {
     return unwrap(http.POST("/ope/orders/{order_id}/resolve-conflict", { ...path(orderId), body: { action, reason: reason || null } }));
+  },
+
+  // ---- ステップ（作業中のオーダーのみ。返り値はオーダーの詳細） ----
+
+  /** todo → submitted（POST /ope/steps/{id}/submit） */
+  submitStep(stepId: number, comment?: string): Promise<OrderDetail> {
+    return unwrap(http.POST("/ope/steps/{step_id}/submit", { ...stepPath(stepId), body: { comment: comment || null } }));
+  },
+
+  /** submitted → approved（提出者以外）（POST /ope/steps/{id}/approve） */
+  approveStep(stepId: number, comment?: string): Promise<OrderDetail> {
+    return unwrap(http.POST("/ope/steps/{step_id}/approve", { ...stepPath(stepId), body: { comment: comment || null } }));
+  },
+
+  /** submitted → todo（提出者以外・理由必須）（POST /ope/steps/{id}/reject） */
+  rejectStep(stepId: number, reason: string): Promise<OrderDetail> {
+    return unwrap(http.POST("/ope/steps/{step_id}/reject", { ...stepPath(stepId), body: { reason } }));
   },
 };

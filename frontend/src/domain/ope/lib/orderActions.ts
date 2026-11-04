@@ -92,7 +92,8 @@ export function availableActions(order: OrderDetail, staff: Staff | null | undef
   if (s === "ready" && !order.conflict && (day <= today || order.early_start_approved)) actions.push("start");
   if (s === "pending" || s === "ready" || s === "in_progress") actions.push("hold");
   if (s === "on_hold") actions.push("resume");
-  if (s === "in_progress") actions.push("finish");
+  // ステップのあるオーダーは最後の承認で自動で完了する（手動の完了はステップの無いオーダーのみ）
+  if (s === "in_progress" && order.steps.length === 0) actions.push("finish");
   if (s !== "finished" && s !== "canceled") actions.push("cancel");
   return actions.filter(can);
 }

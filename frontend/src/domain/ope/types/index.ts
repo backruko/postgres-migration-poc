@@ -13,3 +13,9 @@ export type ConflictAction = Schemas["ConflictAction"];
 export type OrderDetail = Schemas["OrderDetailResponse"];
 export type OrderEvent = Schemas["OrderEventResponse"];
 export type OrderSopVersion = Schemas["OrderSopVersion"];
+
+// ---- ステップ ----
+export type StepState = Schemas["StepState"];
+export type StepEventType = Schemas["StepEventType"];
+export type OrderStep = Schemas["OrderStepResponse"];
+export type StepEvent = Schemas["StepEventResponse"];

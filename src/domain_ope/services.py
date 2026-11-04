@@ -98,7 +98,7 @@ def _order_steps(db: Session, order: OpeOrder) -> tuple[list[OrderStepResponse],
     return [
         OrderStepResponse(
             id=None, step_template_id=t.id, step_num=t.step_num, title=t.title, content=t.content,
-            is_blocking=t.is_blocking, state=None,
+            is_blocking=t.is_blocking, state=None, events=[],
         )
         for t in plan.included
     ], True
