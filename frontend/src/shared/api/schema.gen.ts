@@ -3058,7 +3058,7 @@ export interface components {
          * @description ロールのコード（role テーブルの code と同じ。権限の判定はこのコードで行う）
          * @enum {string}
          */
-        RoleCode: "operator" | "checker" | "releaser" | "admin" | "viewer" | "auditor" | "system_admin";
+        RoleCode: "operator" | "checker" | "releaser" | "admin" | "viewer" | "auditor" | "system_admin" | "signal_sender";
         /** RoleResponse */
         RoleResponse: {
             code: components["schemas"]["RoleCode"];

@@ -45,7 +45,7 @@ def make_staff(db, *roles: RoleCode, status=StaffStatus.ACTIVE, actor=None):
 # ==========================================
 def test_roles_are_seeded(db):
     assert [r.code for r in services.get_roles(db)] == [
-        "operator", "checker", "releaser", "admin", "viewer", "auditor", "system_admin",
+        "operator", "checker", "releaser", "admin", "viewer", "auditor", "system_admin", "signal_sender",
     ]
     assert {r.code: r.name for r in services.get_roles(db)}["system_admin"] == "システム管理者"
 
