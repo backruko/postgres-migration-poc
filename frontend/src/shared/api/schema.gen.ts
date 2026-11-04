@@ -2413,6 +2413,10 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** @description the business's execution type (LIGHTWEIGHT: client event, no steps) */
+            execution_type: components["schemas"]["ExecutionType"];
+            /** @description the business's completion mode (AUTOMATIC: finished by a signal) */
+            completion_mode: components["schemas"]["CompletionMode"];
             /**
              * Steps
              * @description released: the order's steps; not released: a live preview from the SOP version it would run

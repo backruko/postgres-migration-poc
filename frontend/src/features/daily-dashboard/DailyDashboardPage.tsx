@@ -7,6 +7,7 @@ import { TIMEZONE } from "../../shared/config";
 import { dayjs, todayIn } from "../../shared/lib/datetime";
 import { DailyClientSection } from "./DailyClientSection";
 import { OrderDrawer } from "./OrderDrawer";
+import { SignalsPanel } from "./SignalsPanel";
 import { addDays, calendarDayLabel, dayLabel, parseDateParam, summarize } from "./dailyDashboard";
 
 /**
@@ -82,6 +83,8 @@ export function DailyDashboardPage() {
           action={<Button size="small" onClick={dashboard.reload}>再読み込み</Button>}
         />
       )}
+
+      <SignalsPanel onChanged={dashboard.reload} />
 
       {data &&
         (data.clients.length === 0 ? (

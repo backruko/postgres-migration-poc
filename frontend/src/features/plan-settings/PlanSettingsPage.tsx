@@ -4,6 +4,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
+import { BizSettingsPanel } from "./BizSettingsPanel";
 import type { BizMaster } from "../../domain/biz/types";
 import { templateApi } from "../../domain/plan/api";
 import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
@@ -215,6 +216,7 @@ export function PlanSettingsPage() {
           {withoutUpcoming > 0 && (
             <Alert type="warning" showIcon message={`今後の予定が無いテンプレートが ${withoutUpcoming} 件あります。`} description={NO_UPCOMING_HINT} />
           )}
+          {selectedBiz && <BizSettingsPanel biz={selectedBiz} onSaved={bizes.reload} />}
           <div className="table-head">
             <Typography.Text type="secondary">
               {selectedBiz ? `${selectedBiz.business_code} ${selectedBiz.name}` : `業務ID ${bizId}`} のテンプレート

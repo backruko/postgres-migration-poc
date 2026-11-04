@@ -148,11 +148,14 @@ def _order_dependencies(db: Session, order: OpeOrder, events: list[OpeOrderEvent
 def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
     events = ope_order_repo.get_events(db, order_id=order.id)
     order_steps, preview = _order_steps(db, order)
+    biz = db.get(BizMaster, order.biz_master_id)
     return OrderDetailResponse.model_validate(
         {
             **{c.key: getattr(order, c.key) for c in OpeOrder.__table__.columns},
             "early_start_approved": any(e.event_type == OrderEventType.EARLY_START_APPROVED for e in events),
             "late": links.is_late(order, _now()),
+            "execution_type": biz.execution_type if biz else ExecutionType.SOP,
+            "completion_mode": biz.completion_mode if biz else CompletionMode.MANUAL,
             "sop_version": _order_sop_version(db, order),
             "steps": order_steps,
             "steps_preview": preview,

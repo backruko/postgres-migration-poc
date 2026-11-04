@@ -23,3 +23,7 @@ export type StepEvent = Schemas["StepEventResponse"];
 // ---- 依存関係 ----
 export type OrderDependency = Schemas["OrderDependencyResponse"];
 export type OrderDependent = Schemas["OrderDependentResponse"];
+
+// ---- 信号（顧客側の出来事） ----
+export type Signal = Schemas["SignalResponse"];
+export type SignalResult = Schemas["SignalResult"];

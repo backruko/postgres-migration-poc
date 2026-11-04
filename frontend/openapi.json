@@ -11145,6 +11145,14 @@
             "format": "date-time",
             "title": "Updated At"
           },
+          "execution_type": {
+            "$ref": "#/components/schemas/ExecutionType",
+            "description": "the business's execution type (LIGHTWEIGHT: client event, no steps)"
+          },
+          "completion_mode": {
+            "$ref": "#/components/schemas/CompletionMode",
+            "description": "the business's completion mode (AUTOMATIC: finished by a signal)"
+          },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/OrderStepResponse"
@@ -11204,6 +11212,8 @@
           "conflict_reason",
           "created_at",
           "updated_at",
+          "execution_type",
+          "completion_mode",
           "steps",
           "steps_preview",
           "dependencies",

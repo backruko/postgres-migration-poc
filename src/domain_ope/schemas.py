@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from src.domain_biz.models import DependencyKind, DependencyMatchRule
+from src.domain_biz.models import CompletionMode, DependencyKind, DependencyMatchRule, ExecutionType
 from src.domain_ope.models import EventSource, OrderEventType, OrderStatus, SignalResult, StepEventType, StepState
 
 
@@ -162,6 +162,8 @@ class AutoReleaseResult(BaseModel):
 
 
 class OrderDetailResponse(OrderResponse):
+    execution_type: ExecutionType = Field(description="the business's execution type (LIGHTWEIGHT: client event, no steps)")
+    completion_mode: CompletionMode = Field(description="the business's completion mode (AUTOMATIC: finished by a signal)")
     steps: list[OrderStepResponse] = Field(
         description="released: the order's steps; not released: a live preview from the SOP version it would run",
     )

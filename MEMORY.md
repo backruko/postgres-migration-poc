@@ -32,7 +32,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   `6a7849dbf2ec`) committed 2026-11-04 (`0ff76dd`, not pushed). Step 7.2 (ope_signal table + role signal_sender,
   migration `3242f180527a`) committed 2026-11-04 (`a9f8fc3`, not pushed). Step 7.3 (receiving / matching signals, no
   migration) committed 2026-11-04 (`0b5e762`, not pushed). Step 7.4 (late + signal list, no migration) committed
-  2026-11-04 (not pushed). Next: 7.5 (frontend, the last step of Phase 7).**
+  2026-11-04 (`a7e1e03`, not pushed). Step 7.5 (frontend + order detail fields, no migration) committed 2026-11-04;
+  Phase 7 merged into `main` locally (not pushed). With it **Phase 7 — the last phase of the doc's plan — is
+  complete**. Next: whatever the user picks (doc open questions).**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
 - **DB:** latest Alembic head is `3242f180527a` (ope_signal + role signal_sender). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
@@ -98,9 +100,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 66 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 66}` to see only newer edits, and
+**Last rev written by me: 68 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 68}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
-The delivery-phase list in the doc carries the build status (phases 1–6 built, rev 60).
+The delivery-phase list in the doc carries the build status (phases 1–7 built, rev 68).
 
 ### Domains (decided: plan and ope stay separate, no merge)
 | Domain | Owns | Status |
@@ -568,7 +570,7 @@ a re-pointed / new link needs a new approval.
   offered to the releaser, 開始 hidden for the operator, blocked reason, dashboard 待ち true → override → false, start,
   delete — 14/14 passed. **Not checked: the browser** (the new page, the drawer section, the tag) — the user clicks
   through.
-7. Client events with automatic completion (signals). ← **in progress** (branch `feature/ope-signals`)
+7. Client events with automatic completion (signals). **built** (7.1–7.5, branch `feature/ope-signals`)
 
 #### Phase 7 decisions (2026-11-04, doc rev 62)
 All four as I recommended: Phase 6 merged first, Phase 7 on a new branch; **a client event = a LIGHTWEIGHT business**
@@ -583,8 +585,8 @@ until real login; watchers later = scripts posting the same signal); **match = s
 | 7.1 | biz `execution_type` (SOP / LIGHTWEIGHT), `completion_mode` (MANUAL / AUTOMATIC), `signal_type` (required for AUTOMATIC); biz PATCH; migration; LIGHTWEIGHT orders get no steps at release; migration `6a7849dbf2ec` | **done** (`0ff76dd`, not pushed) |
 | 7.2 | `ope_signal` table (append-only: type, client_code, key, received_at, sender, match result + order) + role `signal_sender` — tables / role only; migration `3242f180527a` | **done** (`a9f8fc3`, not pushed) |
 | 7.3 | `POST /ope/signals` (signal_sender): store every signal, match, finish the order (system event); unmatched / ambiguous kept; manual way out (finish with reason) for AUTOMATIC | **done** (`0b5e762`, not pushed) |
-| 7.4 | Read side: "late" computed on the dashboard, unmatched signals listed (`GET /ope/signals`) | **done** (not pushed) |
-| 7.5 | Frontend: client-event settings on a business, 受領 (mark received) in the drawer, late tag, unmatched signals panel | **next** |
+| 7.4 | Read side: "late" computed on the dashboard, unmatched signals listed (`GET /ope/signals`) | **done** (`a7e1e03`, not pushed) |
+| 7.5 | Frontend: client-event settings on a business, 受領 (mark received) in the drawer, late tag, unmatched signals panel | **done** (merged into `main`, not pushed) |
 
 **7.1 as built** (migration `6a7849dbf2ec`). User decisions 2026-11-04 (both as I recommended, doc rev 63): **signal
 type unique per client** (partial unique index `uq_biz_client_signal_type_alive` on (client_code, signal_type) where
@@ -651,6 +653,27 @@ from ready** (受領 = mark received; no start, so no day / dependency check for
 - Tests added to `tests/test_signals.py` (late with `_now` monkeypatched past the end; list scope / client filter /
   handled drops out). HTTP-checked on `plan_check`: **unmatched signal 4 (bad key) left open for 7.5's panel**; 11/02
   orders show `late: true`.
+
+**7.5 as built** (no migration). User decision 2026-11-04: **a 「業務の設定」 panel on the template settings page**
+(`/settings/templates?biz=`) holding the release settings (Phase 4, had no screen) and the client-event settings.
+- Backend: `OrderDetailResponse.execution_type` / `completion_mode` (from the business).
+- Frontend: `domain/biz`: types `BizMasterUpdate` / `ReleaseMode` / `ExecutionType` / `CompletionMode`,
+  `bizApi.update` (PATCH), `lib/settings.ts` (labels, `clientEventError` = backend rules, `clientEventBody` drops the
+  signal type unless LIGHTWEIGHT + automatic); `features/plan-settings/BizSettingsPanel.tsx` (Descriptions + 編集
+  modal: release mode / days before / time, execution type, completion mode + signal type only when LIGHTWEIGHT).
+  `domain/ope`: types `Signal` / `SignalResult`, `api/signalApi.ts` (listOpen, handle), `hooks/useOpenSignals.ts`,
+  `lib/signals.ts` (labels, `canHandleSignals` = operator / releaser / admin); `orderActions`: 完了 offered from ready
+  for LIGHTWEIGHT, `finishLabel` (受領 for LIGHTWEIGHT), `finishNeedsReason` (automatic). `OrderDrawer`: 遅れ tag,
+  顧客側の出来事 tag, 受領 label, reason required + note for automatic. Dashboard rows: red 「遅れ」 tag.
+  `features/daily-dashboard/SignalsPanel.tsx` above the client cards (only when there are open signals and the acting
+  staff is active): table 受信 / 顧客 / 信号の種類 / キー / 結果 + note, 対応 modal (order number optional, note required).
+  CSS `.biz-settings`, `.signals-panel`.
+- Checked: `npm run build`; esbuild harness `ce_harness.ts` against uvicorn 8001 on `plan_check` (order 196 of biz 2,
+  signal 4): settings rules, save manual / automatic, open list, 受領 offered from ready with a reason, handle with
+  the order → finished and gone from the list, late on 11/02 — 14/14 passed. **Not checked: the browser.**
+- Incident: a typo (`newline="\\n"`) in an edit script raised after `open(..., "w")` had already **emptied
+  `frontend/src/styles.css`**; restored from HEAD with `git checkout` (no uncommitted CSS changes existed) and
+  re-applied the 2 new lines. Lesson: build the full text first, then write.
 
 ### Open questions (in the doc)
 Client event scope (per business or per client) · reset later steps on rejection (proposed no) · "latest before due"
