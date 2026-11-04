@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
+from typing import Any
 import enum
 from datetime import datetime
 
@@ -6,6 +7,7 @@ from datetime import datetime
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     String, 
     Text, 
     Enum, 
@@ -15,14 +17,24 @@ from sqlalchemy import (
     Index,  
     Computed,          
     CHAR,
-    text              
+    SmallInteger,
+    Time,
+    text
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.orm import validates, relationship
 
 from src.infrastructure.database import Base
 from src.core.mixin import SoftDeleteMixin
+
+
+class ReleaseMode(str, enum.Enum):
+    """オーダーを pending から ready（実行可能）にする方法"""
+    MANUAL_APPROVAL = "manual_approval"  # リリース担当・業務管理者が SOP とステップを確認して承認する
+    AUTOMATIC = "automatic"              # 予定日の release_days_before 日前の release_time（日本時間）に自動で
+
 
 class BizMaster(Base, SoftDeleteMixin):
     """
@@ -82,11 +94,35 @@ class BizMaster(Base, SoftDeleteMixin):
         comment="業務管理者のメールアドレス（異常時のエスカレーション先等を想定）"
     )
     description: Mapped[str | None] = mapped_column(
-        Text, 
-        nullable=True, 
+        Text,
+        nullable=True,
         comment="業務の概要・補足説明"
     )
-    
+
+    # --- Release Settings（オーダーを実行可能にする方法。時刻は日本時間） ---
+    # ※ SQLAlchemy の Enum はメンバー名を保存するため、server_default は 'MANUAL_APPROVAL' 等の名前で指定する
+    release_mode: Mapped["ReleaseMode"] = mapped_column(
+        Enum(ReleaseMode, name="biz_release_mode_enum"),
+        nullable=False,
+        default=ReleaseMode.MANUAL_APPROVAL,
+        server_default=text("'MANUAL_APPROVAL'"),
+        comment="リリース方法（MANUAL_APPROVAL: リリース担当・業務管理者が承認 / AUTOMATIC: 指定時刻に自動）"
+    )
+    release_time: Mapped[time] = mapped_column(
+        Time,
+        nullable=False,
+        default=time(3, 0),
+        server_default=text("'03:00:00'"),
+        comment="自動リリースの時刻（日本時間。既定 03:00 = 夜間バッチの後）"
+    )
+    release_days_before: Mapped[int] = mapped_column(
+        SmallInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+        comment="自動リリースを予定日の何日前に行うか（0 = 予定日当日）"
+    )
+
     # --- System Audit Trail ---
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
@@ -120,8 +156,13 @@ class BizMaster(Base, SoftDeleteMixin):
         ),
         # 2. 値域チェック：連番は必ず1以上の正の整数（0や負の数はDBが弾く）
         CheckConstraint(
-            'business_seq > 0', 
+            'business_seq > 0',
             name='chk_business_seq_positive'
+        ),
+        # 3. 自動リリースは予定日の当日〜30日前まで
+        CheckConstraint(
+            'release_days_before BETWEEN 0 AND 30',
+            name='chk_biz_release_days_before'
         ),
     )
 
@@ -256,9 +297,23 @@ class SOPStepTemplate(Base):
     
     title: Mapped[str] = mapped_column(String(100), nullable=False, comment="ステップタイトル")
     content: Mapped[str | None] = mapped_column(
-        Text, 
-        nullable=True, 
+        Text,
+        nullable=True,
         comment="具体的な作業手順・マニュアル内容"
+    )
+    # オーダーの予定日に応じて、このステップを含めるかどうか（バージョンとともに固定される）
+    # {"type": "always"} | {"type": "month_in", "months": [4]} | {"type": "first_in_week"}
+    condition: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=lambda: {"type": "always"},
+        server_default=text("""'{"type": "always"}'::jsonb"""),
+        comment="ステップを含める条件（always / month_in / first_in_week）",
+    )
+    # true なら、このステップが承認されるまで次のステップを開けない（false なら提出で次が開く）
+    is_blocking: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"),
+        comment="承認されるまで次のステップを開けないか",
     )
     # 双方向リレーションの設定
     sop_version: Mapped["SOPVersion"] = relationship(

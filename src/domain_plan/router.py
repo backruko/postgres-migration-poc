@@ -4,7 +4,9 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from src.core.schemas.error import COMMON_ERRORS
+from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
+from src.domain_staff.auth import get_current_staff, require_active
+from src.domain_staff.models import StaffUser
 from src.infrastructure.database import get_db
 from src.domain_plan.schemas import (
     BusinessCalendarCreate,
@@ -216,47 +218,60 @@ def get_instances_endpoint(template_id: int, skip: int = 0, limit: int = 100, db
 def rebuild_cache_endpoint(template_id: int, db: Session = Depends(get_db)):
     return CacheRebuildResponse(template_id=template_id, occurrences=rebuild_cache(db=db, template_id=template_id))
 
-@router.post("/templates/{template_id}/instances", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
-def add_one_off_instance_endpoint(template_id: int, one_off_in: PlanOneOffCreate, db: Session = Depends(get_db)):
+@router.post("/templates/{template_id}/instances", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_active()
+def add_one_off_instance_endpoint(
+    template_id: int, one_off_in: PlanOneOffCreate, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
+):
     """
     発生枠に紐づかない単発のインスタンスを追加します(scheduled_end 省略時はテンプレートの所要時間)。
     テンプレートのルールを変更しても維持されます。
     """
-    return add_one_off_instance(db=db, template_id=template_id, one_off_in=one_off_in)
+    return add_one_off_instance(db=db, template_id=template_id, one_off_in=one_off_in, actor_staff_id=current_staff.id)
 
 # ==========================================
 # PlanInstance 手動変更エンドポイント
 # ==========================================
 
-@router.post("/instances/{instance_id}/override", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
-def override_instance_endpoint(instance_id: int, override_in: PlanInstanceOverride, db: Session = Depends(get_db)):
+@router.post("/instances/{instance_id}/override", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_active()
+def override_instance_endpoint(
+    instance_id: int, override_in: PlanInstanceOverride, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
+):
     """
     特定の1件だけ時刻を変更します(延期・前倒し)。テンプレートのルールは変わりません。
     元のインスタンスは MANUAL で無効化され、新しい時刻のインスタンスが追記されます(履歴は不変)。
     以後テンプレートやシート日付が変更されても、この手動変更は維持されます。
     """
-    return override_instance(db=db, instance_id=instance_id, override_in=override_in)
+    return override_instance(db=db, instance_id=instance_id, override_in=override_in, actor_staff_id=current_staff.id)
 
-@router.post("/instances/{instance_id}/cancel", response_model=PlanInstanceResponse, responses={**COMMON_ERRORS})
-def cancel_instance_endpoint(instance_id: int, cancel_in: PlanInstanceCancel | None = None, db: Session = Depends(get_db)):
+@router.post("/instances/{instance_id}/cancel", response_model=PlanInstanceResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_active()
+def cancel_instance_endpoint(
+    instance_id: int, cancel_in: PlanInstanceCancel | None = None, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
+):
     """特定の1件だけ取り消します。以後の再生成でも復活しません。"""
-    return cancel_instance(db=db, instance_id=instance_id, cancel_in=cancel_in or PlanInstanceCancel())
+    return cancel_instance(db=db, instance_id=instance_id, cancel_in=cancel_in or PlanInstanceCancel(), actor_staff_id=current_staff.id)
 
-@router.post("/instances/{instance_id}/restore", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
-def restore_cancelled_instance_endpoint(instance_id: int, db: Session = Depends(get_db)):
+@router.post("/instances/{instance_id}/restore", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_active()
+def restore_cancelled_instance_endpoint(instance_id: int, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff)):
     """
     取り消した予定を、取消の直前と同じ日時で元に戻します（臨時の予定・日時を変更した予定も可）。
     時刻が過ぎた予定は戻せません。取消の記録は履歴として残ります。
     """
-    return restore_cancelled_instance(db=db, instance_id=instance_id)
+    return restore_cancelled_instance(db=db, instance_id=instance_id, actor_staff_id=current_staff.id)
 
-@router.post("/instances/{instance_id}/revert", response_model=PlanRevertResponse, responses={**COMMON_ERRORS})
-def revert_instance_endpoint(instance_id: int, revert_in: PlanInstanceRevert | None = None, db: Session = Depends(get_db)):
+@router.post("/instances/{instance_id}/revert", response_model=PlanRevertResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_active()
+def revert_instance_endpoint(
+    instance_id: int, revert_in: PlanInstanceRevert | None = None, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
+):
     """
     手動変更・取消を取り消し、その発生枠をテンプレートのルールに戻します。
     置き換えの連鎖のどのインスタンスIDを指定しても構いません。
     """
-    return revert_instance(db=db, instance_id=instance_id, revert_in=revert_in or PlanInstanceRevert())
+    return revert_instance(db=db, instance_id=instance_id, revert_in=revert_in or PlanInstanceRevert(), actor_staff_id=current_staff.id)
 
 # ==========================================
 # Occurrence(カレンダー表示用)エンドポイント

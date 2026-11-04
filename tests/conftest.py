@@ -13,6 +13,11 @@ from sqlalchemy.orm import sessionmaker
 from src.infrastructure.config import settings  # 設定クラス
 from src.infrastructure.database import Base    # SQLAlchemyのBaseクラス
 
+# アプリと同じく、plan の発生枠の変更をオーダーに反映する受け手を登録する（main.py と同じ）。
+# これにより全テストで plan の変更がオーダーにも反映され、ope のテーブルも create_all で作られる
+from src.coordination import order_sync
+order_sync.register()
+
 # 【ステップ2】テスト専用のデータベースエンジンを作成
 # 上記で環境変数を設定したため、settings.database_url はテスト用DBのURLになっています
 engine = create_engine(settings.database_url)

@@ -233,3 +233,14 @@ def test_daily_dashboard_defaults_and_validation(db):
     far = date.today() + timedelta(days=200)
     [business] = mine(ops_services.get_daily_dashboard(db, far, "Asia/Tokyo"), code)[code].businesses
     assert [o.template_id for o in business.occurrences] == [t.id]
+
+
+def test_daily_dashboard_shows_the_order_of_each_occurrence(db):
+    # オーダーは plan の予定から自動で作られる（受け手は conftest.py で登録済み）
+    day = next_weekday(3)
+    code = make_client(db)
+    t = make_template(db, make_biz(db, code).id, name="With order")
+    [occ] = mine(ops_services.get_daily_dashboard(db, day, "Asia/Tokyo"), code)[code].businesses[0].occurrences
+    assert occ.order is not None and occ.order.status == "pending" and not occ.order.conflict
+    [inst] = live_on(db, t.id, day)
+    assert occ.instance_id == inst.id

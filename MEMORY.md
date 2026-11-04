@@ -1,31 +1,49 @@
 # MEMORY.md — Session handoff
 
 Handoff for the next working session. Read this first, then the design doc (§2), `frontend/README.md` (frontend
-details), `src/domain_plan/` and `src/coordination/` (backend). Last updated: 2026-10-28.
+details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backend). Last updated: 2026-10-28 (evening).
 
 ## 1. Current status
 
-- **Branch:** `feature/plan-holiday-calendar` (not merged to `main`). **Pushed to `origin`** (the user pushes; I never do).
+- **Branches:** `main` = Plan MVP + Phases 1–3 (merged 2026-10-28, merge `23767b8`, pushed by the user).
+  **Current work: `feature/ope-orders`** (from `main`), Phase 4. The user pushes; I never do.
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
-  next-occurrence guarantee) and 3 (staff: backend + screen) are done.** **Next step: Phase 4, ope orders** — big; it
-  has open questions in the doc (which roles release / pin / force-start / resolve, release lead time …). Re-read the
-  doc and present options before building.
-- **DB:** latest Alembic head is `568c3287c359` (staff users and roles; the user upgraded their dev DB 2026-10-28 and
-  registered staff id 1, login `system`, system_admin). Migrations: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
-  `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`.
-  `plan_check` is migrated too and has staff 1 `check-admin` (system_admin), 2 `check-op` (suspended) + harness users.
+  next-occurrence guarantee) and 3 (staff: backend + screen) are done. Phase 4 (ope orders): step 4.1 (release
+  settings on businesses), 4.2 (ope tables, `0552e9f`, pushed), 4.3 (order sync, `7d94be7`) and 4.4 (status API,
+  `0389de2`) and 4.5 (automatic release job, `09f7455`) committed (4.3–4.5 not pushed). Step 4.6 (SOP version
+  resolution / pinning / freeze at release) and 4.7 (order screen on the dashboard) committed 2026-10-30 (4.3–4.7
+  not pushed). **Phase 4 is complete. Phase 5 (steps, maker-checker) started 2026-10-30: decisions made and step plan
+  approved (§2 "Phase 5 step plan"); step 5.1 (step template condition + is_blocking) done — committed and pushed
+  by the user as `05850c1 phase4(compelete)` (with `5dbbe0f phase4`). Step 5.2 (ope_step / ope_step_event tables,
+  migration `966b78ff950f`) committed 2026-11-04 as `fc58dd0` (not pushed). Step 5.3 (build steps, migration
+  `6c8cc87274c8`) committed 2026-11-04 as `abe6281` (not pushed). Step 5.4 (step actions, no migration) committed
+  2026-11-04 as `074840f` (not pushed). Step 5.5 (frontend: steps in the order drawer, "3/5" on dashboard rows;
+  small backend addition, no migration) committed 2026-11-04. With it **Phase 5 is complete**. Next: Phase 6 (dependencies) — not planned yet; plan its steps with the user first.**
+  The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
+- **DB:** latest Alembic head is `6c8cc87274c8` (ope step retired). Migrations: `ceee1634d6a7`
+  (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
+  `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` →
+  `971958268657` (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at, RETIRED).
+  The user's dev DB: at `6c8cc87274c8` (upgraded by the user 2026-11-04); earlier, at `5eede5808433` on 2026-10-30 (staff id 1, login `system`, system_admin; biz 1 has SOP
+  version 1 `v1.1.0`); `971958268657`, `966b78ff950f` and `6c8cc87274c8` handed over.
+  `plan_check` is at `6c8cc87274c8`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
+  (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/test_plan.py tests/test_ops.py tests/test_staff.py` → 61 passed (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, ope, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 114 passed, ~70–115 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
-  then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"` to stay out of that space.
+  then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
   Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `alembic check` → no drift.
+  `.env` points at the user's `dev_db`: run alembic with `DATABASE_URL` set to the same URL ending in `/plan_check`.
   Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes.
 - **Scheduled job (user's machine):** Task Scheduler `\postgres-migration-poc\PlanExtendJob`, daily 00:05, runs
   `scripts/extend_plans.py` in the repo root (so `.env` → dev DB) as the user (interactive logon, runs on next logon if
   missed), output appended to `extend_plans.log` (git-ignored). First run 2026-10-28: exit 0, 7 templates, 1 extended.
+  Second task `\postgres-migration-poc\OrderReleaseJob` (every 15 min, `scripts/release_orders.py` →
+  `release_orders.log`), registered by the user 2026-10-30 (my attempt was refused by the permission check); first
+  run 11:04 exit 0, 0 orders (all their businesses are MANUAL_APPROVAL).
 - **Browser check:** the user clicked through the 年間計画シート and 休日カレンダー screens (2026-10-28): no issues found.
   Not yet clicked through: 日次ダッシュボード (`/daily`), the 「次の予定」 column on the template settings page, and the
   職員 screen (`/settings/staff`) + nav picker 「操作する職員」.
@@ -33,6 +51,11 @@ details), `src/domain_plan/` and `src/coordination/` (backend). Last updated: 20
 ### Recent commits (newest first)
 | Commit | Content |
 |---|---|
+| `91cde48` | `.gitignore`: `frontend/.vite/` (Vite dep cache; two committed cache files untracked) |
+| `d65af44` | Phase 4.1: biz release settings, migration `f9bbe9648f15`, `tests/test_biz.py` |
+| `0d4ff4c` | MEMORY.md: Phase 4 decisions (first commit on `feature/ope-orders`) |
+| `23767b8` | `main`: merge of `feature/plan-holiday-calendar` (Phases 1–3) |
+| `b13fe73` / `7d01bff` / `8ec4b8d` | MEMORY.md: release 03:00, client-limited role, roles decisions, Phase 3 done |
 | `702ebbb` | Phase 3 frontend: 職員 screen `/settings/staff`, nav picker 「操作する職員」 (X-Staff-Id middleware) |
 | `bfe3deb` | Phase 3 backend: staff domain, migration `568c3287c359`, `require_roles`, `/staff` API, `scripts/create_staff.py` |
 | `fcff659` | Phase 2: `extend_all_templates` + `scripts/extend_plans.py`, next-occurrence guarantee, `next_occurrence_at`, 「次の予定」 column |
@@ -61,6 +84,9 @@ details), `src/domain_plan/` and `src/coordination/` (backend). Last updated: 20
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
+**Last rev written by me: 52 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 52}` to see only newer edits, and
+query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
+The delivery-phase list in the doc carries the build status (phases 1–5 built, rev 52).
 
 ### Domains (decided: plan and ope stay separate, no merge)
 | Domain | Owns | Status |
@@ -138,7 +164,9 @@ Dependency direction: ope → plan (reads slots), ope → biz (pins SOP version)
 | The slot disappears | Canceled by system | Conflict flag | Conflict flag | Not affected |
 | New slot | New pending order | — | — | — |
 
-Mechanism: reconcile returns its change set per slot; the coordination layer applies it in the same transaction.
+Mechanism (decided 2026-10-28): **slot-change listener** — plan's reconcile / manual changes hand a per-slot change set
+to listeners registered at startup; the coordination layer's listener applies it to orders in the same transaction.
+Plan never imports ope.
 
 ### Client-side events
 - A business with `execution_type = LIGHTWEIGHT` → an order with zero steps, same lifecycle.
@@ -160,7 +188,251 @@ Mechanism: reconcile returns its change set per slot; the coordination layer app
 3. ~~staff (users, roles)~~ **done** (§4 Staff, §5 職員). User decisions: no login yet (trusted `X-Staff-Id` header);
    fixed global roles; backend first, screen second.
 4. ope orders: eager creation, propagation, statuses, release modes, SOP resolution / pinning, conflict flags. ← **next**
-5. Steps: conditions, maker-checker, `is_blocking`.
+   (branch `feature/ope-orders`). Decided 2026-10-28: slot-change listener; orders only for live occurrences from
+   go-live on (no past backfill); interim finish = operator marks in_progress → finished (Phase 5 replaces it for
+   orders with steps); release config on biz_master = `release_mode`, `release_time` (default 03:00 JST),
+   `release_days_before` (default 0).
+
+#### Phase 4 step plan (approved by the user 2026-10-28; one step at a time, each reviewed + committed)
+| # | Step | Migration | Status |
+|---|---|---|---|
+| 4.1 | Release settings on `biz_master` + biz API | `f9bbe9648f15` | **done** (`d65af44`) |
+| 4.2 | ope tables: `ope_order`, append-only `ope_order_event` (immutability trigger like plan's `plan_reject_mutation`). Models + migration + tests, **no behavior** | `9e1bcef6cbc7` | **done** (`0552e9f`) |
+| 4.3 | **done** (`7d94be7`) — Slot-change listener in plan (reconcile + manual override / cancel / revert / one-off / restore emit per-slot changes) + coordination listener (create / move / cancel / conflict-flag orders per the propagation table) + script creating orders for existing future live occurrences | — | |
+| 4.4 | **done** (`0389de2`) — Status API: release (releaser/admin), start (operator, on/after the scheduled day JST, earlier only with a releaser's approval event), hold / resume, cancel (reason), finish (operator, interim), resolve conflict (releaser/admin); every transition an order event; `@require_roles` | — | |
+| 4.5 | **done** (`09f7455`) — Automatic release job (03:00 JST; `release_time` / `release_days_before`) + its own Task Scheduler entry (registered by the user) | — | |
+| 4.6 | **done** (`4790ac1`) — SOP version resolution, pin / unpin (releaser/admin), freeze at release | none needed | |
+| 4.7 | **done** (`d151fbf`) — Frontend: order status on the dashboard + actions | — | |
+
+**4.2 as built (`src/domain_ope/models.py`, migration `9e1bcef6cbc7`) — order slot identity = plan's slot.**
+Plan has three slot kinds: rule-generated `("date", occurrence_date)`, sheet-based `("sheet_event",
+source_sheet_event_id)` (survives a sheet date move), and **one-offs, which have no slot in plan** (`add_one_off` sets
+only its own date; overrides inherit their original's slot). User's decision 2026-10-30: **typed slot columns** —
+`ope_order` keeps `template_id` + `occurrence_date` always, plus `source_sheet_event_id` (snapshot, no FK, like plan)
+**or** `one_off_instance_id` (FK plan_instance: the one-off's *first* instance; later moves keep it).
+Partial unique indexes `uq_ope_order_sheet_slot`, `uq_ope_order_one_off_slot`, `uq_ope_order_date_slot` (neither set) +
+CHECK `ck_ope_order_one_slot_kind`. So 4.3's listener must find a one-off's root instance (walk
+`overrides_instance_id`) to locate its order.
+Other `ope_order` columns: `current_instance_id` (FK, last one after the slot disappears), `biz_master_id`,
+`client_code` (FK client_master; for the future client-limited role), `scheduled_start` / `scheduled_end`, `status`
+(`OrderStatus`, member names stored, default PENDING; cache of the latest event), `status_before_hold` (only while
+ON_HOLD; PENDING / READY / IN_PROGRESS), `pinned_sop_version_id` / `frozen_sop_version_id` (FK sop_version),
+`released_at` (required for READY / IN_PROGRESS / FINISHED), `conflict` + `conflict_reason` (required when conflict).
+`ope_order_event` (append-only; trigger `trg_ope_order_event_immutable` → `ope_reject_mutation()`, also installed by
+`create_all` for tests): `event_type` (`OrderEventType`: CREATED, STATUS_CHANGED, RESCHEDULED, PINNED, UNPINNED,
+EARLY_START_APPROVED, CONFLICT_RAISED, CONFLICT_RESOLVED), `from_status` / `to_status`, `source` (HUMAN | SYSTEM;
+CHECK: HUMAN ⇔ `actor_staff_id` set), `reason`, `detail` (JSONB), `occurred_at`. FK order_id RESTRICT (orders with
+events can't be deleted). Adding an event type later = `ALTER TYPE … ADD VALUE` migration.
+Tests: `tests/test_ope.py` (6, constraints only — they switch the 4.3 listener off with
+`monkeypatch.setattr(slot_events, "_listeners", [])`; client prefix `"O"`). The doc's data-model rows were updated (rev 33).
+
+**4.3 as built — plan → order sync** (decisions 2026-10-30: a returning slot gets a **new** order, the canceled one
+stays as history → migration `5eede5808433` adds `status <> 'CANCELED'` to the three slot unique indexes; plan's
+manual endpoints **require X-Staff-Id**).
+- `src/domain_plan/slot_events.py` (plan side, knows nothing of ope): `SlotKey(template_id, kind date|sheet_event|
+  one_off, ref, occurrence_date[compare=False])`, `slot_key_of(db, instance)` (one-offs: walk to the root),
+  `live_instance_for_slot`, `record_created` / `record_voided` (called from the repo chokepoints `add_many`,
+  `add_override`, `add_one_off`, `void_many`), `mark_person_change(db, actor_staff_id, note)` (called by the 5 manual
+  services), `register_slot_listener`. A global `Session` `before_commit` hook groups the recorded slots and calls the
+  listeners **in the same transaction**; `after_rollback` discards them. A listener exception aborts the commit.
+- Plan manual services (`override_instance`, `cancel_instance`, `revert_instance`, `add_one_off_instance`,
+  `restore_cancelled_instance`) take `actor_staff_id: int | None = None`; their endpoints have `@require_active()` +
+  `current_staff` (→ the calendar's 変更 / 取消 / 臨時 / 元に戻す buttons get 401 until an acting staff is picked in
+  the nav). Service calls without an actor (scripts, old tests) are recorded as SYSTEM events with
+  `detail.cause = "manual plan change"`.
+- `src/coordination/order_sync.py`: `register()` (called in `main.py`, `tests/conftest.py`, `scripts/extend_plans.py`,
+  `scripts/create_orders.py` — **any new script that changes plan must call it too**), `apply_slot_changes` = the
+  doc's propagation table: no order + live future instance → CREATED pending; moved → pending / ready / on_hold
+  follow (RESCHEDULED, detail before / after), in_progress: person → `DuplicatedRecordError` code
+  `ORDER_IN_PROGRESS` (409, rolls back the plan change), system → CONFLICT_RAISED + `conflict_reason`; removed →
+  person: cancel (in_progress refused), system: pending / ready canceled with the plan void reason as `reason`,
+  on_hold / in_progress conflict; finished untouched. No orders for past instances. `create_missing_orders(db)` =
+  go-live backfill (`scripts/create_orders.py`, idempotent).
+- Repo `src/infrastructure/repositories/Ope.py` (`ope_order_repo.get_active_for_slot` with `FOR UPDATE`,
+  `add_event`, `get_events`).
+- "Ready order whose step conditions change gets a flag" (doc table) waits for Phase 5 (steps).
+- Tests: `tests/test_order_sync.py` (9; client prefix `"S"`). Doc rev 34 records both decisions.
+
+**4.4 as built — order status API** (`src/domain_ope/{schemas,services,router}.py`, prefix `/ope`; no migration).
+User decisions 2026-10-30: **cancel = releaser / admin** (reason required); **hold / resume = operator, releaser,
+admin** (reason required to hold); start + finish = operator; release + resolve conflict = releaser / admin;
+approve early start = **releaser only**; a releaser / admin **may release an AUTOMATIC business's order by hand**;
+**a conflict flag blocks release and start** until resolved.
+- `GET /ope/orders/{id}` (active staff) → `OrderDetailResponse` (order + `early_start_approved` + events oldest first).
+- `POST /ope/orders/{id}/release | approve-early-start | start | hold | resume | finish | cancel | resolve-conflict`;
+  every action locks the order (`ope_order_repo.get_locked`, FOR UPDATE), checks the status, appends one event
+  (HUMAN, actor) and returns the detail. Wrong status → 400 (message lists allowed statuses).
+- Start: scheduled day = `scheduled_start` in JST vs `_local_today()` (JST); before it only if an
+  EARLY_START_APPROVED event exists (start event then has `detail.early_start = true`). Approving twice → 409;
+  approving on/after the day → 400.
+- Hold stores `status_before_hold`; resume returns to it. Finish = interim (Phase 5 replaces it for orders with steps).
+- **Cancel also cancels the plan occurrence**: the order is marked canceled first, then
+  `plan_services.cancel_instance(..., actor_staff_id)` voids the live instance (MANUAL, reason as note), so the
+  listener finds no active order and creates nothing; the calendar drops it. Cancel works from in_progress too
+  (unlike a plan-side cancel, which the listener refuses for in-progress orders).
+- Resolve conflict: `accept_plan` (adopt the slot's live instance times; if the slot is gone → cancel), `keep` (clear
+  the flag only), `cancel` (reason required; also cancels the plan occurrence if still live). One CONFLICT_RESOLVED
+  event (with from / to status when it cancels).
+- Force-start is **not** built (it belongs to dependencies, Phase 6). SOP freeze at release is 4.6.
+- Tests: `tests/test_order_actions.py` (7; client prefix `"A"`; `monkeypatch.setattr(ope, "_now", …)` to pick
+  "today"). HTTP-checked on `plan_check` with staff 4 (operator) and 5 (releaser). Doc rev 38 records the decisions.
+
+**4.5 as built — automatic release** (no migration). `ope.release_due_orders(db) -> AutoReleaseResult{checked,
+released}`: pending, non-conflicted orders of `AUTOMATIC` businesses (`ope_order_repo.get_pending_automatic`, FOR UPDATE
+SKIP LOCKED, scheduled within 31 days) whose `release_moment` = (scheduled day JST − `release_days_before`) at
+`release_time` JST has passed → ready, SYSTEM event `detail {"cause": "automatic release", "release_at": …}`.
+Overdue ones (job was down) are released on the next run; idempotent. Manual and automatic release share
+`_release()` (4.6 adds the SOP freeze there). Script `scripts/release_orders.py` (no listener needed: it doesn't touch
+plan). **Runs every 15 minutes** (my call: release times differ per business, e.g. 21:30 the day before, so a single
+03:00 run isn't enough; releases happen up to 15 min after the set time). Tests `tests/test_release_job.py` (3;
+client prefix `"R"`). On `plan_check`: run with biz 1 manual → 0 checked; automatic → 71 checked, 0 released
+(earliest pending is 11/1, due 11/1 03:00); set back to manual.
+
+**4.6 as built — SOP version on orders** (no migration; the columns came with 4.2). User decision 2026-10-30:
+**release goes ahead when no approved version is effective** (frozen = null; the release event detail says
+`{"sop_version": null, "sop_note": "no SOP version effective on <day>"}`) — none of the user's businesses had an
+approved SOP version on 2026-10-30.
+- `ope.resolve_sop_version(db, order)` = pinned ?? `sop_version_repo.get_effective_at(biz, at=order.scheduled_start)`
+  (non-draft, `effective_at ≤ at < expired_at`, newest `version_number`). Computed, so a plan move of a pending order
+  changes it automatically. Biz's own `get_current_active_version` only works for "now" — don't use it for orders.
+- `_release` freezes: `frozen_sop_version_id` + event detail `sop_version {id, version_tag, source pinned|effective}`.
+  Manual and automatic release both go through it. A released order's version never changes (a later plan move
+  keeps it).
+- `POST /ope/orders/{id}/pin {sop_version_id, reason?}` / `…/unpin` (releaser, admin; pending only): same business,
+  non-draft (older or newer); PINNED / UNPINNED events with `version_tag` / `previous_pin`.
+- `OrderResponse.sop_version` = `{id, version_tag, source: frozen | pinned | effective}` or null.
+- Not built from the doc's SOP section: the "impact before approval" list on the biz SOP approval screen
+  ("which upcoming orders will run v4") — no step owns it yet; copying the step list at release is Phase 5.
+- Biz quirk seen: only one FUTURE version may exist and nothing turns FUTURE into ACTIVE (status stays FUTURE;
+  `dynamic_status` computes it), so tests create consecutive versions directly via the ORM.
+- Tests: `tests/test_sop_resolution.py` (5; client prefix `"V"`). HTTP-checked on `plan_check` (biz 1 now has an
+  approved version `v9.…` effective 2026-11-02, and order 191 is released with it frozen). Doc rev 39.
+- The user's dev DB: biz 1 has SOP version id 1 `v1.1.0` (effective 2026-10-30 11:49; biz shows status "future") →
+  biz 1's pending orders (e.g. 888–890) resolve to it.
+
+**4.7 as built — order screen** (no migration). Backend: `/ops/daily` rows carry `order: {id, status, conflict,
+conflict_reason}` (`ope_order_repo.get_active_by_instances`, one query; null for occurrences without an order).
+Frontend: `domain/ope/{types,api,hooks,lib}` (`orderApi` = every `/ope/orders` action; `lib/orderActions.ts` = status /
+event labels and `availableActions(order, staff, today, day)` mirroring the backend roles + rules, display only);
+the 日次ダッシュボード rows show an order status tag (未リリース / リリース済 / 作業中 / 保留中 / 完了 / 取消) + 矛盾,
+and clicking a row opens `OrderDrawer` (status, schedule, SOP version + source, release time, the actions the acting
+staff may use with a reason / memo modal — reason required for hold, cancel, resolve-conflict cancel — and the event
+timeline, newest first; actors shown as 職員 #id). **Not in the UI:** pin / unpin (biz has no endpoint listing a
+business's SOP versions to pick from; API only), staff names in the timeline, the SOP "impact before approval" list.
+Harness-checked through Vite on `plan_check` (10 checks). Frontend types regenerated (includes 4.3–4.6 changes).
+5. Steps: conditions, maker-checker, `is_blocking`. **built** (5.1–5.5, branch `feature/ope-orders`)
+
+#### Phase 5 decisions (2026-10-30, doc rev 41)
+Rejecting a non-blocking step returns **only that step** to todo (later steps keep their state; the order can't
+finish until all are approved). Steps are created at release but stay **locked until the order starts**; starting
+opens step 1. **Only the checker role** approves / rejects, never the step's submitter (four-eyes). Already in the
+doc: conditions `always` / `month_in` / `first_in_week` evaluated on the scheduled date (`first_in_week` = the
+template's first occurrence in that ISO week, read from plan); live preview while pending, frozen at release; next
+step opens on submit, or on approve when `is_blocking` (versioned on the step template); order finishes automatically
+when the last step is approved; a ready order whose step conditions change after a system move gets a conflict flag.
+
+#### Phase 5 step plan (approved 2026-10-30)
+| # | Step | Status |
+|---|---|---|
+| 5.1 | biz `sop_step_template.condition` (JSONB, default `{"type": "always"}`) + `is_blocking` (default false); migration `971958268657`; schemas `StepCondition` = discriminated union `AlwaysCondition` / `MonthInCondition(months 1–12, deduped + sorted)` / `FirstInWeekCondition`; `clone_active_to_draft` copies both; tests in `tests/test_biz.py` | **done** (`05850c1`, pushed by the user) |
+| 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event`; migration `966b78ff950f` | **done** (`fc58dd0`, not pushed) |
+| 5.3 | Build steps: live preview while pending (in the order detail), create + freeze at release, conflict flag when a system move changes a ready order's step set; migration `6c8cc87274c8` | **done** (`abe6281`, not pushed) |
+| 5.4 | Step actions: submit (operator) / approve / reject (checker, four-eyes, reason for reject), unlock rules, start opens step 1, auto-finish on the last approval; manual finish only for zero-step orders | **done** (`074840f`, not pushed) |
+| 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | **done** (not pushed) |
+
+**5.2 as built** (`src/domain_ope/models.py`, migration `966b78ff950f`). User decisions 2026-11-04 (all four as I
+recommended): **events shaped like order events** (`StepEventType` CREATED | STATE_CHANGED, from / to required for a
+change; reject = SUBMITTED → TODO, CHECK `ck_ope_step_event_reject_reason` requires `reason`); **actors only in the
+events** (no submitted_by / approved_by on `ope_step`; 5.4's four-eyes check reads the latest → SUBMITTED event);
+**non-matching steps get no row** (5.3 lists the skipped step templates in the release event detail); **`step_num` =
+the template's number** (gaps allowed).
+- `ope_step`: `order_id` (FK RESTRICT), `step_template_id` (FK sop_step_template RESTRICT — so an SOP version /
+  step template used by an order can't be hard-deleted), `step_num` (> 0), snapshot `title` / `content` /
+  `is_blocking`, `state` (`StepState` LOCKED default | TODO | SUBMITTED | APPROVED; cache of the latest event),
+  timestamps. Unique `uq_ope_step_order_num`, `uq_ope_step_order_template`. The snapshot matters: biz's
+  `cancel_future_version` turns a FUTURE version (pinnable) back into an editable DRAFT.
+- `ope_step_event`: `step_id` (FK RESTRICT), `event_type`, `from_state` / `to_state`, `source` (reuses
+  `ope_event_source_enum`, `create_type=False` in the migration), `actor_staff_id` (CHECK HUMAN ⇔ actor), `reason`,
+  `detail`, `occurred_at`; trigger `trg_ope_step_event_immutable` → existing `ope_reject_mutation()` (models.py also
+  re-creates the function for `create_all`, since table order isn't fixed). Downgrade drops the two new enum types.
+- Tests `tests/test_ope_step.py` (4; client prefix `"P"`; listener switched off like `test_ope.py`).
+- Doc rows for `ope_step` / `ope_step_event` updated (rev 48, after the user allowed the doc edit).
+
+**5.3 as built** (`src/domain_ope/steps.py`, migration `6c8cc87274c8`). User decisions 2026-11-04 (all as I
+recommended): **accept_plan rebuilds** the steps of a released, unstarted order whose step set changed (old rows get
+`retired_at` + a RETIRED step event; the unique indexes ignore retired rows); **same-week orders are re-checked**
+(first_in_week); **person moves flag too** (one rule for all plan changes). Doc rev 49 (paragraph after the
+first_in_week note in Steps).
+- Conditions on the scheduled day (JST): `month_in` = its month; `first_in_week` = no other live occurrence of the
+  template (one-offs included) starts earlier in that ISO week (Mon–Sun JST), via new
+  `plan_cache_repo.starts_for_template`. Same start time counts as first.
+- `plan_steps(db, order, version) -> StepPlan(included, skipped)`; `create_steps` at release (in `_release`, so manual
+  and automatic): LOCKED rows + CREATED step events with the release's source / actor; release event
+  `detail.steps = {created: [nums], skipped: [{step_num, step_template_id, condition}]}` (no version → both empty).
+- `GET /ope/orders/{id}` → `steps` (`OrderStepResponse`: id / state null in a preview) + `steps_preview` (true while
+  not released; canceled unreleased → empty). Frontend types regenerated (no UI yet — 5.5).
+- `order_sync.apply_slot_changes`: `_apply` returns the days touched (old + new scheduled day); afterwards
+  `_recheck_steps` flushes, then for each template checks `ope_order_repo.get_released_unstarted` (ready, or on_hold
+  from ready; FOR UPDATE) in the touched weeks → `step_set_change` → CONFLICT_RAISED, reason
+  `ステップの条件が変わりました（追加: 2、除外: 3）`, detail `{cause: "step conditions changed", added, removed}`. Not raised
+  twice; appended to an existing conflict reason with ` / `. `_raise_conflict` lost its unused `change` param.
+- `resolve_conflict(accept_plan)`: after adopting the plan times, if `is_unstarted_release` and the set differs →
+  `rebuild_steps` (retires **all** active rows, recreates from the frozen version; `detail.steps = {added, removed,
+  created, skipped}`). keep = frozen steps stay. Started orders (in_progress / on_hold from in_progress) are never
+  rechecked or rebuilt.
+- Migration gotchas: autogenerate misses partial-index WHERE changes and enum values; `ALTER TYPE … ADD VALUE` works
+  in the migration transaction (PG 16); the downgrade recreates the enum type and must drop / recreate the CHECKs
+  that compare `event_type` with literals.
+- Tests `tests/test_order_steps.py` (6; client prefix `"K"`; dates computed from today: `base_tuesday()` ≥ 14 days
+  ahead, `next_month_tuesday`); release-detail assertions in `test_release_job.py` / `test_sop_resolution.py` now
+  include `steps`. HTTP-checked on `plan_check` (uvicorn 8001): biz 1's version 1 got 3 step templates via SQL
+  (always / month_in [12] / first_in_week blocking); order 18 (11/17) previewed [1, 3], released, moved by staff 4 to
+  12/08 → conflict 「追加: 2」, start → 400, accept_plan → steps [1, 2, 3].
+
+**5.4 as built** (no migration). User decisions 2026-11-04 (both as I recommended): **a conflict doesn't stop step
+work, but the order can't finish while it's open** (the last approval leaves it in_progress; `resolve_conflict` accept_plan /
+keep then finishes it); **steps are frozen while the order is on hold** (step actions only while in_progress).
+My calls (doc rev 50): opening a step and the automatic finish are SYSTEM events (`detail.cause`: "order started" /
+"previous step submitted" / "previous step approved" + `after_step`; order: "all steps approved"); four-eyes =
+approver / rejecter ≠ the **latest** submitter of that step (`ope_step_repo.latest_submitter`), else 403 `FOUR_EYES`
+(new `ErrorCode`); a resubmission by someone else lets the first submitter approve.
+- `POST /ope/steps/{step_id}/submit` (operator, `OrderCommentIn`) · `/approve` (checker, comment) · `/reject` (checker,
+  `OrderReasonIn`, reason required) → `OrderDetailResponse`. Each locks the **order** row first (`_get_step_for_action`,
+  then `db.refresh(step)`), requires order in_progress and the step state (todo / submitted), else 400.
+- Unlock (`steps.open_next_step`): only the immediate next active step, only if still LOCKED; non-blocking → on
+  submit, `is_blocking` → on approve. Reject → that step back to todo, nothing else changes.
+- `start_order` → `steps.open_first_step`. `finish_order` → 400 when the order has active steps (manual finish = zero
+  steps only). `_finish_if_complete` after approve and after a non-cancel `resolve_conflict`.
+- `OrderStepResponse.events` (`StepEventResponse`, oldest first; empty in a preview) — one query for all steps.
+- Tests `tests/test_step_actions.py` (7; client prefix `"M"`; `monkeypatch.setattr(ope, "_now", …)` to start).
+  HTTP-checked on `plan_check` (8001): new active checkers 6, 7; order 18 (12/08, steps 1, 2, 3 blocking) early-start
+  approved by 5, started by 4 → step 1 todo; manual finish 400; operator approve / checker submit 403; empty reject
+  reason 422; reject → resubmit; all approved → finished (SYSTEM "all steps approved"). Four-eyes over HTTP not checked
+  (no plan_check staff is operator + checker); covered by the unit test.
+- Frontend gap closed by 5.5 (完了 only for zero-step orders, steps in the drawer).
+
+**5.5 as built** (no migration; no user decisions needed — my UI calls, listed here).
+- Backend: `/ops/daily` `DailyOrderSummary.steps_total` / `steps_approved` (`ope_step_repo.progress_by_orders`, one
+  grouped query, retired steps excluded); `OrderDetailResponse.steps` / `steps_preview` and
+  `OrderStepResponse.events` are now **required** in the schema (openapi-typescript made `default_factory` fields
+  optional). Test `test_dashboard_rows_carry_the_step_progress` in `tests/test_step_actions.py`.
+- Frontend: `domain/ope/types` (StepState, StepEventType, OrderStep, StepEvent); `orderApi.submitStep / approveStep /
+  rejectStep`; new `domain/ope/lib/stepActions.ts` (labels 待機 / 未提出 / 確認待ち / 承認済 — not 作業中, which is
+  the order's; `describeStepEvent`, `latestSubmitter`, `rejectionReason`, `availableStepActions` mirroring the
+  backend: in_progress only, submit = operator on todo, approve / reject = checker on submitted and not the latest
+  submitter; `stepBlockedReason` explains the four-eyes case; `stepProgress`). `availableActions` offers 完了 only
+  when `order.steps` is empty.
+- `OrderDrawer`: section 「ステップ」 (承認 x/y; preview note before release) with `StepRow` per step (number, title,
+  state tag, 承認で次へ tag for blocking, content pre-wrap, 差し戻し alert with the reason, last human action line,
+  small 提出 / 承認 / 差し戻し buttons); the existing modal handles step actions too (`PendingAction` union; reason
+  required for 差し戻し). Dashboard rows show `x/y` (mono, muted) after the title when the order has steps.
+  CSS `.order-steps`, `.order-step*`, `.order-progress` (uses `--rule` / `--sheet`; there is no `--border`).
+- Checked: `npm run build`; esbuild harness of the real modules (orderApi, stepActions, orderActions, dashboardApi,
+  staffApi, actingStaff) in node **directly against uvicorn 8001** (`VITE_API_BASE_URL=http://127.0.0.1:8001`; the
+  Vite proxy only strips `/api`, so Vite isn't needed for API checks) on `plan_check`: orders 74 (1 step) and 104
+  (12/07, 3 steps incl. blocking) — preview, release, start, operator / checker actions, four-eyes hiding, reject
+  reason, finish, dashboard "3/3": all 14 checks passed. **Not checked: the browser** (layout, the drawer, buttons) —
+  the user clicks through.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
 
@@ -175,6 +447,27 @@ release / pin / force-start / resolve conflicts; automatic release default 03:00
 A future role that sees only its own client code(s). Needs a per-user client scope (e.g. `staff_client(staff_user_id,
 client_code)`) and every read model / API (calendar, dashboard, orders …) filtering by it — so new endpoints should
 take the acting staff into account and keep client filtering in one place. Details are an open question in the doc.
+
+## 2b. Working away from the office (web session or home PC)
+
+The user sometimes continues away from the office PC: in a Claude Code web session (cloud sandbox, Linux) or on a
+home PC. Their office `.env` (dev DB) is not available there.
+- It clones from GitHub: only **pushed** commits exist there. Push nothing yourself; when done, commit on the branch
+  and tell the user to push / pull.
+- Not available there: the user's dev DB, their uvicorn on 8000, `plan_check`, Task Scheduler, the Windows paths and
+  PowerShell. `.env` / `.env.test` are git-ignored and absent.
+- **PostgreSQL runs in Docker (the user's decision, 2026-10-28)** — away from the office (web session or home PC),
+  never a native install:
+  `docker run -d --name pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16`, then create `test_db` and a
+  throwaway DB `plan_check` (`docker exec pg createdb -U postgres test_db`, same for `plan_check`), and write
+  `.env.test` (`ENVIRONMENT=test`, `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_db`) and `.env`
+  (`DATABASE_URL=postgresql://postgres:postgres@localhost:5432/plan_check`), then `alembic upgrade head` on
+  `plan_check`. Never commit them. If Docker isn't available, say so before writing code and list what can't be
+  verified — don't silently switch to another way of running PostgreSQL.
+- Python: create a venv and `pip install -r requirements.txt` — commands are `.venv/bin/python` there
+  instead of `.venv/Scripts/python.exe` (pyright: `--pythonpath .venv/bin/python`). Frontend: `cd frontend && npm ci`.
+- Line endings: the repository stores LF; the Linux checkout is LF everywhere — keep LF (Windows converts on checkout).
+- Migrations for the user's dev DB: still only hand them over; the user runs `alembic upgrade head` at home/office.
 
 ## 3. Working agreement with the user
 
@@ -200,8 +493,8 @@ take the acting staff into account and keep client filtering in one place. Detai
   user does that).
 - **Design work** (cross-domain, for the team) goes into a Claude Docs document, not chat.
 - Code comments in the repo are Japanese; UI text is Japanese; replies to the user in English.
-- Windows line endings: frontend files are CRLF in the working tree; backend Python files, migrations and MEMORY.md are
-  LF. Match the file you edit. Japanese in shell arguments gets mangled (cp932): pass JSON via files and run Python with
+- Line endings: the ope / dashboard frontend files and `styles.css` are LF in the working tree (checked 2026-11-04;
+  older notes said CRLF); backend Python files, migrations and MEMORY.md are LF. Match the file you edit. Japanese in shell arguments gets mangled (cp932): pass JSON via files and run Python with
   `PYTHONUTF8=1`; long inline Python heredocs can break bash parsing → write the script to the scratchpad and run it.
   `.env`/`.env.*` are git-ignored.
 
@@ -309,6 +602,13 @@ failure). `PlanTemplateResponse.next_occurrence_at` (computed per response by `_
 `biz_master` (client_code, business_seq → business_code, name, …) → `sop_version` (version_number, version_tag,
 status, `effective_at`, `expired_at`; clone / approve / cancel endpoints) → `sop_step_template` (step_num, title,
 content). Definitions only — no execution, no conditions, no `is_blocking` yet (§2 adds them).
+**Release settings (4.1):** `release_mode` (`ReleaseMode`: MANUAL_APPROVAL default | AUTOMATIC; stored as member
+names), `release_time` (Time, default 03:00 JST), `release_days_before` (0–30, default 0, CHECK
+`chk_biz_release_days_before`). New businesses get the defaults (the shared `CRUDBase.create` runs
+`jsonable_encoder`, which turns enums into value strings the Enum column rejects — so create doesn't take them);
+change them with `PATCH /biz/{id}` (`model_dump`, explicit nulls refused for these three only).
+Migration gotchas seen: `op.add_column` with an Enum does not create the PG type (create it first, drop it on
+downgrade); autogenerate never emits CHECK constraints.
 
 ### Key endpoints used by the frontend
 | Purpose | Endpoint |

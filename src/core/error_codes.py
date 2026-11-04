@@ -14,6 +14,7 @@ class ErrorCode(str, Enum):
     # 認証・権限系 (401, 403)
     UNAUTHORIZED = "UNAUTHORIZED"
     FORBIDDEN = "FORBIDDEN"
+    FOUR_EYES = "FOUR_EYES"  # ステップの提出者は、そのステップを承認・差し戻しできない
     STAFF_NOT_ACTIVE = "STAFF_NOT_ACTIVE"  # 職員アカウントが利用開始前・利用停止中
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
     PASSWORD_EXPIRED = "PASSWORD_EXPIRED"
@@ -24,6 +25,7 @@ class ErrorCode(str, Enum):
     # 競合・DB制約系 (409)
     RECORD_ALREADY_EXISTS = "RECORD_ALREADY_EXISTS"
     INSTANCE_ALREADY_VOIDED = "INSTANCE_ALREADY_VOIDED"
+    ORDER_IN_PROGRESS = "ORDER_IN_PROGRESS"  # 作業中のオーダーの予定は人が変更・取消できない
     DELETE_FAILED_RECORD_IN_USE = "DELETE_FAILED_RECORD_IN_USE"
     
     # サーバー内部エラー (500)

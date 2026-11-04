@@ -1,0 +1,491 @@
+"""
+オーダーの状態の操作（4.4）。どの操作もオーダーを行ロックしてから状態を確かめ、記録（ope_order_event）を1件追記します。
+
+    pending ──release──▶ ready ──start──▶ in_progress ──finish──▶ finished
+       │                   │                  │
+       └───────hold────────┴──────hold────────┘ ──▶ on_hold ──resume──▶ 保留前の状態
+    （finished / canceled 以外は cancel で canceled。cancel は plan の予定も取り消す）
+
+- start は予定日（日本時間）以降のみ。それより前はリリース担当の承認（approve_early_start）が必要。
+- 矛盾フラグのあるオーダーは、解決（resolve_conflict）するまでリリース・開始できない。
+- 誰が操作できるかはルーターの @require_roles で決める（ここでは判定しない）。
+- ステップ（5.3）: リリース時に固定したバージョンから作る（domain_ope/steps.py）。リリース前は詳細でプレビューを返す。
+- ステップの操作（5.4）: 作業中のオーダーのみ（保留中は止まる）。提出は作業者、承認・差し戻しは確認者で、
+  そのステップを最後に提出した人以外（四つの目）。最後のステップの承認でオーダーは自動で完了する
+  （矛盾フラグがあれば解決まで待ち、解決時に完了する）。ステップのあるオーダーは手動で完了にできない。
+"""
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
+from zoneinfo import ZoneInfo
+
+from sqlalchemy.orm import Session
+
+from src.core.error_codes import ErrorCode
+from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
+from src.domain_biz.models import BizMaster, SOPStatus, SOPVersion
+from src.domain_ope.models import EventSource, OpeOrder, OpeStep, OrderEventType, OrderStatus, StepState
+from src.domain_ope import steps
+from src.domain_ope.schemas import (
+    AutoReleaseResult, ConflictAction, ConflictResolveIn, OrderDetailResponse, OrderEventResponse, OrderSopVersion,
+    OrderStepResponse, StepEventResponse,
+)
+from src.domain_plan import services as plan_services
+from src.domain_plan.schemas import PlanInstanceCancel
+from src.domain_plan.slot_events import SlotKey, live_instance_for_slot
+from src.infrastructure.repositories import ope_order_repo, ope_step_repo, plan_instance_repo, sop_version_repo
+
+# 予定日の判定に使うタイムゾーン（シートの日付・休日と同じく日本の日付）
+LOCAL_TIMEZONE = ZoneInfo("Asia/Tokyo")
+
+# 保留にできる状態・取り消せる状態（finished / canceled は最終状態）
+HOLDABLE = (OrderStatus.PENDING, OrderStatus.READY, OrderStatus.IN_PROGRESS)
+CANCELABLE = (*HOLDABLE, OrderStatus.ON_HOLD)
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _local_today() -> date:
+    return _now().astimezone(LOCAL_TIMEZONE).date()
+
+
+def _scheduled_day(order: OpeOrder) -> date:
+    return order.scheduled_start.astimezone(LOCAL_TIMEZONE).date()
+
+
+# ==========================================
+# 参照
+# ==========================================
+def resolve_sop_version(db: Session, order: OpeOrder) -> SOPVersion | None:
+    """
+    リリース前のオーダーが使う SOP バージョン = 人が指定したもの ?? 予定日時に有効な承認済みバージョン。
+    （リリース後は frozen_sop_version_id が正。予定が動けば、有効なバージョンも動いた日時で決まり直す）
+    """
+    if order.pinned_sop_version_id is not None:
+        return db.get(SOPVersion, order.pinned_sop_version_id)
+    return sop_version_repo.get_effective_at(db, biz_master_id=order.biz_master_id, at=order.scheduled_start)
+
+
+def _order_sop_version(db: Session, order: OpeOrder) -> OrderSopVersion | None:
+    if order.released_at is not None:
+        frozen = db.get(SOPVersion, order.frozen_sop_version_id) if order.frozen_sop_version_id else None
+        return OrderSopVersion(id=frozen.id, version_tag=frozen.version_tag, source="frozen") if frozen else None
+    version = resolve_sop_version(db, order)
+    if version is None:
+        return None
+    return OrderSopVersion(id=version.id, version_tag=version.version_tag,
+                           source="pinned" if order.pinned_sop_version_id else "effective")
+
+
+def _order_steps(db: Session, order: OpeOrder) -> tuple[list[OrderStepResponse], bool]:
+    """リリース後は作ったステップ、リリース前は使う予定のバージョンからのプレビュー（取消済みの未リリースは空）"""
+    if order.released_at is not None:
+        active = ope_step_repo.get_active(db, order_id=order.id)
+        events: dict[int, list[StepEventResponse]] = {}
+        for e in ope_step_repo.get_events(db, step_ids=[s.id for s in active]):
+            events.setdefault(e.step_id, []).append(StepEventResponse.model_validate(e))
+        return [
+            OrderStepResponse(
+                id=s.id, step_template_id=s.step_template_id, step_num=s.step_num, title=s.title, content=s.content,
+                is_blocking=s.is_blocking, state=s.state, events=events.get(s.id, []),
+            )
+            for s in active
+        ], False
+    if order.status == OrderStatus.CANCELED:
+        return [], False
+    plan = steps.plan_steps(db, order, resolve_sop_version(db, order))
+    return [
+        OrderStepResponse(
+            id=None, step_template_id=t.id, step_num=t.step_num, title=t.title, content=t.content,
+            is_blocking=t.is_blocking, state=None, events=[],
+        )
+        for t in plan.included
+    ], True
+
+
+def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
+    events = ope_order_repo.get_events(db, order_id=order.id)
+    order_steps, preview = _order_steps(db, order)
+    return OrderDetailResponse.model_validate(
+        {
+            **{c.key: getattr(order, c.key) for c in OpeOrder.__table__.columns},
+            "early_start_approved": any(e.event_type == OrderEventType.EARLY_START_APPROVED for e in events),
+            "sop_version": _order_sop_version(db, order),
+            "steps": order_steps,
+            "steps_preview": preview,
+            "events": [OrderEventResponse.model_validate(e) for e in events],
+        }
+    )
+
+
+def get_order(db: Session, order_id: int) -> OrderDetailResponse:
+    order = db.get(OpeOrder, order_id)
+    if not order:
+        raise NotFoundError(f"Order(id={order_id}) not found.")
+    return _detail(db, order)
+
+
+# ==========================================
+# 状態の操作
+# ==========================================
+def _get_locked(db: Session, order_id: int) -> OpeOrder:
+    order = ope_order_repo.get_locked(db, id=order_id)
+    if not order:
+        raise NotFoundError(f"Order(id={order_id}) not found.")
+    return order
+
+
+def _require_status(order: OpeOrder, allowed: tuple[OrderStatus, ...], action: str) -> None:
+    if order.status not in allowed:
+        raise BadRequestError(
+            f"Cannot {action} order {order.id}: it is {order.status.value} "
+            f"(allowed: {', '.join(s.value for s in allowed)})."
+        )
+
+
+def _require_no_conflict(order: OpeOrder, action: str) -> None:
+    if order.conflict:
+        raise BadRequestError(f"Cannot {action} order {order.id} while it has a conflict; resolve it first.")
+
+
+def _transition(
+    db: Session, order: OpeOrder, to: OrderStatus, actor_staff_id: int, reason: str | None,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    from_status = order.status
+    order.status = to
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.STATUS_CHANGED, from_status=from_status, to_status=to,
+        source=EventSource.HUMAN, actor_staff_id=actor_staff_id, reason=reason, detail=detail,
+    )
+
+
+def _finish(db: Session, order: OpeOrder) -> OrderDetailResponse:
+    db.commit()
+    db.refresh(order)
+    return _detail(db, order)
+
+
+def _release(
+    db: Session, order: OpeOrder, source: EventSource, actor_staff_id: int | None, reason: str | None,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    """
+    pending → ready。手動・自動のリリースで共通。リリース時点で使う SOP バージョンを固定する（以後は変わらない）。
+    承認済みのバージョンが無い業務でもリリースはできる（2026-10-30 の決定。記録に「バージョンなし」と残す。ステップは0件）。
+    同時に、条件に合うステップを作る（すべて locked。作ったもの・条件で外れたものを記録の detail.steps に残す）。
+    """
+    version = resolve_sop_version(db, order)
+    order.frozen_sop_version_id = version.id if version else None
+    order.released_at = _now()
+    order.status = OrderStatus.READY
+    sop: dict[str, Any] = (
+        {"sop_version": {"id": version.id, "version_tag": version.version_tag,
+                         "source": "pinned" if order.pinned_sop_version_id else "effective"}}
+        if version else {"sop_version": None, "sop_note": f"no SOP version effective on {_scheduled_day(order).isoformat()}"}
+    )
+    sop["steps"] = steps.create_steps(db, order, version, source, actor_staff_id)
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.STATUS_CHANGED, from_status=OrderStatus.PENDING,
+        to_status=OrderStatus.READY, source=source, actor_staff_id=actor_staff_id, reason=reason,
+        detail={**(detail or {}), **sop},
+    )
+
+
+def release_order(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """pending → ready（リリース担当・業務管理者。自動リリースの業務でも手動でリリースできる）"""
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.PENDING,), "release")
+    _require_no_conflict(order, "release")
+    _release(db, order, EventSource.HUMAN, actor_staff_id, comment)
+    return _finish(db, order)
+
+
+# ==========================================
+# 自動リリース（scripts/release_orders.py から15分ごとに実行）
+# ==========================================
+# 対象の絞り込み: リリースは最大で予定日の30日前（release_days_before の上限）
+MAX_RELEASE_LEAD = timedelta(days=31)
+
+
+def release_moment(order: OpeOrder, biz: BizMaster) -> datetime:
+    """自動リリースの日時 = 予定日（日本時間）の release_days_before 日前の release_time（日本時間）"""
+    day = _scheduled_day(order) - timedelta(days=biz.release_days_before)
+    return datetime.combine(day, biz.release_time, tzinfo=LOCAL_TIMEZONE)
+
+
+def release_due_orders(db: Session) -> AutoReleaseResult:
+    """
+    自動リリースの業務の pending オーダーのうち、リリース日時を過ぎたものを ready にします（システムの記録）。
+    矛盾のあるオーダーは飛ばします（人が解決してから）。止まっていた間の分もまとめてリリースします。
+    何度実行しても同じ結果になります（手動でリリース済み・取消済みのものは対象外）。
+    """
+    now = _now()
+    candidates = ope_order_repo.get_pending_automatic(db, starting_before=now + MAX_RELEASE_LEAD)
+    released = []
+    for order, biz in candidates:
+        moment = release_moment(order, biz)
+        if moment <= now:
+            _release(db, order, EventSource.SYSTEM, None, None, {"cause": "automatic release", "release_at": moment.isoformat()})
+            released.append(order.id)
+    db.commit()
+    return AutoReleaseResult(checked=len(candidates), released=released)
+
+
+def pin_sop_version(
+    db: Session, order_id: int, actor_staff_id: int, sop_version_id: int, reason: str | None = None,
+) -> OrderDetailResponse:
+    """
+    リリース前のオーダーに使う SOP バージョンを指定します（リリース担当・業務管理者）。
+    同じ業務の承認済み（草稿以外）のバージョンなら、古いものでも新しいものでも指定できます。
+    """
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.PENDING,), "pin a SOP version for")
+    version = db.get(SOPVersion, sop_version_id)
+    if version is None or version.biz_master_id != order.biz_master_id:
+        raise NotFoundError(f"SOPVersion(id={sop_version_id}) of this order's business not found.")
+    if version.status == SOPStatus.DRAFT:
+        raise BadRequestError(f"SOPVersion {version.version_tag} is a draft; only approved versions can be pinned.")
+    if order.pinned_sop_version_id == version.id:
+        raise BadRequestError(f"Order {order.id} is already pinned to {version.version_tag}.")
+    previous = order.pinned_sop_version_id
+    order.pinned_sop_version_id = version.id
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.PINNED, source=EventSource.HUMAN, actor_staff_id=actor_staff_id,
+        reason=reason, detail={"sop_version_id": version.id, "version_tag": version.version_tag, "previous_pin": previous},
+    )
+    return _finish(db, order)
+
+
+def unpin_sop_version(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """指定を外し、予定日時に有効なバージョンに戻します（リリース担当・業務管理者。リリース前のみ）。"""
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.PENDING,), "unpin the SOP version of")
+    if order.pinned_sop_version_id is None:
+        raise BadRequestError(f"Order {order.id} has no pinned SOP version.")
+    previous = order.pinned_sop_version_id
+    order.pinned_sop_version_id = None
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.UNPINNED, source=EventSource.HUMAN, actor_staff_id=actor_staff_id,
+        reason=comment, detail={"previous_pin": previous},
+    )
+    return _finish(db, order)
+
+
+def approve_early_start(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """予定日より前の開始を承認します（リリース担当）。承認後は予定日前でも start できます。"""
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.PENDING, OrderStatus.READY), "approve an early start for")
+    if _scheduled_day(order) <= _local_today():
+        raise BadRequestError(f"Order {order.id} is scheduled for today or earlier; no approval is needed to start it.")
+    if ope_order_repo.has_event(db, order_id=order.id, event_type=OrderEventType.EARLY_START_APPROVED):
+        raise DuplicatedRecordError(f"An early start of order {order.id} has already been approved.")
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.EARLY_START_APPROVED, source=EventSource.HUMAN,
+        actor_staff_id=actor_staff_id, reason=comment, detail={"scheduled_day": _scheduled_day(order).isoformat()},
+    )
+    return _finish(db, order)
+
+
+def start_order(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """ready → in_progress（作業者）。予定日（日本時間）以降のみ。それより前はリリース担当の承認が必要。"""
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.READY,), "start")
+    _require_no_conflict(order, "start")
+    early = _scheduled_day(order) > _local_today()
+    if early and not ope_order_repo.has_event(db, order_id=order.id, event_type=OrderEventType.EARLY_START_APPROVED):
+        raise BadRequestError(
+            f"Order {order.id} is scheduled for {_scheduled_day(order).isoformat()}; "
+            "starting before that day needs a releaser's approval."
+        )
+    _transition(db, order, OrderStatus.IN_PROGRESS, actor_staff_id, comment, {"early_start": True} if early else None)
+    steps.open_first_step(db, order)
+    return _finish(db, order)
+
+
+def hold_order(db: Session, order_id: int, actor_staff_id: int, reason: str) -> OrderDetailResponse:
+    """pending / ready / in_progress → on_hold（日付なし。再開すると保留前の状態に戻る）"""
+    order = _get_locked(db, order_id)
+    _require_status(order, HOLDABLE, "hold")
+    order.status_before_hold = order.status
+    _transition(db, order, OrderStatus.ON_HOLD, actor_staff_id, reason)
+    return _finish(db, order)
+
+
+def resume_order(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """on_hold → 保留前の状態"""
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.ON_HOLD,), "resume")
+    assert order.status_before_hold is not None  # CHECK 制約で保証
+    back_to = order.status_before_hold
+    order.status_before_hold = None
+    _transition(db, order, back_to, actor_staff_id, comment)
+    return _finish(db, order)
+
+
+def finish_order(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """in_progress → finished（作業者。ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了する）"""
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.IN_PROGRESS,), "finish")
+    if ope_step_repo.get_active(db, order_id=order.id):
+        raise BadRequestError(f"Order {order.id} has steps; it finishes automatically when its last step is approved.")
+    _transition(db, order, OrderStatus.FINISHED, actor_staff_id, comment)
+    return _finish(db, order)
+
+
+def _finish_if_complete(db: Session, order: OpeOrder) -> None:
+    """作業中で矛盾が無く、すべてのステップが承認済みならオーダーを完了にする（システムの記録）"""
+    if order.status == OrderStatus.IN_PROGRESS and not order.conflict and steps.all_approved(db, order):
+        order.status = OrderStatus.FINISHED
+        ope_order_repo.add_event(
+            db, order=order, event_type=OrderEventType.STATUS_CHANGED, from_status=OrderStatus.IN_PROGRESS,
+            to_status=OrderStatus.FINISHED, source=EventSource.SYSTEM, actor_staff_id=None,
+            detail={"cause": "all steps approved"},
+        )
+
+
+# ==========================================
+# ステップの操作（5.4）
+# ==========================================
+def _get_step_for_action(db: Session, step_id: int, allowed: StepState, action: str) -> tuple[OpeOrder, OpeStep]:
+    """ステップのオーダーを行ロックしてから、ステップの状態を確かめる（同じオーダーのステップの操作は順番に処理される）"""
+    found = db.get(OpeStep, step_id)
+    if found is None or found.retired_at is not None:
+        raise NotFoundError(f"Step(id={step_id}) not found.")
+    order = _get_locked(db, found.order_id)
+    db.refresh(found)  # ロックを取った後の状態で判定する
+    _require_status(order, (OrderStatus.IN_PROGRESS,), f"{action} a step of")
+    if found.state != allowed:
+        raise BadRequestError(
+            f"Cannot {action} step {found.step_num} of order {order.id}: it is {found.state.value} (allowed: {allowed.value})."
+        )
+    return order, found
+
+
+def _require_other_than_submitter(db: Session, step: OpeStep, actor_staff_id: int, action: str) -> None:
+    if ope_step_repo.latest_submitter(db, step_id=step.id) == actor_staff_id:
+        raise ForbiddenError(
+            f"You submitted step {step.step_num}; another checker must {action} it.", error_code=ErrorCode.FOUR_EYES,
+        )
+
+
+def submit_step(db: Session, step_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """todo → submitted（作業者）。is_blocking でなければ次のステップが開く。"""
+    order, step = _get_step_for_action(db, step_id, StepState.TODO, "submit")
+    steps.set_state(db, step, StepState.SUBMITTED, EventSource.HUMAN, actor_staff_id, comment)
+    if not step.is_blocking:
+        steps.open_next_step(db, order, step, "previous step submitted")
+    return _finish(db, order)
+
+
+def approve_step(db: Session, step_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """submitted → approved（確認者・提出者以外）。is_blocking なら次のステップが開く。最後の承認でオーダーが完了する。"""
+    order, step = _get_step_for_action(db, step_id, StepState.SUBMITTED, "approve")
+    _require_other_than_submitter(db, step, actor_staff_id, "approve")
+    steps.set_state(db, step, StepState.APPROVED, EventSource.HUMAN, actor_staff_id, comment)
+    if step.is_blocking:
+        steps.open_next_step(db, order, step, "previous step approved")
+    db.flush()
+    _finish_if_complete(db, order)
+    return _finish(db, order)
+
+
+def reject_step(db: Session, step_id: int, actor_staff_id: int, reason: str) -> OrderDetailResponse:
+    """submitted → todo（確認者・提出者以外・理由必須）。そのステップだけを戻し、後のステップはそのまま。"""
+    order, step = _get_step_for_action(db, step_id, StepState.SUBMITTED, "reject")
+    _require_other_than_submitter(db, step, actor_staff_id, "reject")
+    steps.set_state(db, step, StepState.TODO, EventSource.HUMAN, actor_staff_id, reason)
+    return _finish(db, order)
+
+
+def _cancel_plan_instance(db: Session, order: OpeOrder, actor_staff_id: int, reason: str) -> bool:
+    """
+    オーダーの plan の予定がまだ有効なら取り消します（カレンダーからも消え、同じ枠に新しいオーダーが作られないように）。
+    オーダーを先に取消済みにしてから呼ぶため、plan の変更の受け手（order_sync）は何もしません。
+    plan の取消はコミットまで行います。
+    """
+    found = plan_instance_repo.get_with_void(db, id=order.current_instance_id)
+    if found is None or found[1] is not None:
+        return False  # 枠はすでに消えている
+    plan_services.cancel_instance(db, order.current_instance_id, PlanInstanceCancel(note=reason), actor_staff_id=actor_staff_id)
+    return True
+
+
+def cancel_order(db: Session, order_id: int, actor_staff_id: int, reason: str) -> OrderDetailResponse:
+    """finished / canceled 以外 → canceled（リリース担当・業務管理者。理由必須。plan の予定も取り消す）"""
+    order = _get_locked(db, order_id)
+    _require_status(order, CANCELABLE, "cancel")
+    order.status_before_hold = None
+    order.conflict = False
+    order.conflict_reason = None
+    _transition(db, order, OrderStatus.CANCELED, actor_staff_id, reason)
+    db.flush()
+    if not _cancel_plan_instance(db, order, actor_staff_id, reason):
+        db.commit()
+    db.refresh(order)
+    return _detail(db, order)
+
+
+def _slot_of(order: OpeOrder) -> SlotKey:
+    if order.source_sheet_event_id is not None:
+        return SlotKey(order.template_id, "sheet_event", order.source_sheet_event_id, order.occurrence_date)
+    if order.one_off_instance_id is not None:
+        return SlotKey(order.template_id, "one_off", order.one_off_instance_id, order.occurrence_date)
+    return SlotKey(order.template_id, "date", order.occurrence_date, order.occurrence_date)
+
+
+def resolve_conflict(db: Session, order_id: int, actor_staff_id: int, resolve_in: ConflictResolveIn) -> OrderDetailResponse:
+    """
+    矛盾を解決します（リリース担当・業務管理者）。
+    - accept_plan: plan の新しい日時を採用（plan の予定が無くなっていた場合はオーダーを取消）。
+      リリース済みで未開始なら、今の予定日の条件でステップを作り直す（結果が変わっていた場合のみ。detail.steps）
+    - keep: オーダーをそのまま続ける（フラグだけ外す）
+    - cancel: オーダーを取り消す（plan の予定がまだあれば、それも取り消す。理由必須）
+    """
+    if resolve_in.action == ConflictAction.CANCEL and not resolve_in.reason:
+        raise BadRequestError("A reason is required to cancel an order.")
+    order = _get_locked(db, order_id)
+    if not order.conflict:
+        raise BadRequestError(f"Order {order.id} has no conflict to resolve.")
+
+    previous_reason = order.conflict_reason
+    order.conflict = False
+    order.conflict_reason = None
+    detail: dict[str, Any] = {"action": resolve_in.action.value, "conflict_reason": previous_reason}
+    cancel = resolve_in.action == ConflictAction.CANCEL
+    if resolve_in.action == ConflictAction.ACCEPT_PLAN:
+        live = live_instance_for_slot(db, _slot_of(order))
+        if live is None:
+            cancel = True  # plan の予定が無くなっていた → 採用 = 取消
+        else:
+            detail["before"] = {"start": order.scheduled_start.isoformat(), "end": order.scheduled_end.isoformat()}
+            detail["after"] = {"start": live.scheduled_start.isoformat(), "end": live.scheduled_end.isoformat()}
+            order.current_instance_id = live.id
+            order.occurrence_date = live.occurrence_date
+            order.scheduled_start = live.scheduled_start
+            order.scheduled_end = live.scheduled_end
+
+        if not cancel and steps.is_unstarted_release(order):
+            db.flush()
+            change = steps.step_set_change(db, order)
+            if change is not None:
+                detail["steps"] = steps.rebuild_steps(db, order, change, EventSource.HUMAN, actor_staff_id)
+
+    from_status = order.status
+    if cancel:
+        order.status = OrderStatus.CANCELED
+        order.status_before_hold = None
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.CONFLICT_RESOLVED, source=EventSource.HUMAN,
+        actor_staff_id=actor_staff_id, reason=resolve_in.reason, detail=detail,
+        from_status=from_status if cancel else None, to_status=OrderStatus.CANCELED if cancel else None,
+    )
+    if not cancel:
+        db.flush()
+        _finish_if_complete(db, order)  # 矛盾の間に最後のステップが承認されていた → ここで完了
+    db.flush()
+    if not (cancel and _cancel_plan_instance(db, order, actor_staff_id, resolve_in.reason or "conflict resolved")):
+        db.commit()
+    db.refresh(order)
+    return _detail(db, order)

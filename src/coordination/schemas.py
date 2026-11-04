@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from src.domain_ope.models import OrderStatus
 from src.domain_plan.models import InstanceOrigin, VoidReason
 
 
@@ -19,6 +20,16 @@ class DailyCalendarStatus(BaseModel):
     holiday_name: str | None = Field(default=None, description="holiday name when the day is a holiday in this calendar")
 
 
+class DailyOrderSummary(BaseModel):
+    """予定のオーダーの要約（詳細と操作は GET /ope/orders/{id}）"""
+    id: int
+    status: OrderStatus
+    conflict: bool
+    conflict_reason: str | None = None
+    steps_total: int = Field(default=0, description="the order's steps (0: not released yet, or no steps)")
+    steps_approved: int = Field(default=0, description="steps approved so far")
+
+
 class DailyOccurrence(BaseModel):
     """その日に開始する有効な予定"""
     instance_id: int
@@ -31,6 +42,9 @@ class DailyOccurrence(BaseModel):
     is_override: bool
     source_sheet_event_id: int | None = Field(default=None, description="sheet date this occurrence was computed from")
     ui_metadata: dict[str, Any] | None = Field(description="effective styling (template merged with instance)")
+    order: DailyOrderSummary | None = Field(
+        default=None, description="the order of this occurrence (null: none, e.g. past occurrences before go-live)"
+    )
 
 
 class DailyVoidedItem(BaseModel):

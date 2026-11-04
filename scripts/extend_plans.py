@@ -18,10 +18,13 @@ sys.path.insert(0, str(ROOT))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("extend_plans")
 
+from src.coordination import order_sync  # noqa: E402
 from src.domain_plan.services import extend_all_templates  # noqa: E402
 from src.infrastructure.database import SessionLocal, engine  # noqa: E402
 
 engine.echo = False  # 毎日の実行ログに全SQLを出さない（アプリ側の echo 設定はそのまま）
+# 新しく生成した予定にもオーダーを作る（アプリと同じ受け手を登録する）
+order_sync.register()
 
 
 def main() -> int:

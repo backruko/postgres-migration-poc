@@ -1,6 +1,8 @@
 # src/infrastructure/repositories/sop.py
+from datetime import datetime
+
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from src.infrastructure.repositories.base import CRUDBase  
@@ -29,6 +31,24 @@ class SOPVersionRepository(CRUDBase[SOPVersion, SOPVersionCreate, SOPVersionUpda
         db.commit()
         db.refresh(db_obj)
         return db_obj
+
+    def get_effective_at(self, db: Session, *, biz_master_id: int, at: datetime) -> SOPVersion | None:
+        """
+        指定日時に有効な承認済みバージョン（草稿以外で effective_at ≤ at < expired_at。expired_at が無ければ無期限）。
+        オーダーの予定日時に使うバージョンの解決に使います（現在日時ではなく、予定日時で判定する）。
+        """
+        stmt = (
+            select(SOPVersion)
+            .where(
+                SOPVersion.biz_master_id == biz_master_id,
+                SOPVersion.status != SOPStatus.DRAFT,
+                SOPVersion.effective_at <= at,
+                or_(SOPVersion.expired_at.is_(None), SOPVersion.expired_at > at),
+            )
+            .order_by(SOPVersion.version_number.desc())
+            .limit(1)
+        )
+        return db.scalars(stmt).first()
 
 
 # ==========================================

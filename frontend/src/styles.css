@@ -248,6 +248,24 @@ h1 .client { color: var(--accent); }
 .daily-item.voided { color: var(--muted); }
 .daily-item.voided .daily-title { text-decoration: line-through; text-decoration-thickness: 1px; }
 .voided-swatch { background: transparent; border: 1.5px dashed var(--rule-strong); }
+/* オーダーの状態（行をクリックすると詳細と操作のドロワー） */
+.daily-item.has-order { cursor: pointer; border-radius: 4px; margin-inline: -4px; padding: 2px 4px; }
+.daily-item.has-order:hover { background: var(--select); }
+.daily-item.has-order:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.order-status-tag { min-width: 64px; text-align: center; }
+.order-blocked { margin-top: 6px; font-size: 12px; }
+.order-event { display: grid; gap: 2px; font-size: 13px; }
+.order-progress { font-size: 12px; }
+.order-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.order-step { border: 1px solid var(--rule); background: var(--sheet); border-radius: 6px; padding: 8px 10px; display: grid; gap: 4px; }
+.order-step.approved { opacity: 0.75; }
+.order-step.locked, .order-step.preview { border-style: dashed; }
+.order-step-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.order-step-num { min-width: 1.5em; text-align: right; }
+.order-step-content { white-space: pre-wrap; font-size: 13px; }
+.order-step-last { font-size: 12px; }
+.order-step-alert { padding: 4px 8px; }
+.order-step-actions { margin-top: 2px; }
 
 .page-footer { color: var(--muted); font-size: 12px; }
 @media (prefers-reduced-motion: no-preference) {
