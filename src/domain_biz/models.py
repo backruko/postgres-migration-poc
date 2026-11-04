@@ -30,6 +30,18 @@ from src.infrastructure.database import Base
 from src.core.mixin import SoftDeleteMixin
 
 
+class ExecutionType(str, enum.Enum):
+    """業務の実行のしかた（Phase 7）"""
+    SOP = "sop"                  # SOP バージョンのステップで作業する（既定）
+    LIGHTWEIGHT = "lightweight"  # ステップなし（顧客側の出来事: データの受領など）。完了は人の受領操作か信号
+
+
+class CompletionMode(str, enum.Enum):
+    """LIGHTWEIGHT の業務のオーダーを完了にする方法（SOP の業務はステップの承認で完了する）"""
+    MANUAL = "manual"        # 作業者が受領を記録する（既定）
+    AUTOMATIC = "automatic"  # 信号（POST /ope/signals）で完了する。signal_type が必須
+
+
 class ReleaseMode(str, enum.Enum):
     """オーダーを pending から ready（実行可能）にする方法"""
     MANUAL_APPROVAL = "manual_approval"  # リリース担当・業務管理者が SOP とステップを確認して承認する
@@ -123,6 +135,25 @@ class BizMaster(Base, SoftDeleteMixin):
         comment="自動リリースを予定日の何日前に行うか（0 = 予定日当日）"
     )
 
+    # --- 顧客側の出来事（Phase 7）。AUTOMATIC は LIGHTWEIGHT のみ・signal_type 必須（顧客ごとに一意） ---
+    execution_type: Mapped["ExecutionType"] = mapped_column(
+        Enum(ExecutionType, name="biz_execution_type_enum"),
+        nullable=False,
+        default=ExecutionType.SOP,
+        server_default=text("'SOP'"),
+        comment="実行のしかた（SOP: ステップで作業 / LIGHTWEIGHT: ステップなし・顧客側の出来事）"
+    )
+    completion_mode: Mapped["CompletionMode"] = mapped_column(
+        Enum(CompletionMode, name="biz_completion_mode_enum"),
+        nullable=False,
+        default=CompletionMode.MANUAL,
+        server_default=text("'MANUAL'"),
+        comment="完了のしかた（MANUAL: 作業者が受領を記録 / AUTOMATIC: 信号で完了。LIGHTWEIGHT のみ）"
+    )
+    signal_type: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, comment="完了の信号の種類（AUTOMATIC のとき必須。同じ顧客の業務どうしで一意）"
+    )
+
     # --- System Audit Trail ---
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
@@ -163,6 +194,23 @@ class BizMaster(Base, SoftDeleteMixin):
         CheckConstraint(
             'release_days_before BETWEEN 0 AND 30',
             name='chk_biz_release_days_before'
+        ),
+        # 4. 信号での完了は LIGHTWEIGHT の業務のみ。信号の種類は信号で完了する業務だけが持つ
+        CheckConstraint(
+            "completion_mode <> 'AUTOMATIC' OR execution_type = 'LIGHTWEIGHT'",
+            name='chk_biz_automatic_completion_lightweight'
+        ),
+        CheckConstraint(
+            "(completion_mode = 'AUTOMATIC') = (signal_type IS NOT NULL)",
+            name='chk_biz_signal_type'
+        ),
+        # 5. 信号の種類は、同じ顧客の未削除の業務どうしで一意（1つの信号が見つける業務は1つ）
+        Index(
+            'uq_biz_client_signal_type_alive',
+            'client_code',
+            'signal_type',
+            unique=True,
+            postgresql_where=text("signal_type IS NOT NULL AND deleted_at IS NULL")
         ),
     )
 

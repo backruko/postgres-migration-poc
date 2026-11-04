@@ -1408,6 +1408,10 @@ export interface components {
             release_time: string;
             /** Release Days Before */
             release_days_before: number;
+            execution_type: components["schemas"]["ExecutionType"];
+            completion_mode: components["schemas"]["CompletionMode"];
+            /** Signal Type */
+            signal_type: string | null;
             /** Is Deleted */
             is_deleted: boolean;
             /**
@@ -1441,6 +1445,15 @@ export interface components {
              * @description automatic release N days before the scheduled day
              */
             release_days_before?: number | null;
+            /** @description SOP (steps) or LIGHTWEIGHT (client-side event, no steps) */
+            execution_type?: components["schemas"]["ExecutionType"] | null;
+            /** @description MANUAL (operator marks received) or AUTOMATIC (signal) */
+            completion_mode?: components["schemas"]["CompletionMode"] | null;
+            /**
+             * Signal Type
+             * @description signal type that completes the orders (AUTOMATIC only)
+             */
+            signal_type?: string | null;
         };
         /** BizRef */
         BizRef: {
@@ -1763,6 +1776,12 @@ export interface components {
             name?: string | null;
         };
         /**
+         * CompletionMode
+         * @description LIGHTWEIGHT の業務のオーダーを完了にする方法（SOP の業務はステップの承認で完了する）
+         * @enum {string}
+         */
+        CompletionMode: "manual" | "automatic";
+        /**
          * ConflictAction
          * @description 矛盾の解決方法
          * @enum {string}
@@ -2072,6 +2091,12 @@ export interface components {
          * @enum {string}
          */
         EventSource: "human" | "system";
+        /**
+         * ExecutionType
+         * @description 業務の実行のしかた（Phase 7）
+         * @enum {string}
+         */
+        ExecutionType: "sop" | "lightweight";
         /** ExplicitDatesAdd */
         ExplicitDatesAdd: {
             /** Dates */

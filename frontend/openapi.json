@@ -8684,6 +8684,23 @@
             "type": "integer",
             "title": "Release Days Before"
           },
+          "execution_type": {
+            "$ref": "#/components/schemas/ExecutionType"
+          },
+          "completion_mode": {
+            "$ref": "#/components/schemas/CompletionMode"
+          },
+          "signal_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Type"
+          },
           "is_deleted": {
             "type": "boolean",
             "title": "Is Deleted"
@@ -8709,6 +8726,9 @@
           "release_mode",
           "release_time",
           "release_days_before",
+          "execution_type",
+          "completion_mode",
+          "signal_type",
           "is_deleted",
           "created_at",
           "updated_at"
@@ -8789,6 +8809,42 @@
             ],
             "title": "Release Days Before",
             "description": "automatic release N days before the scheduled day"
+          },
+          "execution_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionType"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SOP (steps) or LIGHTWEIGHT (client-side event, no steps)"
+          },
+          "completion_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompletionMode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MANUAL (operator marks received) or AUTOMATIC (signal)"
+          },
+          "signal_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Type",
+            "description": "signal type that completes the orders (AUTOMATIC only)"
           }
         },
         "type": "object",
@@ -9470,6 +9526,15 @@
         "type": "object",
         "title": "ClientUpdate"
       },
+      "CompletionMode": {
+        "type": "string",
+        "enum": [
+          "manual",
+          "automatic"
+        ],
+        "title": "CompletionMode",
+        "description": "LIGHTWEIGHT の業務のオーダーを完了にする方法（SOP の業務はステップの承認で完了する）"
+      },
       "ConflictAction": {
         "type": "string",
         "enum": [
@@ -10069,6 +10134,15 @@
           "system"
         ],
         "title": "EventSource"
+      },
+      "ExecutionType": {
+        "type": "string",
+        "enum": [
+          "sop",
+          "lightweight"
+        ],
+        "title": "ExecutionType",
+        "description": "業務の実行のしかた（Phase 7）"
       },
       "ExplicitDatesAdd": {
         "properties": {

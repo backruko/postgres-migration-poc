@@ -28,19 +28,20 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   2026-11-04 (`1a364ca`, not pushed). Step 6.4 (start check + dependency override, migration `58425e70286d`)
   committed 2026-11-04 (`916ebee`, not pushed). Step 6.5 (frontend + small backend additions, no migration) committed
   2026-11-04 (`3669528`, not pushed). With it **Phase 6 is complete** (merged into `main`). Phase 7 (client
-  events / signals) planned 2026-11-04 (§2 "Phase 7 step plan"). Next: 7.1.**
+  events / signals) planned 2026-11-04 (§2 "Phase 7 step plan"). Step 7.1 (biz client-event settings, migration
+  `6a7849dbf2ec`) committed 2026-11-04 (not pushed). Next: 7.2.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
-- **DB:** latest Alembic head is `58425e70286d` (order event DEPENDENCY_OVERRIDE_APPROVED). Migrations: `ceee1634d6a7`
+- **DB:** latest Alembic head is `6a7849dbf2ec` (biz execution_type / completion_mode / signal_type). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
   `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` →
-  `971958268657` (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at, RETIRED) → `2904467fd7b9` (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (order event type DEPENDENCY_OVERRIDE_APPROVED).
+  `971958268657` (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at, RETIRED) → `2904467fd7b9` (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (order event type DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec` (biz client-event settings).
   The user's dev DB: at `6c8cc87274c8` (upgraded by the user 2026-11-04); earlier, at `5eede5808433` on 2026-10-30 (staff id 1, login `system`, system_admin; biz 1 has SOP
-  version 1 `v1.1.0`); `971958268657`, `966b78ff950f` and `6c8cc87274c8` handed over; `2904467fd7b9`, `cb0ae371f402` and `58425e70286d` handed over 2026-11-04.
-  `plan_check` is at `58425e70286d`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
+  version 1 `v1.1.0`); `971958268657`, `966b78ff950f` and `6c8cc87274c8` handed over; `2904467fd7b9`, `cb0ae371f402`, `58425e70286d` and `6a7849dbf2ec` handed over 2026-11-04.
+  `plan_check` is at `6a7849dbf2ec`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, dependency_start, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 132 passed, ~95–175 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, dependency_start, client_events, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 136 passed, ~95–175 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -94,7 +95,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 62 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 62}` to see only newer edits, and
+**Last rev written by me: 63 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 63}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–6 built, rev 60).
 
@@ -576,11 +577,28 @@ until real login; watchers later = scripts posting the same signal); **match = s
 #### Phase 7 step plan (approved 2026-11-04)
 | # | Step | Status |
 |---|---|---|
-| 7.1 | biz `execution_type` (SOP / LIGHTWEIGHT), `completion_mode` (MANUAL / AUTOMATIC), `signal_type` (required for AUTOMATIC); biz PATCH; migration; LIGHTWEIGHT orders get no steps at release | **next** |
-| 7.2 | `ope_signal` table (append-only: type, client_code, key, received_at, sender, match result + order) + role `signal_sender` — tables / role only | |
+| 7.1 | biz `execution_type` (SOP / LIGHTWEIGHT), `completion_mode` (MANUAL / AUTOMATIC), `signal_type` (required for AUTOMATIC); biz PATCH; migration; LIGHTWEIGHT orders get no steps at release; migration `6a7849dbf2ec` | **done** (not pushed) |
+| 7.2 | `ope_signal` table (append-only: type, client_code, key, received_at, sender, match result + order) + role `signal_sender` — tables / role only | **next** |
 | 7.3 | `POST /ope/signals` (signal_sender): store every signal, match, finish the order (system event); unmatched / ambiguous kept; manual way out (finish with reason) for AUTOMATIC | |
 | 7.4 | Read side: "late" computed on the dashboard, unmatched signals listed (`GET /ope/signals`) | |
 | 7.5 | Frontend: client-event settings on a business, 受領 (mark received) in the drawer, late tag, unmatched signals panel | |
+
+**7.1 as built** (migration `6a7849dbf2ec`). User decisions 2026-11-04 (both as I recommended, doc rev 63): **signal
+type unique per client** (partial unique index `uq_biz_client_signal_type_alive` on (client_code, signal_type) where
+not null and `deleted_at IS NULL`); **AUTOMATIC only for LIGHTWEIGHT**.
+- `biz_master`: `execution_type` (`ExecutionType` SOP default | LIGHTWEIGHT; `biz_execution_type_enum`),
+  `completion_mode` (`CompletionMode` MANUAL default | AUTOMATIC; `biz_completion_mode_enum`), `signal_type`
+  (String 50). CHECKs `chk_biz_automatic_completion_lightweight`, `chk_biz_signal_type` (AUTOMATIC ⇔ signal type set).
+  Migration creates the enum types first and the CHECKs by hand (both autogenerate gaps again).
+- `BizMasterUpdate`: the three fields (explicit null refused for the two enums via `NOT_NULL_FIELDS`; `signal_type`
+  stripped, null clears it); `BizMasterResponse` carries them. `update_biz` → `_check_client_event_settings` on the
+  merged values: 400 (AUTOMATIC on SOP / AUTOMATIC without signal type / signal type with MANUAL), 409 (signal type used
+  by another business of the client, message names it). `PATCH /biz/{id}` stays unguarded like before.
+- `steps.plan_steps` returns no steps for LIGHTWEIGHT businesses (preview, release, step-set checks).
+- Tests `tests/test_client_events.py` (4; client prefix `"E"`). HTTP-checked on `plan_check` (biz 2 left back at SOP /
+  MANUAL). Frontend types regenerated (no UI yet — 7.5).
+- Shell gotcha seen: `sed -n … $f` with an empty `$f` reads stdin and hangs the command — guard with `[ -n "$f" ]` /
+  `< /dev/null`.
 
 ### Open questions (in the doc)
 Client event scope (per business or per client) · reset later steps on rejection (proposed no) · "latest before due"

@@ -4,7 +4,9 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.exc import IntegrityError
 
 from src.infrastructure.repositories import biz_dependency_repo, biz_master_repo, client_repo, sop_version_repo, sop_step_repo
-from src.domain_biz.models import BizDependency, BizMaster, SOPVersion, SOPStepTemplate, SOPStatus
+from src.domain_biz.models import (
+    BizDependency, BizMaster, CompletionMode, ExecutionType, SOPVersion, SOPStepTemplate, SOPStatus,
+)
 from src.domain_biz.schemas import (
     BizDependencyCreate, BizDependencyResponse, BizMasterCreate, BizMasterUpdate, BizRef, SOPVersionCreate,
     SOPStepTemplateCreate,
@@ -35,11 +37,35 @@ def get_biz(db: Session, biz_id: int) -> BizMaster:
 def get_bizes(db: Session, skip: int = 0, limit: int = 100) -> list[BizMaster]:
     return biz_master_repo.get_multi(db, skip=skip, limit=limit)
 
+def _check_client_event_settings(db: Session, biz: BizMaster, biz_in: BizMasterUpdate) -> None:
+    """
+    顧客側の出来事の設定（Phase 7）を、変更後の値で確かめる（DB の CHECK・一意制約の前に、分かりやすい理由で返す）。
+    信号での完了は LIGHTWEIGHT のみ・信号の種類が必須・信号の種類は同じ顧客の業務どうしで一意。
+    """
+    data = biz_in.model_dump(exclude_unset=True)
+    execution = data.get("execution_type", biz.execution_type)
+    completion = data.get("completion_mode", biz.completion_mode)
+    signal = data.get("signal_type", biz.signal_type)
+    if completion == CompletionMode.AUTOMATIC and execution != ExecutionType.LIGHTWEIGHT:
+        raise BadRequestError("Automatic completion (by signal) is only for LIGHTWEIGHT businesses.")
+    if completion == CompletionMode.AUTOMATIC and not signal:
+        raise BadRequestError("signal_type is required for automatic completion.")
+    if completion != CompletionMode.AUTOMATIC and signal:
+        raise BadRequestError("signal_type is only for automatic completion; clear it (null) or set completion_mode AUTOMATIC.")
+    if signal:
+        other = db.scalars(select(BizMaster).where(
+            BizMaster.client_code == biz.client_code, BizMaster.signal_type == signal, BizMaster.id != biz.id,
+        )).first()
+        if other:
+            raise DuplicatedRecordError(f"Signal type '{signal}' is already used by {other.business_code} of client {biz.client_code}.")
+
+
 def update_biz(db: Session, biz_id: int, biz_in: BizMasterUpdate) -> BizMaster:
     db_obj = biz_master_repo.get(db, id=biz_id)
     if not db_obj:
-        raise NotFoundError(f"BizMaster(id={biz_id}) not found for update.")  
-        
+        raise NotFoundError(f"BizMaster(id={biz_id}) not found for update.")
+    _check_client_event_settings(db, db_obj, biz_in)
+
     try:
         return biz_master_repo.update(db, db_obj=db_obj, obj_in=biz_in)
     except IntegrityError:
