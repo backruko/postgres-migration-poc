@@ -11,7 +11,9 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Boolean,
     Integer,
+    String,
     Text,
     event,
     text,
@@ -43,6 +45,20 @@ class OrderEventType(str, enum.Enum):
     EARLY_START_APPROVED = "early_start_approved"  # 予定日より前の開始をリリース担当が承認
     CONFLICT_RAISED = "conflict_raised"            # plan の変更と矛盾（作業中に日時が動いた・発生枠が消えた等）
     CONFLICT_RESOLVED = "conflict_resolved"        # 矛盾の解決（新しい日時を採用・そのまま・取消）
+
+
+class StepState(str, enum.Enum):
+    """ステップの状態。approved が最終状態（差し戻しは submitted → todo）"""
+    LOCKED = "locked"        # まだ開いていない（オーダーの開始・前のステップの提出 / 承認で開く）
+    TODO = "todo"            # 作業できる（差し戻されたステップもここに戻る）
+    SUBMITTED = "submitted"  # 作業者が提出した（チェック担当の承認待ち）
+    APPROVED = "approved"    # チェック担当が承認した（提出者以外）
+
+
+class StepEventType(str, enum.Enum):
+    """ステップの記録の種類（追記のみ）"""
+    CREATED = "created"              # ステップの作成（リリース時に、固定した SOP バージョンから）
+    STATE_CHANGED = "state_changed"  # 状態の変更（開く・提出・承認・差し戻し）
 
 
 class EventSource(str, enum.Enum):
@@ -186,6 +202,87 @@ class OpeOrderEvent(Base):
 
 
 # ==========================================
+# OpeStep（オーダーのステップ）
+# リリース時に、固定した SOP バージョンのステップテンプレートのうち条件に合うものだけを作る（合わないものは作らない）。
+# タイトル・内容・is_blocking は作成時の写し（SOP バージョン側が後で変わっても、このオーダーの手順は変わらない）。
+# ==========================================
+class OpeStep(Base):
+    __tablename__ = "ope_step"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    # RESTRICT: ステップのあるオーダーは物理削除させない
+    order_id: Mapped[int] = mapped_column(ForeignKey("ope_order.id", ondelete="RESTRICT"))
+    step_template_id: Mapped[int] = mapped_column(
+        ForeignKey("sop_step_template.id", ondelete="RESTRICT"), index=True, comment="作成元のステップテンプレート"
+    )
+    # テンプレートのステップ番号のまま（条件で作らなかったステップがあれば番号は飛ぶ。SOP の手順書と同じ番号）
+    step_num: Mapped[int] = mapped_column(Integer, nullable=False, comment="ステップの実行順序（テンプレートの番号）")
+
+    # --- 作成時の写し ---
+    title: Mapped[str] = mapped_column(String(100), nullable=False, comment="ステップタイトル（作成時の写し）")
+    content: Mapped[str | None] = mapped_column(Text, comment="作業手順・マニュアル内容（作成時の写し）")
+    is_blocking: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, comment="承認されるまで次のステップを開けないか（作成時の写し）"
+    )
+
+    # --- 状態（最新の記録のキャッシュ。正は ope_step_event。誰が提出・承認したかも記録の側にだけ持つ） ---
+    state: Mapped[StepState] = mapped_column(
+        Enum(StepState, name="ope_step_state_enum"), nullable=False, default=StepState.LOCKED,
+        server_default=text("'LOCKED'"),
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("step_num > 0", name="ck_ope_step_num_positive"),
+        # 1つのオーダーに、同じ番号・同じテンプレートのステップは1件
+        Index("uq_ope_step_order_num", "order_id", "step_num", unique=True),
+        Index("uq_ope_step_order_template", "order_id", "step_template_id", unique=True),
+    )
+
+
+# ==========================================
+# OpeStepEvent（ステップの記録。追記のみ）
+# 誰が（職員 or システム）・いつ・なぜ。状態の正はこの記録で、ope_step.state はそのキャッシュ。
+# 差し戻し = submitted → todo（理由が必須）。四つの目の確認（提出者 ≠ 承認者）はこの記録の職員で行う。
+# ==========================================
+class OpeStepEvent(Base):
+    __tablename__ = "ope_step_event"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    # RESTRICT: 記録のあるステップは物理削除させない
+    step_id: Mapped[int] = mapped_column(ForeignKey("ope_step.id", ondelete="RESTRICT"), index=True)
+    event_type: Mapped[StepEventType] = mapped_column(Enum(StepEventType, name="ope_step_event_type_enum"), nullable=False)
+    from_state: Mapped[StepState | None] = mapped_column(Enum(StepState, name="ope_step_state_enum"))
+    to_state: Mapped[StepState | None] = mapped_column(Enum(StepState, name="ope_step_state_enum"))
+    source: Mapped[EventSource] = mapped_column(Enum(EventSource, name="ope_event_source_enum"), nullable=False)
+    actor_staff_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staff_user.id", ondelete="RESTRICT"), comment="操作した職員（システムの処理は NULL）"
+    )
+    reason: Mapped[str | None] = mapped_column(Text, comment="理由（差し戻しでは必須）")
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB, comment="種類ごとの詳細")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # 人の操作は職員を、システムの処理は職員なしで記録する
+        CheckConstraint("(source = 'HUMAN') = (actor_staff_id IS NOT NULL)", name="ck_ope_step_event_actor"),
+        # 状態の変更は変更前後を、作成は作成時の状態を持つ
+        CheckConstraint(
+            "event_type <> 'STATE_CHANGED' OR (from_state IS NOT NULL AND to_state IS NOT NULL)",
+            name="ck_ope_step_event_state_change",
+        ),
+        CheckConstraint("event_type <> 'CREATED' OR to_state IS NOT NULL", name="ck_ope_step_event_created"),
+        # 差し戻し（submitted → todo）は理由が必須
+        CheckConstraint(
+            "NOT (from_state = 'SUBMITTED' AND to_state = 'TODO') OR reason IS NOT NULL",
+            name="ck_ope_step_event_reject_reason",
+        ),
+        Index("ix_ope_step_event_step_at", "step_id", "occurred_at"),
+    )
+
+
+# ==========================================
 # 不変性の強制（DBトリガー）
 # マイグレーションにも同じSQLがあります。ここは create_all（テスト等）用です。
 # ==========================================
@@ -205,6 +302,19 @@ event.listen(
     "after_create",
     DDL(
         "CREATE TRIGGER trg_ope_order_event_immutable BEFORE UPDATE OR DELETE ON ope_order_event "
+        "FOR EACH ROW EXECUTE FUNCTION ope_reject_mutation()"
+    ).execute_if(dialect="postgresql"),
+)
+
+# create_all でテーブルの作成順は決まらないため、ステップの記録の側でも関数を作る（CREATE OR REPLACE なので二重でも可）
+event.listen(
+    OpeStepEvent.__table__, "after_create", DDL(OPE_REJECT_MUTATION_FUNCTION).execute_if(dialect="postgresql")
+)
+event.listen(
+    OpeStepEvent.__table__,
+    "after_create",
+    DDL(
+        "CREATE TRIGGER trg_ope_step_event_immutable BEFORE UPDATE OR DELETE ON ope_step_event "
         "FOR EACH ROW EXECUTE FUNCTION ope_reject_mutation()"
     ).execute_if(dialect="postgresql"),
 )

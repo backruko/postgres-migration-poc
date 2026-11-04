@@ -14,24 +14,26 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   resolution / pinning / freeze at release) and 4.7 (order screen on the dashboard) committed 2026-10-30 (4.3–4.7
   not pushed). **Phase 4 is complete. Phase 5 (steps, maker-checker) started 2026-10-30: decisions made and step plan
   approved (§2 "Phase 5 step plan"); step 5.1 (step template condition + is_blocking) done — committed and pushed
-  by the user as `05850c1 phase4(compelete)` (with `5dbbe0f phase4`). Branch in sync with origin. Next: step 5.2.**
+  by the user as `05850c1 phase4(compelete)` (with `5dbbe0f phase4`). Step 5.2 (ope_step / ope_step_event tables,
+  migration `966b78ff950f`) built 2026-11-04, **uncommitted, waiting for the user's review**. Next: step 5.3.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
-- **DB:** latest Alembic head is `971958268657` (sop step condition and is_blocking). Migrations: `ceee1634d6a7`
+- **DB:** latest Alembic head is `966b78ff950f` (ope steps and step events). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
   `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` →
-  `971958268657` (step template condition / is_blocking).
+  `971958268657` (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event).
   The user's dev DB: at `5eede5808433` on 2026-10-30 (staff id 1, login `system`, system_admin; biz 1 has SOP
-  version 1 `v1.1.0`); `971958268657` handed over.
-  `plan_check` is at `971958268657`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
+  version 1 `v1.1.0`); `971958268657` and `966b78ff950f` handed over.
+  `plan_check` is at `966b78ff950f`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, ope, order_sync, order_actions, release_job, sop_resolution) → 96 passed, ~115 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, ope, ope_step, order_sync, order_actions, release_job, sop_resolution) → 100 passed, ~70–115 s (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
   Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `alembic check` → no drift.
+  `.env` points at the user's `dev_db`: run alembic with `DATABASE_URL` set to the same URL ending in `/plan_check`.
   Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes.
 - **Scheduled job (user's machine):** Task Scheduler `\postgres-migration-poc\PlanExtendJob`, daily 00:05, runs
   `scripts/extend_plans.py` in the repo root (so `.env` → dev DB) as the user (interactive logon, runs on next logon if
@@ -330,10 +332,29 @@ when the last step is approved; a ready order whose step conditions change after
 | # | Step | Status |
 |---|---|---|
 | 5.1 | biz `sop_step_template.condition` (JSONB, default `{"type": "always"}`) + `is_blocking` (default false); migration `971958268657`; schemas `StepCondition` = discriminated union `AlwaysCondition` / `MonthInCondition(months 1–12, deduped + sorted)` / `FirstInWeekCondition`; `clone_active_to_draft` copies both; tests in `tests/test_biz.py` | **done** (`05850c1`, pushed by the user) |
-| 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event` | **next** |
-| 5.3 | Build steps: live preview while pending (in the order detail), create + freeze at release, conflict flag when a system move changes a ready order's step set | |
+| 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event`; migration `966b78ff950f` | **built, uncommitted** (2026-11-04) |
+| 5.3 | Build steps: live preview while pending (in the order detail), create + freeze at release, conflict flag when a system move changes a ready order's step set | **next** |
 | 5.4 | Step actions: submit (operator) / approve / reject (checker, four-eyes, reason for reject), unlock rules, start opens step 1, auto-finish on the last approval; manual finish only for zero-step orders | |
 | 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | |
+
+**5.2 as built** (`src/domain_ope/models.py`, migration `966b78ff950f`). User decisions 2026-11-04 (all four as I
+recommended): **events shaped like order events** (`StepEventType` CREATED | STATE_CHANGED, from / to required for a
+change; reject = SUBMITTED → TODO, CHECK `ck_ope_step_event_reject_reason` requires `reason`); **actors only in the
+events** (no submitted_by / approved_by on `ope_step`; 5.4's four-eyes check reads the latest → SUBMITTED event);
+**non-matching steps get no row** (5.3 lists the skipped step templates in the release event detail); **`step_num` =
+the template's number** (gaps allowed).
+- `ope_step`: `order_id` (FK RESTRICT), `step_template_id` (FK sop_step_template RESTRICT — so an SOP version /
+  step template used by an order can't be hard-deleted), `step_num` (> 0), snapshot `title` / `content` /
+  `is_blocking`, `state` (`StepState` LOCKED default | TODO | SUBMITTED | APPROVED; cache of the latest event),
+  timestamps. Unique `uq_ope_step_order_num`, `uq_ope_step_order_template`. The snapshot matters: biz's
+  `cancel_future_version` turns a FUTURE version (pinnable) back into an editable DRAFT.
+- `ope_step_event`: `step_id` (FK RESTRICT), `event_type`, `from_state` / `to_state`, `source` (reuses
+  `ope_event_source_enum`, `create_type=False` in the migration), `actor_staff_id` (CHECK HUMAN ⇔ actor), `reason`,
+  `detail`, `occurred_at`; trigger `trg_ope_step_event_immutable` → existing `ope_reject_mutation()` (models.py also
+  re-creates the function for `create_all`, since table order isn't fixed). Downgrade drops the two new enum types.
+- Tests `tests/test_ope_step.py` (4; client prefix `"P"`; listener switched off like `test_ope.py`).
+- Doc rows for `ope_step` / `ope_step_event` **not yet updated** (my doc edit was refused by the permission check
+  2026-11-04) — still at rev 46.
 6. Dependencies (hard + override, informational).
 7. Client events with automatic completion (signals).
 
