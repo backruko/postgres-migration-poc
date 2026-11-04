@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
-from src.domain_biz.models import SOPStepTemplate, SOPVersion
+from src.domain_biz.models import BizMaster, ExecutionType, SOPStepTemplate, SOPVersion
 from src.domain_biz.schemas import AlwaysCondition, FirstInWeekCondition, MonthInCondition, StepCondition
 from src.domain_ope.models import EventSource, OpeOrder, OpeStep, OrderStatus, StepEventType, StepState
 from src.infrastructure.repositories import ope_step_repo, plan_cache_repo
@@ -87,6 +87,9 @@ def plan_steps(db: Session, order: OpeOrder, version: SOPVersion | None) -> Step
     plan = StepPlan(included=[], skipped=[])
     if version is None:
         return plan
+    biz = db.get(BizMaster, order.biz_master_id)
+    if biz is not None and biz.execution_type == ExecutionType.LIGHTWEIGHT:
+        return plan  # 顧客側の出来事（LIGHTWEIGHT）はステップなし（受領の記録・信号で完了する）
     for template in sorted(version.step_templates, key=lambda t: t.step_num):
         (plan.included if condition_matches(db, template.condition, order) else plan.skipped).append(template)
     return plan

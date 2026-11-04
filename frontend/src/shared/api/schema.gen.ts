@@ -1177,7 +1177,8 @@ export interface paths {
         put?: never;
         /**
          * Finish Order Endpoint
-         * @description in_progress → finished（ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了します）
+         * @description in_progress → finished（ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了します）。
+         *     顧客側の出来事（LIGHTWEIGHT）は ready からも完了（受領）にでき、信号で完了する業務は理由が必須です。
          */
         post: operations["finish_order_endpoint_ope_orders__order_id__finish_post"];
         delete?: never;
@@ -1280,6 +1281,51 @@ export interface paths {
          * @description submitted → todo（提出者以外・理由必須）。そのステップだけが戻り、後のステップはそのままです。
          */
         post: operations["reject_step_endpoint_ope_steps__step_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Signals Endpoint
+         * @description 信号の一覧（新しい順）。既定は人の対応が必要なもの（照合できず、まだ対応していない信号）だけです。
+         */
+        get: operations["list_signals_endpoint_ope_signals_get"];
+        put?: never;
+        /**
+         * Receive Signal Endpoint
+         * @description 信号を受け取ります（信号の送信のロール）。すべて記録し、照合できればオーダーを完了にします。
+         *     result: matched（完了にした）/ duplicate（すでに完了）/ unmatched・ambiguous（人が対応する。result_note に理由）。
+         */
+        post: operations["receive_signal_endpoint_ope_signals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/signals/{signal_id}/handle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Handle Signal Endpoint
+         * @description 照合できなかった信号に対応します（order_id を指定すると、そのオーダーを完了にしてから対応済みにします）。
+         */
+        post: operations["handle_signal_endpoint_ope_signals__signal_id__handle_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1408,6 +1454,10 @@ export interface components {
             release_time: string;
             /** Release Days Before */
             release_days_before: number;
+            execution_type: components["schemas"]["ExecutionType"];
+            completion_mode: components["schemas"]["CompletionMode"];
+            /** Signal Type */
+            signal_type: string | null;
             /** Is Deleted */
             is_deleted: boolean;
             /**
@@ -1441,6 +1491,15 @@ export interface components {
              * @description automatic release N days before the scheduled day
              */
             release_days_before?: number | null;
+            /** @description SOP (steps) or LIGHTWEIGHT (client-side event, no steps) */
+            execution_type?: components["schemas"]["ExecutionType"] | null;
+            /** @description MANUAL (operator marks received) or AUTOMATIC (signal) */
+            completion_mode?: components["schemas"]["CompletionMode"] | null;
+            /**
+             * Signal Type
+             * @description signal type that completes the orders (AUTOMATIC only)
+             */
+            signal_type?: string | null;
         };
         /** BizRef */
         BizRef: {
@@ -1763,6 +1822,12 @@ export interface components {
             name?: string | null;
         };
         /**
+         * CompletionMode
+         * @description LIGHTWEIGHT の業務のオーダーを完了にする方法（SOP の業務はステップの承認で完了する）
+         * @enum {string}
+         */
+        CompletionMode: "manual" | "automatic";
+        /**
          * ConflictAction
          * @description 矛盾の解決方法
          * @enum {string}
@@ -1985,6 +2050,12 @@ export interface components {
              * @default false
              */
             blocked: boolean;
+            /**
+             * Late
+             * @description past its scheduled end and not finished / canceled (computed)
+             * @default false
+             */
+            late: boolean;
         };
         /**
          * DailyVoidedItem
@@ -2072,6 +2143,12 @@ export interface components {
          * @enum {string}
          */
         EventSource: "human" | "system";
+        /**
+         * ExecutionType
+         * @description 業務の実行のしかた（Phase 7）
+         * @enum {string}
+         */
+        ExecutionType: "sop" | "lightweight";
         /** ExplicitDatesAdd */
         ExplicitDatesAdd: {
             /** Dates */
@@ -2318,6 +2395,12 @@ export interface components {
              * @default false
              */
             early_start_approved: boolean;
+            /**
+             * Late
+             * @description past its scheduled end and not finished / canceled (computed)
+             * @default false
+             */
+            late: boolean;
             /** @description the SOP version this order runs (null: none approved / none was frozen at release) */
             sop_version?: components["schemas"]["OrderSopVersion"] | null;
             /**
@@ -2330,6 +2413,10 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** @description the business's execution type (LIGHTWEIGHT: client event, no steps) */
+            execution_type: components["schemas"]["ExecutionType"];
+            /** @description the business's completion mode (AUTOMATIC: finished by a signal) */
+            completion_mode: components["schemas"]["CompletionMode"];
             /**
              * Steps
              * @description released: the order's steps; not released: a live preview from the SOP version it would run
@@ -3033,7 +3120,7 @@ export interface components {
          * @description ロールのコード（role テーブルの code と同じ。権限の判定はこのコードで行う）
          * @enum {string}
          */
-        RoleCode: "operator" | "checker" | "releaser" | "admin" | "viewer" | "auditor" | "system_admin";
+        RoleCode: "operator" | "checker" | "releaser" | "admin" | "viewer" | "auditor" | "system_admin" | "signal_sender";
         /** RoleResponse */
         RoleResponse: {
             code: components["schemas"]["RoleCode"];
@@ -3132,6 +3219,93 @@ export interface components {
              */
             effective_at: string;
         };
+        /**
+         * SignalHandleIn
+         * @description 照合できなかった信号への人の対応（order_id があれば、そのオーダーを完了にしてから対応済みにする）
+         */
+        SignalHandleIn: {
+            /** Note */
+            note: string;
+            /**
+             * Order Id
+             * @description a ready / in-progress order of the signal's client to finish
+             */
+            order_id?: number | null;
+        };
+        /**
+         * SignalIn
+         * @description 顧客側の出来事の信号（POST /ope/signals）。照合できなくても捨てずに残す
+         */
+        SignalIn: {
+            /**
+             * Type
+             * @description signal type (the business's signal_type)
+             */
+            type: string;
+            /** Client Code */
+            client_code: string;
+            /**
+             * Key
+             * @description the order's rule date, YYYY-MM-DD
+             */
+            key: string;
+            /**
+             * Received At
+             * Format: date-time
+             * @description when the sender received it (with a timezone offset)
+             */
+            received_at: string;
+            /**
+             * Payload
+             * @description extra data for the record (never used for matching)
+             */
+            payload?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** SignalResponse */
+        SignalResponse: {
+            /** Id */
+            id: number;
+            /** Signal Type */
+            signal_type: string;
+            /** Client Code */
+            client_code: string;
+            /** Key */
+            key: string;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Sender Staff Id */
+            sender_staff_id: number;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            } | null;
+            result: components["schemas"]["SignalResult"];
+            /** Matched Order Id */
+            matched_order_id: number | null;
+            /** Result Note */
+            result_note: string | null;
+            /** Handled At */
+            handled_at: string | null;
+            /** Handled By Staff Id */
+            handled_by_staff_id: number | null;
+            /** Handled Note */
+            handled_note: string | null;
+        };
+        /**
+         * SignalResult
+         * @enum {string}
+         */
+        SignalResult: "matched" | "duplicate" | "unmatched" | "ambiguous";
         /** StaffCreate */
         StaffCreate: {
             /**
@@ -9406,6 +9580,281 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_signals_endpoint_ope_signals_get: {
+        parameters: {
+            query?: {
+                /** @description open: unmatched / ambiguous and not handled yet */
+                scope?: "open" | "all";
+                client_code?: string | null;
+                /** @description recorded at or after (with a timezone offset) */
+                since?: string | null;
+                limit?: number;
+            };
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignalResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    receive_signal_endpoint_ope_signals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignalResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    handle_signal_endpoint_ope_signals__signal_id__handle_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                signal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignalHandleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignalResponse"];
                 };
             };
             /** @description Bad Request(リクエスト不正) */

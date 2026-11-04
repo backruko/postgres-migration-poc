@@ -7,7 +7,8 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 
 - **Branches:** `main` = Plan MVP + Phases 1–5. Phases 1–3 merged 2026-10-28 (`23767b8`); **Phases 4–5 merged
   locally 2026-11-04 at the user's request (`71de514`, --no-ff, not pushed — the user pushes `main` and
-  `feature/ope-orders`)**. **Current work: `feature/ope-dependencies`** (from `main` after that merge), Phase 6.
+  `feature/ope-orders`)**. **Phase 6 merged locally 2026-11-04 (`b3538aa`, --no-ff, not pushed; `main` 29 ahead of
+  origin)**. **Current work: `feature/ope-signals`** (from `main` after that merge), Phase 7.
   The user pushes; I never do. (The user committed + pushed 5.5 themselves as `75cc109 phase5`; my MEMORY-only
   commit on top is `6a37fee`.)
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
@@ -26,20 +27,26 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   `cb0ae371f402`) committed 2026-11-04 (`3eaede4`, not pushed). Step 6.3 (link resolution, no migration) committed
   2026-11-04 (`1a364ca`, not pushed). Step 6.4 (start check + dependency override, migration `58425e70286d`)
   committed 2026-11-04 (`916ebee`, not pushed). Step 6.5 (frontend + small backend additions, no migration) committed
-  2026-11-04 (not pushed). With it **Phase 6 is complete**. Next: Phase 7
-  (client events / signals) — not planned yet; plan it with the user first (the doc has open questions on it).**
+  2026-11-04 (`3669528`, not pushed). With it **Phase 6 is complete** (merged into `main`). Phase 7 (client
+  events / signals) planned 2026-11-04 (§2 "Phase 7 step plan"). Step 7.1 (biz client-event settings, migration
+  `6a7849dbf2ec`) committed 2026-11-04 (`0ff76dd`, not pushed). Step 7.2 (ope_signal table + role signal_sender,
+  migration `3242f180527a`) committed 2026-11-04 (`a9f8fc3`, not pushed). Step 7.3 (receiving / matching signals, no
+  migration) committed 2026-11-04 (`0b5e762`, not pushed). Step 7.4 (late + signal list, no migration) committed
+  2026-11-04 (`a7e1e03`, not pushed). Step 7.5 (frontend + order detail fields, no migration) committed 2026-11-04;
+  Phase 7 merged into `main` locally (not pushed). With it **Phase 7 — the last phase of the doc's plan — is
+  complete**. Next: whatever the user picks (doc open questions).**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
-- **DB:** latest Alembic head is `58425e70286d` (order event DEPENDENCY_OVERRIDE_APPROVED). Migrations: `ceee1634d6a7`
+- **DB:** latest Alembic head is `3242f180527a` (ope_signal + role signal_sender). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
   `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` →
-  `971958268657` (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at, RETIRED) → `2904467fd7b9` (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (order event type DEPENDENCY_OVERRIDE_APPROVED).
+  `971958268657` (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at, RETIRED) → `2904467fd7b9` (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (order event type DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec` (biz client-event settings) → `3242f180527a` (ope_signal, role signal_sender).
   The user's dev DB: at `6c8cc87274c8` (upgraded by the user 2026-11-04); earlier, at `5eede5808433` on 2026-10-30 (staff id 1, login `system`, system_admin; biz 1 has SOP
-  version 1 `v1.1.0`); `971958268657`, `966b78ff950f` and `6c8cc87274c8` handed over; `2904467fd7b9`, `cb0ae371f402` and `58425e70286d` handed over 2026-11-04.
-  `plan_check` is at `58425e70286d`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
+  version 1 `v1.1.0`); `971958268657`, `966b78ff950f` and `6c8cc87274c8` handed over; `2904467fd7b9`, `cb0ae371f402`, `58425e70286d`, `6a7849dbf2ec` and `3242f180527a` handed over 2026-11-04.
+  `plan_check` is at `3242f180527a`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
   (system_admin), 2 `check-op` (suspended) + harness users.
   The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
   without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, dependency_start, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 132 passed, ~95–175 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, dependency_start, client_events, ope_signal, signals, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 147 passed, ~95–225 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
   `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
   then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
   The user hasn't asked for the fix yet (retry or counter in the fixture).
@@ -93,9 +100,9 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 60 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 60}` to see only newer edits, and
+**Last rev written by me: 68 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 68}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
-The delivery-phase list in the doc carries the build status (phases 1–6 built, rev 60).
+The delivery-phase list in the doc carries the build status (phases 1–7 built, rev 68).
 
 ### Domains (decided: plan and ope stay separate, no merge)
 | Domain | Owns | Status |
@@ -458,7 +465,7 @@ like the rest of biz.
 | 6.2 | ope tables `ope_dependency` (upstream order, downstream order, definition, kind) — tables only; migration `cb0ae371f402` | **done** (`3eaede4`, not pushed) |
 | 6.3 | Link resolution: create / refresh concrete links when orders are created or moved (order_sync) and when a definition is added or removed | **done** (`1a364ca`, not pushed) |
 | 6.4 | Start check: hard links need the upstream order finished, else start → 400 listing blockers; force-start (releaser / admin, reason) as an order event; upstream canceled / on hold stays blocked; migration `58425e70286d` | **done** (`916ebee`, not pushed) |
-| 6.5 | Frontend: dependency settings for a business, upstream / downstream in the order drawer, "blocked" tag + force-start | **done** (not pushed) |
+| 6.5 | Frontend: dependency settings for a business, upstream / downstream in the order drawer, "blocked" tag + force-start | **done** (`3669528`, not pushed) |
 
 **6.1 as built** (`src/domain_biz/models.py` end, migration `2904467fd7b9`). `BizDependency`: `upstream_biz_id` /
 `downstream_biz_id` (FK biz_master RESTRICT), `match_rule` (`DependencyMatchRule` SAME_SHEET_EVENT |
@@ -563,7 +570,110 @@ a re-pointed / new link needs a new approval.
   offered to the releaser, 開始 hidden for the operator, blocked reason, dashboard 待ち true → override → false, start,
   delete — 14/14 passed. **Not checked: the browser** (the new page, the drawer section, the tag) — the user clicks
   through.
-7. Client events with automatic completion (signals).
+7. Client events with automatic completion (signals). **built** (7.1–7.5, branch `feature/ope-signals`)
+
+#### Phase 7 decisions (2026-11-04, doc rev 62)
+All four as I recommended: Phase 6 merged first, Phase 7 on a new branch; **a client event = a LIGHTWEIGHT business**
+with its own template / orders (a file feeding several jobs = they depend on that business via Phase 6 links);
+**transport: HTTP `POST /ope/signals` only**, sender = a staff account with a new role **`signal_sender`** (X-Staff-Id
+until real login; watchers later = scripts posting the same signal); **match = signal type + client + rule date**
+(`key` = the order's `occurrence_date` YYYY-MM-DD); none or several matches → stored unmatched for a person.
+
+#### Phase 7 step plan (approved 2026-11-04)
+| # | Step | Status |
+|---|---|---|
+| 7.1 | biz `execution_type` (SOP / LIGHTWEIGHT), `completion_mode` (MANUAL / AUTOMATIC), `signal_type` (required for AUTOMATIC); biz PATCH; migration; LIGHTWEIGHT orders get no steps at release; migration `6a7849dbf2ec` | **done** (`0ff76dd`, not pushed) |
+| 7.2 | `ope_signal` table (append-only: type, client_code, key, received_at, sender, match result + order) + role `signal_sender` — tables / role only; migration `3242f180527a` | **done** (`a9f8fc3`, not pushed) |
+| 7.3 | `POST /ope/signals` (signal_sender): store every signal, match, finish the order (system event); unmatched / ambiguous kept; manual way out (finish with reason) for AUTOMATIC | **done** (`0b5e762`, not pushed) |
+| 7.4 | Read side: "late" computed on the dashboard, unmatched signals listed (`GET /ope/signals`) | **done** (`a7e1e03`, not pushed) |
+| 7.5 | Frontend: client-event settings on a business, 受領 (mark received) in the drawer, late tag, unmatched signals panel | **done** (merged into `main`, not pushed) |
+
+**7.1 as built** (migration `6a7849dbf2ec`). User decisions 2026-11-04 (both as I recommended, doc rev 63): **signal
+type unique per client** (partial unique index `uq_biz_client_signal_type_alive` on (client_code, signal_type) where
+not null and `deleted_at IS NULL`); **AUTOMATIC only for LIGHTWEIGHT**.
+- `biz_master`: `execution_type` (`ExecutionType` SOP default | LIGHTWEIGHT; `biz_execution_type_enum`),
+  `completion_mode` (`CompletionMode` MANUAL default | AUTOMATIC; `biz_completion_mode_enum`), `signal_type`
+  (String 50). CHECKs `chk_biz_automatic_completion_lightweight`, `chk_biz_signal_type` (AUTOMATIC ⇔ signal type set).
+  Migration creates the enum types first and the CHECKs by hand (both autogenerate gaps again).
+- `BizMasterUpdate`: the three fields (explicit null refused for the two enums via `NOT_NULL_FIELDS`; `signal_type`
+  stripped, null clears it); `BizMasterResponse` carries them. `update_biz` → `_check_client_event_settings` on the
+  merged values: 400 (AUTOMATIC on SOP / AUTOMATIC without signal type / signal type with MANUAL), 409 (signal type used
+  by another business of the client, message names it). `PATCH /biz/{id}` stays unguarded like before.
+- `steps.plan_steps` returns no steps for LIGHTWEIGHT businesses (preview, release, step-set checks).
+- Tests `tests/test_client_events.py` (4; client prefix `"E"`). HTTP-checked on `plan_check` (biz 2 left back at SOP /
+  MANUAL). Frontend types regenerated (no UI yet — 7.5).
+- Shell gotcha seen: `sed -n … $f` with an empty `$f` reads stdin and hangs the command — guard with `[ -n "$f" ]` /
+  `< /dev/null`. And never combine `python - <<'EOF'` with `< /dev/null` (the redirect replaces the heredoc → an
+  interactive REPL that hangs). Edit scripts go into the scratchpad via the Write tool.
+
+**7.2 as built** (`OpeSignal` at the end of `src/domain_ope/models.py`, migration `3242f180527a`). User decisions
+2026-11-04 (all as I recommended, doc rev 64): **store every signal; a resend whose order is already finished =
+`DUPLICATE`** (no idempotency key); **optional JSON `payload`** (never used for matching); **`handled_*` settable once**
+(trigger, no separate table).
+- Columns: `signal_type` (50), `client_code` (String 10, **no FK** so unknown clients are kept), `key` (100),
+  `received_at` (sender's), `recorded_at` (server), `sender_staff_id` (FK staff), `payload` JSONB, `result`
+  (`SignalResult` MATCHED | DUPLICATE | UNMATCHED | AMBIGUOUS; `ope_signal_result_enum`), `matched_order_id` (FK
+  ope_order RESTRICT), `result_note`, `handled_at` / `handled_by_staff_id` / `handled_note`. CHECKs:
+  `ck_ope_signal_matched_order` (matched / duplicate ⇔ order), `ck_ope_signal_handled` (all three or none),
+  `ck_ope_signal_handled_unmatched` (handled only for unmatched / ambiguous). Indexes `ix_ope_signal_open` (result,
+  handled_at), `ix_ope_signal_client_type`.
+- Trigger `trg_ope_signal_guard` → `ope_signal_guard()`: DELETE refused; UPDATE refused once handled, or when any
+  non-handled column changes (row compare with IS DISTINCT FROM). Also installed by `create_all` (models.py DDL).
+- Role `signal_sender` (信号の送信): `RoleCode.SIGNAL_SENDER`, `ROLE_SEED`, migration INSERT … ON CONFLICT DO NOTHING
+  (downgrade deletes it; fails if a staff still holds it). `test_staff.py::test_roles_are_seeded` updated.
+- Tests `tests/test_ope_signal.py` (3; client prefix `"H"`). Frontend types regenerated.
+
+**7.3 as built** (`src/domain_ope/signals.py`; no migration). User decisions 2026-11-04 (all as I recommended, doc rev
+65): **a signal finishes only ready / in-progress orders** (pending → unmatched "not released yet"); **on hold /
+conflict → unmatched** with the reason; **handle endpoint** for people. My call: **LIGHTWEIGHT orders can be finished
+from ready** (受領 = mark received; no start, so no day / dependency check for them).
+- `POST /ope/signals` (`@require_roles([SIGNAL_SENDER])`, `SignalIn {type, client_code, key, received_at (tz
+  required), payload? (≤ 10 000 bytes JSON)}`, 201 → `SignalResponse`): client code upper-cased; `_match` = AUTOMATIC
+  business with (client, signal_type) → `date.fromisoformat(key)` → non-canceled orders of that business on that
+  `occurrence_date` (FOR UPDATE): none → unmatched; all finished → DUPLICATE (latest finished order); >1 open →
+  AMBIGUOUS; the one open order: conflict / on hold / pending → unmatched, else MATCHED → `finish_by_signal`
+  (STATUS_CHANGED → FINISHED, SYSTEM, `detail {"cause": "signal", "signal_id"}`). The signal row is flushed first so
+  the event can carry its id.
+- `POST /ope/signals/{id}/handle` (operator / releaser / admin, `SignalHandleIn {note, order_id?}`): only unmatched /
+  ambiguous, once (400 otherwise); with `order_id` the order must be the signal's client's (404) and ready / in
+  progress (400) → finished as HUMAN with `detail {"cause": "signal handled", "signal_id"}` and `reason` = note.
+- `finish_order`: LIGHTWEIGHT allowed from READY or IN_PROGRESS; AUTOMATIC businesses need a non-empty comment (400).
+- Tests `tests/test_signals.py` (6; client prefix `"J"`). HTTP-checked on `plan_check`: new signal_sender staff 9 / 10,
+  **biz 2 `MOCK0002` is now LIGHTWEIGHT + AUTOMATIC `data_received` with daily template 23** (left that way for 7.4 /
+  7.5); order 194 (11/07): signal before release unmatched, operator 403, after release matched → finished (SYSTEM,
+  signal 2), resend duplicate, handle once 200 / again 400.
+- Gotcha: plan template API wants `template_type: "rrule"` (lowercase value).
+
+**7.4 as built** (no migration). User decisions 2026-11-04 (both as I recommended, doc rev 66): **late = past
+`scheduled_end` and not finished / canceled**; **all orders** (not only client events).
+- `links.is_late(order, now)` (one rule); `OrderResponse.late` (detail, via `ope._now`), `DailyOrderSummary.late`
+  (dashboard, via `ops_services._now`; `now` computed once per request).
+- `GET /ope/signals?scope=open|all&client_code=&since=&limit=` (`@require_active()`; open = unmatched / ambiguous and
+  not handled; newest first; client code upper-cased) → `signals.list_signals`.
+- Tests added to `tests/test_signals.py` (late with `_now` monkeypatched past the end; list scope / client filter /
+  handled drops out). HTTP-checked on `plan_check`: **unmatched signal 4 (bad key) left open for 7.5's panel**; 11/02
+  orders show `late: true`.
+
+**7.5 as built** (no migration). User decision 2026-11-04: **a 「業務の設定」 panel on the template settings page**
+(`/settings/templates?biz=`) holding the release settings (Phase 4, had no screen) and the client-event settings.
+- Backend: `OrderDetailResponse.execution_type` / `completion_mode` (from the business).
+- Frontend: `domain/biz`: types `BizMasterUpdate` / `ReleaseMode` / `ExecutionType` / `CompletionMode`,
+  `bizApi.update` (PATCH), `lib/settings.ts` (labels, `clientEventError` = backend rules, `clientEventBody` drops the
+  signal type unless LIGHTWEIGHT + automatic); `features/plan-settings/BizSettingsPanel.tsx` (Descriptions + 編集
+  modal: release mode / days before / time, execution type, completion mode + signal type only when LIGHTWEIGHT).
+  `domain/ope`: types `Signal` / `SignalResult`, `api/signalApi.ts` (listOpen, handle), `hooks/useOpenSignals.ts`,
+  `lib/signals.ts` (labels, `canHandleSignals` = operator / releaser / admin); `orderActions`: 完了 offered from ready
+  for LIGHTWEIGHT, `finishLabel` (受領 for LIGHTWEIGHT), `finishNeedsReason` (automatic). `OrderDrawer`: 遅れ tag,
+  顧客側の出来事 tag, 受領 label, reason required + note for automatic. Dashboard rows: red 「遅れ」 tag.
+  `features/daily-dashboard/SignalsPanel.tsx` above the client cards (only when there are open signals and the acting
+  staff is active): table 受信 / 顧客 / 信号の種類 / キー / 結果 + note, 対応 modal (order number optional, note required).
+  CSS `.biz-settings`, `.signals-panel`.
+- Checked: `npm run build`; esbuild harness `ce_harness.ts` against uvicorn 8001 on `plan_check` (order 196 of biz 2,
+  signal 4): settings rules, save manual / automatic, open list, 受領 offered from ready with a reason, handle with
+  the order → finished and gone from the list, late on 11/02 — 14/14 passed. **Not checked: the browser.**
+- Incident: a typo (`newline="\\n"`) in an edit script raised after `open(..., "w")` had already **emptied
+  `frontend/src/styles.css`**; restored from HEAD with `git checkout` (no uncommitted CSS changes existed) and
+  re-applied the 2 new lines. Lesson: build the full text first, then write.
 
 ### Open questions (in the doc)
 Client event scope (per business or per client) · reset later steps on rejection (proposed no) · "latest before due"

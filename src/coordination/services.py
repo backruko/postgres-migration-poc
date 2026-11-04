@@ -69,6 +69,7 @@ def get_daily_dashboard(db: Session, target_date: date | None, tz_name: str) -> 
     orders = ope_order_repo.get_active_by_instances(db, instance_ids=[cache.instance_id for cache, _, _ in occurrences])
     progress = ope_step_repo.progress_by_orders(db, order_ids=[o.id for o in orders.values()])
     blocked = links.blocked_order_ids(db, list(orders.values()))
+    now = _now()  # 遅れの判定（表示のたびに計算する）
     for cache, instance, biz in occurrences:
         order = orders.get(cache.instance_id)
         business(biz).occurrences.append(DailyOccurrence(
@@ -86,6 +87,7 @@ def get_daily_dashboard(db: Session, target_date: date | None, tz_name: str) -> 
                 id=order.id, status=order.status, conflict=order.conflict, conflict_reason=order.conflict_reason,
                 steps_total=progress.get(order.id, (0, 0))[0], steps_approved=progress.get(order.id, (0, 0))[1],
                 blocked=order.id in blocked,
+                late=links.is_late(order, now),
             ) if order else None,
         ))
 

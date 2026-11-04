@@ -3,7 +3,7 @@ import { useState } from "react";
 import { orderApi } from "../../domain/ope/api";
 import { useOrder } from "../../domain/ope/hooks/useOrder";
 import {
-  availableActions, CONFLICT_ACTION_LABEL, ORDER_ACTION_LABEL, ORDER_EVENT_LABEL, ORDER_STATUS_COLOR, ORDER_STATUS_LABEL,
+  availableActions, CONFLICT_ACTION_LABEL, finishLabel, finishNeedsReason, ORDER_ACTION_LABEL, ORDER_EVENT_LABEL, ORDER_STATUS_COLOR, ORDER_STATUS_LABEL,
   REASON_REQUIRED, SOP_SOURCE_LABEL, startBlockedReason, type OrderAction,
 } from "../../domain/ope/lib/orderActions";
 import {
@@ -46,8 +46,7 @@ interface ActionValues {
 /** 確認中の操作（オーダーの操作か、ステップの操作か） */
 type PendingAction = { kind: "order"; action: OrderAction } | { kind: "step"; action: StepAction; step: OrderStep };
 
-const pendingLabel = (p: PendingAction) =>
-  p.kind === "order" ? ORDER_ACTION_LABEL[p.action] : `ステップ ${p.step.step_num} を${STEP_ACTION_LABEL[p.action]}`;
+const actionLabel = (a: OrderAction, order: OrderDetail | null) => (a === "finish" && order ? finishLabel(order) : ORDER_ACTION_LABEL[a]);
 
 /**
  * オーダーの詳細（右から開くドロワー）。状態・SOP バージョン・ステップ・記録と、操作する職員のロールで使える操作を表示する。
@@ -64,6 +63,8 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
 
   const today = todayIn(TIMEZONE);
   const data = order.data;
+  const pendingLabel = (p: PendingAction) =>
+    p.kind === "order" ? actionLabel(p.action, data) : `ステップ ${p.step.step_num} を${STEP_ACTION_LABEL[p.action]}`;
   const day = data ? inZone(data.scheduled_start, TIMEZONE).format("YYYY-MM-DD") : today;
   const actions = data ? availableActions(data, me.data, today, day) : [];
   const blocked = data ? startBlockedReason(data, today, day) : null;
@@ -120,6 +121,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
     pending.kind === "step"
       ? STEP_REASON_REQUIRED.has(pending.action)
       : REASON_REQUIRED.has(pending.action) || (pending.action === "resolveConflict" && conflictAction === "cancel")
+        || (pending.action === "finish" && data !== null && finishNeedsReason(data))
   );
   const approvedCount = data ? data.steps.filter((st) => st.state === "approved").length : 0;
   const progress = data && !data.steps_preview ? stepProgress(data.steps.length, approvedCount) : null;
@@ -135,6 +137,10 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
             <Tag color={ORDER_STATUS_COLOR[data.status]}>{ORDER_STATUS_LABEL[data.status]}</Tag>
             {data.status_before_hold && <span className="muted">保留前: {ORDER_STATUS_LABEL[data.status_before_hold]}</span>}
             {data.early_start_approved && <Tag color="purple">予定日前の開始を承認済み</Tag>}
+            {data.late && <Tag color="red">遅れ</Tag>}
+            {data.execution_type === "lightweight" && (
+              <Tag>{data.completion_mode === "automatic" ? "顧客側の出来事（信号で完了）" : "顧客側の出来事"}</Tag>
+            )}
           </Space>
 
           {data.conflict && <Alert type="warning" showIcon message="予定と矛盾しています" description={data.conflict_reason} />}
@@ -162,7 +168,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
               <Space wrap>
                 {actions.map((a) => (
                   <Button key={a} type={a === "cancel" ? "default" : "primary"} danger={a === "cancel"} ghost={a !== "cancel" && a !== actions[0]} onClick={() => openAction({ kind: "order", action: a })}>
-                    {ORDER_ACTION_LABEL[a]}
+                    {actionLabel(a, data)}
                   </Button>
                 ))}
               </Space>
@@ -238,7 +244,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
       <Modal
         open={pending !== null}
         title={pending ? pendingLabel(pending) : ""}
-        okText={pending ? (pending.kind === "order" ? ORDER_ACTION_LABEL[pending.action] : STEP_ACTION_LABEL[pending.action]) : ""}
+        okText={pending ? (pending.kind === "order" ? actionLabel(pending.action, data) : STEP_ACTION_LABEL[pending.action]) : ""}
         okButtonProps={{ danger: pending?.kind === "order" && pending.action === "cancel" }}
         cancelText="キャンセル"
         onOk={() => form.submit()}
@@ -249,6 +255,11 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
         {pending?.kind === "order" && pending.action === "approveDependencyOverride" && (
           <Typography.Paragraph type="secondary">
             上流のオーダーが完了していないまま、作業者が開始できるようにします。対象は今満たされていないつながりです（後から増えたものには改めて承認が必要です）。
+          </Typography.Paragraph>
+        )}
+        {pending?.kind === "order" && pending.action === "finish" && data && finishNeedsReason(data) && (
+          <Typography.Paragraph type="secondary">
+            この業務は信号で自動的に完了します。手で完了にする理由（信号が来なかった・誤っていた など）を記録してください。
           </Typography.Paragraph>
         )}
         {pending?.kind === "order" && pending.action === "cancel" && (

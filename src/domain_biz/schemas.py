@@ -4,9 +4,11 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.domain_biz.models import DependencyKind, DependencyMatchRule, ReleaseMode, SOPStatus
+from src.domain_biz.models import CompletionMode, DependencyKind, DependencyMatchRule, ExecutionType, ReleaseMode, SOPStatus
 
 RELEASE_FIELDS = ("release_mode", "release_time", "release_days_before")
+# 明示的な null を受け付けない項目（signal_type は null で解除できる）
+NOT_NULL_FIELDS = (*RELEASE_FIELDS, "execution_type", "completion_mode")
 
 
 class BizMasterBase(BaseModel):
@@ -31,10 +33,19 @@ class BizMasterUpdate(BaseModel):
     release_mode: ReleaseMode | None = Field(None, description="MANUAL_APPROVAL or AUTOMATIC")
     release_time: time | None = Field(None, description="automatic release time of day (JST)")
     release_days_before: int | None = Field(None, ge=0, le=30, description="automatic release N days before the scheduled day")
+    # 顧客側の出来事（Phase 7）。AUTOMATIC は LIGHTWEIGHT のみ・signal_type 必須（null で解除）
+    execution_type: ExecutionType | None = Field(None, description="SOP (steps) or LIGHTWEIGHT (client-side event, no steps)")
+    completion_mode: CompletionMode | None = Field(None, description="MANUAL (operator marks received) or AUTOMATIC (signal)")
+    signal_type: str | None = Field(None, min_length=1, max_length=50, description="signal type that completes the orders (AUTOMATIC only)")
+
+    @field_validator("signal_type")
+    @classmethod
+    def strip_signal_type(cls, v: str | None) -> str | None:
+        return v.strip() if v else v
 
     @model_validator(mode="after")
     def check_release_not_null(self):
-        nulls = sorted(f for f in RELEASE_FIELDS if f in self.model_fields_set and getattr(self, f) is None)
+        nulls = sorted(f for f in NOT_NULL_FIELDS if f in self.model_fields_set and getattr(self, f) is None)
         if nulls:
             raise ValueError(f"{nulls} must not be null")
         return self
@@ -46,6 +57,9 @@ class BizMasterResponse(BizMasterBase):
     release_mode: ReleaseMode
     release_time: time = Field(description="automatic release time of day (JST)")
     release_days_before: int
+    execution_type: ExecutionType
+    completion_mode: CompletionMode
+    signal_type: str | None
     is_deleted: bool
     created_at: datetime
     updated_at: datetime

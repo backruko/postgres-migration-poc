@@ -387,3 +387,90 @@ class OpeDependency(Base):
             unique=True, postgresql_where=text("removed_at IS NULL AND upstream_order_id IS NULL"),
         ),
     )
+
+
+# ==========================================
+# OpeSignal（顧客側の出来事の信号。Phase 7）
+# POST /ope/signals で受け取った信号をすべて残す（照合できなかったもの・重複も捨てない）。
+# 照合の結果は受け取ったときに決まり、変えない。人が「対応済み」にする handled_* だけを一度だけ書ける（DB トリガー）。
+# ==========================================
+class SignalResult(str, enum.Enum):
+    MATCHED = "matched"      # 対応するオーダーを完了にした
+    DUPLICATE = "duplicate"  # 対応するオーダーは前の信号ですでに完了していた（何もしない）
+    UNMATCHED = "unmatched"  # 対応する業務・オーダーが見つからない（人が対応する）
+    AMBIGUOUS = "ambiguous"  # 対応するオーダーが複数ある（人が対応する）
+
+
+class OpeSignal(Base):
+    __tablename__ = "ope_signal"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    signal_type: Mapped[str] = mapped_column(String(50), nullable=False, comment="信号の種類（業務の signal_type と照合）")
+    # 未登録の顧客コードの信号も捨てずに残すため、外部キーにしない
+    client_code: Mapped[str] = mapped_column(String(10), nullable=False, comment="顧客コード（送られてきたまま）")
+    key: Mapped[str] = mapped_column(String(100), nullable=False, comment="照合のキー（オーダーのルール上の日付 YYYY-MM-DD）")
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, comment="送信側が受け取った日時")
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="記録した日時")
+    sender_staff_id: Mapped[int] = mapped_column(
+        ForeignKey("staff_user.id", ondelete="RESTRICT"), comment="送信した職員（signal_sender のアカウント）"
+    )
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, comment="送信側の補足（ファイル名・件数など。照合には使わない）")
+
+    # --- 照合の結果（受け取ったときに決まる） ---
+    result: Mapped[SignalResult] = mapped_column(Enum(SignalResult, name="ope_signal_result_enum"), nullable=False)
+    matched_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ope_order.id", ondelete="RESTRICT"), index=True, comment="対応したオーダー（matched / duplicate）"
+    )
+    result_note: Mapped[str | None] = mapped_column(Text, comment="照合の説明（見つからなかった理由など）")
+
+    # --- 人の対応（照合できなかった信号を「対応済み」にする。一度だけ） ---
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    handled_by_staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff_user.id", ondelete="RESTRICT"))
+    handled_note: Mapped[str | None] = mapped_column(Text, comment="対応の内容（手動で完了にした・誤送信だった など）")
+
+    __table_args__ = (
+        CheckConstraint(
+            "(result IN ('MATCHED', 'DUPLICATE')) = (matched_order_id IS NOT NULL)", name="ck_ope_signal_matched_order"
+        ),
+        CheckConstraint(
+            "(handled_at IS NULL) = (handled_by_staff_id IS NULL) AND (handled_at IS NULL) = (handled_note IS NULL)",
+            name="ck_ope_signal_handled",
+        ),
+        CheckConstraint(
+            "handled_at IS NULL OR result IN ('UNMATCHED', 'AMBIGUOUS')", name="ck_ope_signal_handled_unmatched"
+        ),
+        Index("ix_ope_signal_open", "result", "handled_at"),
+        Index("ix_ope_signal_client_type", "client_code", "signal_type"),
+    )
+
+
+# 信号の行は変えられない。handled_* だけを、まだ空のときに一度だけ書ける。削除はできない
+# マイグレーションにも同じSQLがあります。ここは create_all（テスト等）用です。
+OPE_SIGNAL_GUARD_FUNCTION = """
+CREATE OR REPLACE FUNCTION ope_signal_guard() RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION USING MESSAGE = 'ope_signal is immutable';
+    END IF;
+    IF OLD.handled_at IS NOT NULL
+       OR (NEW.id, NEW.signal_type, NEW.client_code, NEW.key, NEW.received_at, NEW.recorded_at, NEW.sender_staff_id,
+           NEW.payload, NEW.result, NEW.matched_order_id, NEW.result_note)
+          IS DISTINCT FROM
+          (OLD.id, OLD.signal_type, OLD.client_code, OLD.key, OLD.received_at, OLD.recorded_at, OLD.sender_staff_id,
+           OLD.payload, OLD.result, OLD.matched_order_id, OLD.result_note) THEN
+        RAISE EXCEPTION USING MESSAGE = 'ope_signal is immutable (only handled_* can be set, once)';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+"""
+
+event.listen(OpeSignal.__table__, "after_create", DDL(OPE_SIGNAL_GUARD_FUNCTION).execute_if(dialect="postgresql"))
+event.listen(
+    OpeSignal.__table__,
+    "after_create",
+    DDL(
+        "CREATE TRIGGER trg_ope_signal_guard BEFORE UPDATE OR DELETE ON ope_signal "
+        "FOR EACH ROW EXECUTE FUNCTION ope_signal_guard()"
+    ).execute_if(dialect="postgresql"),
+)

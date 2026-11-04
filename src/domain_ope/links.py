@@ -19,6 +19,12 @@ from src.domain_ope.models import OpeDependency, OpeOrder, OpeOrderEvent, OrderE
 from src.infrastructure.repositories import biz_dependency_repo, ope_dependency_repo, ope_order_repo
 
 NOT_STARTED = (OrderStatus.PENDING, OrderStatus.READY)
+FINAL = (OrderStatus.FINISHED, OrderStatus.CANCELED)
+
+
+def is_late(order: OpeOrder, now: datetime) -> bool:
+    """遅れ = 予定の終了時刻を過ぎても完了・取消になっていない（保存しない。表示のたびに計算する。Phase 7）"""
+    return order.status not in FINAL and order.scheduled_end < now
 
 REASON_DEFINITION_DELETED = "依存関係の定義が削除されました"
 REASON_UPSTREAM_CHANGED = "待つ上流のオーダーが変わりました"

@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
-from src.domain_biz.models import BizMaster, SOPStatus, SOPVersion
+from src.domain_biz.models import BizMaster, CompletionMode, ExecutionType, SOPStatus, SOPVersion
 from src.domain_ope.models import EventSource, OpeOrder, OpeOrderEvent, OpeStep, OrderEventType, OrderStatus, StepState
 from src.domain_ope import links, steps
 from src.domain_ope.schemas import (
@@ -148,10 +148,14 @@ def _order_dependencies(db: Session, order: OpeOrder, events: list[OpeOrderEvent
 def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
     events = ope_order_repo.get_events(db, order_id=order.id)
     order_steps, preview = _order_steps(db, order)
+    biz = db.get(BizMaster, order.biz_master_id)
     return OrderDetailResponse.model_validate(
         {
             **{c.key: getattr(order, c.key) for c in OpeOrder.__table__.columns},
             "early_start_approved": any(e.event_type == OrderEventType.EARLY_START_APPROVED for e in events),
+            "late": links.is_late(order, _now()),
+            "execution_type": biz.execution_type if biz else ExecutionType.SOP,
+            "completion_mode": biz.completion_mode if biz else CompletionMode.MANUAL,
             "sop_version": _order_sop_version(db, order),
             "steps": order_steps,
             "steps_preview": preview,
@@ -403,9 +407,17 @@ def resume_order(db: Session, order_id: int, actor_staff_id: int, comment: str |
 
 
 def finish_order(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
-    """in_progress → finished（作業者。ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了する）"""
+    """
+    in_progress → finished（作業者。ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了する）。
+    顧客側の出来事（LIGHTWEIGHT）は ready からも完了にできる（受領の記録。開始しない）。
+    信号で完了する業務（AUTOMATIC）を手で完了にするときは理由が必須（信号が来なかった・誤っていた など）。
+    """
     order = _get_locked(db, order_id)
-    _require_status(order, (OrderStatus.IN_PROGRESS,), "finish")
+    biz = db.get(BizMaster, order.biz_master_id)
+    lightweight = biz is not None and biz.execution_type == ExecutionType.LIGHTWEIGHT
+    _require_status(order, (OrderStatus.READY, OrderStatus.IN_PROGRESS) if lightweight else (OrderStatus.IN_PROGRESS,), "finish")
+    if biz is not None and biz.completion_mode == CompletionMode.AUTOMATIC and not (comment and comment.strip()):
+        raise BadRequestError(f"Order {order.id} completes by signal; a reason is required to finish it by hand.")
     if ope_step_repo.get_active(db, order_id=order.id):
         raise BadRequestError(f"Order {order.id} has steps; it finishes automatically when its last step is approved.")
     _transition(db, order, OrderStatus.FINISHED, actor_staff_id, comment)

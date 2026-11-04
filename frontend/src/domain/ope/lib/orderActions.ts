@@ -78,6 +78,12 @@ export const ORDER_ACTION_LABEL: Record<OrderAction, string> = {
 /** 理由の入力が必須の操作 */
 export const REASON_REQUIRED: ReadonlySet<OrderAction> = new Set(["hold", "cancel", "approveDependencyOverride"]);
 
+/** 完了の操作の表示名（顧客側の出来事は「受領」） */
+export const finishLabel = (order: Pick<OrderDetail, "execution_type">) => (order.execution_type === "lightweight" ? "受領" : "完了");
+
+/** 完了の操作に理由が必須か（信号で完了する業務を手で完了にするとき） */
+export const finishNeedsReason = (order: Pick<OrderDetail, "completion_mode">) => order.completion_mode === "automatic";
+
 /** 開始を止めている依存関係（hard・上流が未完了・承認なし） */
 export const blockingDependencies = (order: Pick<OrderDetail, "dependencies">) =>
   order.dependencies.filter((d) => d.kind === "hard" && !d.met && !d.overridden);
@@ -103,8 +109,9 @@ export function availableActions(order: OrderDetail, staff: Staff | null | undef
   if (s === "ready" && !order.conflict && !blocked && (day <= today || order.early_start_approved)) actions.push("start");
   if (s === "pending" || s === "ready" || s === "in_progress") actions.push("hold");
   if (s === "on_hold") actions.push("resume");
-  // ステップのあるオーダーは最後の承認で自動で完了する（手動の完了はステップの無いオーダーのみ）
-  if (s === "in_progress" && order.steps.length === 0) actions.push("finish");
+  // ステップのあるオーダーは最後の承認で自動で完了する（手動の完了はステップの無いオーダーのみ）。
+  // 顧客側の出来事（LIGHTWEIGHT）は ready からも完了（受領）にできる
+  if (order.steps.length === 0 && (s === "in_progress" || (s === "ready" && order.execution_type === "lightweight"))) actions.push("finish");
   if (s !== "finished" && s !== "canceled") actions.push("cancel");
   return actions.filter(can);
 }

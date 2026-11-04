@@ -27,6 +27,7 @@ class RoleCode(str, enum.Enum):
     VIEWER = "viewer"              # 閲覧者: 参照のみ
     AUDITOR = "auditor"            # 監査担当: 参照のみ（履歴・監査記録を含む）
     SYSTEM_ADMIN = "system_admin"  # システム管理者: 職員アカウントの管理（業務の操作は含まない）
+    SIGNAL_SENDER = "signal_sender"  # 信号の送信: 顧客側の出来事の信号（POST /ope/signals）を送る仕組み用（Phase 7）
 
 
 # role テーブルの初期データ（マイグレーションにも同じ内容があります。ここは create_all（テスト等）用です）
@@ -38,6 +39,7 @@ ROLE_SEED: list[dict[str, str]] = [
     {"code": RoleCode.VIEWER.value, "name": "閲覧者", "description": "参照のみ"},
     {"code": RoleCode.AUDITOR.value, "name": "監査担当", "description": "参照のみ（履歴・監査記録を含む）"},
     {"code": RoleCode.SYSTEM_ADMIN.value, "name": "システム管理者", "description": "職員アカウントの管理（業務の操作は含まない）"},
+    {"code": RoleCode.SIGNAL_SENDER.value, "name": "信号の送信", "description": "顧客側の出来事の信号を送る（受け取り側の仕組み用）"},
 ]
 
 
