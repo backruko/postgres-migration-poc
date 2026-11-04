@@ -23,16 +23,18 @@ from sqlalchemy.orm import Session
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
 from src.domain_biz.models import BizMaster, SOPStatus, SOPVersion
-from src.domain_ope.models import EventSource, OpeOrder, OpeStep, OrderEventType, OrderStatus, StepState
+from src.domain_ope.models import EventSource, OpeOrder, OpeOrderEvent, OpeStep, OrderEventType, OrderStatus, StepState
 from src.domain_ope import links, steps
 from src.domain_ope.schemas import (
-    AutoReleaseResult, ConflictAction, ConflictResolveIn, OrderDetailResponse, OrderEventResponse, OrderSopVersion,
-    OrderStepResponse, StepEventResponse,
+    AutoReleaseResult, ConflictAction, ConflictResolveIn, DependencyBiz, OrderDependencyResponse, OrderDetailResponse,
+    OrderEventResponse, OrderSopVersion, OrderStepResponse, StepEventResponse,
 )
 from src.domain_plan import services as plan_services
 from src.domain_plan.schemas import PlanInstanceCancel
 from src.domain_plan.slot_events import SlotKey, live_instance_for_slot
-from src.infrastructure.repositories import ope_order_repo, ope_step_repo, plan_instance_repo, sop_version_repo
+from src.infrastructure.repositories import (
+    ope_dependency_repo, ope_order_repo, ope_step_repo, plan_instance_repo, sop_version_repo,
+)
 
 # 予定日の判定に使うタイムゾーン（シートの日付・休日と同じく日本の日付）
 LOCAL_TIMEZONE = ZoneInfo("Asia/Tokyo")
@@ -104,6 +106,33 @@ def _order_steps(db: Session, order: OpeOrder) -> tuple[list[OrderStepResponse],
     ], True
 
 
+def _overridden_link_ids(events: list[OpeOrderEvent]) -> set[int]:
+    """依存関係の承認（DEPENDENCY_OVERRIDE_APPROVED）が対象にしたつながり"""
+    ids: set[int] = set()
+    for e in events:
+        if e.event_type == OrderEventType.DEPENDENCY_OVERRIDE_APPROVED and e.detail:
+            ids.update(int(i) for i in e.detail.get("links", []))
+    return ids
+
+
+def _order_dependencies(db: Session, order: OpeOrder, events: list[OpeOrderEvent]) -> list[OrderDependencyResponse]:
+    overridden = _overridden_link_ids(events)
+    result = []
+    for link in ope_dependency_repo.get_active(db, downstream_order_id=order.id):
+        biz = db.get(BizMaster, link.upstream_biz_id)
+        upstream = db.get(OpeOrder, link.upstream_order_id) if link.upstream_order_id else None
+        result.append(OrderDependencyResponse(
+            id=link.id, kind=link.kind, match_rule=link.match_rule,
+            upstream_biz=DependencyBiz(id=link.upstream_biz_id, business_code=biz.business_code if biz else "", name=biz.name if biz else ""),
+            upstream_order_id=link.upstream_order_id,
+            upstream_status=upstream.status if upstream else None,
+            upstream_scheduled_start=upstream.scheduled_start if upstream else None,
+            met=upstream is not None and upstream.status == OrderStatus.FINISHED,
+            overridden=link.id in overridden,
+        ))
+    return result
+
+
 def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
     events = ope_order_repo.get_events(db, order_id=order.id)
     order_steps, preview = _order_steps(db, order)
@@ -114,6 +143,7 @@ def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
             "sop_version": _order_sop_version(db, order),
             "steps": order_steps,
             "steps_preview": preview,
+            "dependencies": _order_dependencies(db, order, events),
             "events": [OrderEventResponse.model_validate(e) for e in events],
         }
     )
@@ -288,6 +318,27 @@ def approve_early_start(db: Session, order_id: int, actor_staff_id: int, comment
     return _finish(db, order)
 
 
+def approve_dependency_override(db: Session, order_id: int, actor_staff_id: int, reason: str) -> OrderDetailResponse:
+    """
+    満たされていない hard の依存関係のまま開始することを承認します（リリース担当・業務管理者・理由必須）。
+    承認は、その時点で満たされていないつながりが対象（後から増えたつながりには、改めて承認が必要）。開始は作業者が行う。
+    """
+    order = _get_locked(db, order_id)
+    _require_status(order, (OrderStatus.PENDING, OrderStatus.READY), "approve a dependency override for")
+    unmet = links.unmet_hard_links(db, order)
+    if not unmet:
+        raise BadRequestError(f"Order {order.id} has no unmet hard dependency to override.")
+    covered = _overridden_link_ids(ope_order_repo.get_events(db, order_id=order.id))
+    if all(link.id in covered for link in unmet):
+        raise DuplicatedRecordError(f"Starting order {order.id} without its unmet dependencies is already approved.")
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.DEPENDENCY_OVERRIDE_APPROVED, source=EventSource.HUMAN,
+        actor_staff_id=actor_staff_id, reason=reason,
+        detail={"links": sorted(link.id for link in unmet), "blockers": [links.describe(db, link) for link in unmet]},
+    )
+    return _finish(db, order)
+
+
 def start_order(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
     """ready → in_progress（作業者）。予定日（日本時間）以降のみ。それより前はリリース担当の承認が必要。"""
     order = _get_locked(db, order_id)
@@ -299,7 +350,21 @@ def start_order(db: Session, order_id: int, actor_staff_id: int, comment: str | 
             f"Order {order.id} is scheduled for {_scheduled_day(order).isoformat()}; "
             "starting before that day needs a releaser's approval."
         )
-    _transition(db, order, OrderStatus.IN_PROGRESS, actor_staff_id, comment, {"early_start": True} if early else None)
+    # hard の依存関係: 上流が完了していないつながりは、リリース担当・業務管理者の承認があるものだけ越えられる
+    unmet = links.unmet_hard_links(db, order)
+    covered = _overridden_link_ids(ope_order_repo.get_events(db, order_id=order.id))
+    blocking = [link for link in unmet if link.id not in covered]
+    if blocking:
+        raise BadRequestError(
+            f"Order {order.id} waits for: " + "; ".join(links.describe(db, link) for link in blocking)
+            + ". A releaser or admin can approve starting without them."
+        )
+    detail: dict[str, Any] = {}
+    if early:
+        detail["early_start"] = True
+    if unmet:
+        detail["dependency_override"] = sorted(link.id for link in unmet)
+    _transition(db, order, OrderStatus.IN_PROGRESS, actor_staff_id, comment, detail or None)
     steps.open_first_step(db, order)
     return _finish(db, order)
 

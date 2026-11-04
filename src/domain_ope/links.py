@@ -13,7 +13,7 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from src.domain_biz.models import BizDependency, DependencyMatchRule
+from src.domain_biz.models import BizDependency, BizMaster, DependencyKind, DependencyMatchRule
 from src.domain_ope.models import OpeDependency, OpeOrder, OrderStatus
 from src.infrastructure.repositories import biz_dependency_repo, ope_dependency_repo
 
@@ -143,3 +143,34 @@ def definition_deleted(db: Session, dep: BizDependency) -> None:
     for link in ope_dependency_repo.get_active_by_definition(db, biz_dependency_id=dep.id):
         _remove(link, REASON_DEFINITION_DELETED, now)
     db.flush()
+
+
+# ==========================================
+# 開始の判定（6.4）
+# ==========================================
+def is_met(db: Session, link: OpeDependency) -> bool:
+    """つながりを満たしているか = 上流のオーダーが完了している（待ち先なし・取消・保留・作業中は満たさない）"""
+    if link.upstream_order_id is None:
+        return False
+    upstream = db.get(OpeOrder, link.upstream_order_id)
+    return upstream is not None and upstream.status == OrderStatus.FINISHED
+
+
+def unmet_hard_links(db: Session, order: OpeOrder) -> list[OpeDependency]:
+    """開始を止める、満たされていない hard のつながり（informational は止めない）"""
+    db.flush()
+    return [
+        link for link in ope_dependency_repo.get_active(db, downstream_order_id=order.id)
+        if link.kind == DependencyKind.HARD and not is_met(db, link)
+    ]
+
+
+def describe(db: Session, link: OpeDependency) -> str:
+    """止めている理由（エラーメッセージ・記録用）"""
+    biz = db.get(BizMaster, link.upstream_biz_id)
+    code = biz.business_code if biz else f"biz {link.upstream_biz_id}"
+    if link.upstream_order_id is None:
+        key = link.match_date.isoformat() if link.match_date else f"sheet event {link.match_sheet_event_id}"
+        return f"no order of {code} for {key}"
+    upstream = db.get(OpeOrder, link.upstream_order_id)
+    return f"order {link.upstream_order_id} of {code} is {upstream.status.value if upstream else 'missing'}"

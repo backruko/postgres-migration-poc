@@ -46,6 +46,7 @@ class OrderEventType(str, enum.Enum):
     EARLY_START_APPROVED = "early_start_approved"  # 予定日より前の開始をリリース担当が承認
     CONFLICT_RAISED = "conflict_raised"            # plan の変更と矛盾（作業中に日時が動いた・発生枠が消えた等）
     CONFLICT_RESOLVED = "conflict_resolved"        # 矛盾の解決（新しい日時を採用・そのまま・取消）
+    DEPENDENCY_OVERRIDE_APPROVED = "dependency_override_approved"  # 満たされていない依存関係のまま開始することを承認（Phase 6）
 
 
 class StepState(str, enum.Enum):

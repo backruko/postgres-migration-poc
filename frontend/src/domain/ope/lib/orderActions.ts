@@ -30,6 +30,7 @@ export const ORDER_EVENT_LABEL: Record<OrderEventType, string> = {
   early_start_approved: "予定日前の開始を承認",
   conflict_raised: "矛盾",
   conflict_resolved: "矛盾の解決",
+  dependency_override_approved: "依存関係を待たない開始を承認",
 };
 
 export const SOP_SOURCE_LABEL = { frozen: "固定", pinned: "指定", effective: "予定日に有効" } as const;

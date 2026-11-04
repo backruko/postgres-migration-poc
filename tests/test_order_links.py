@@ -199,6 +199,8 @@ def test_started_downstream_orders_keep_their_links(db, bizes, staff, monkeypatc
     started, pending = orders_of(db, bizes["down"])[1:3]
     ope.release_order(db, started.id, staff["releaser"])
     monkeypatch.setattr(ope, "_now", lambda: started.scheduled_start)
+    # 待ち先なし（hard）のままでは開始できない（6.4）→ リリース担当の承認で開始
+    ope.approve_dependency_override(db, started.id, staff["releaser"], "上流の予定がまだ無い")
     ope.start_order(db, started.id, staff["operator"])
 
     daily(db, bizes["up"])

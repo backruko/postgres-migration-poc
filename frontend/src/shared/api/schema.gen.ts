@@ -1065,6 +1065,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ope/orders/{order_id}/approve-dependency-override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Dependency Override Endpoint
+         * @description 満たされていない hard の依存関係のまま開始することを承認します（理由必須。開始は作業者が行います）。
+         */
+        post: operations["approve_dependency_override_endpoint_ope_orders__order_id__approve_dependency_override_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ope/orders/{order_id}/start": {
         parameters: {
             query?: never;
@@ -1076,7 +1096,8 @@ export interface paths {
         put?: never;
         /**
          * Start Order Endpoint
-         * @description ready → in_progress。予定日（日本時間）以降のみ。それより前はリリース担当の承認が必要です。矛盾があると開始できません。
+         * @description ready → in_progress。予定日（日本時間）以降のみ（それより前はリリース担当の承認が必要）。矛盾があると開始できません。
+         *     hard の依存関係は上流のオーダーの完了が必要です（満たされていなければ、リリース担当・業務管理者の承認が必要）。
          */
         post: operations["start_order_endpoint_ope_orders__order_id__start_post"];
         delete?: never;
@@ -1978,6 +1999,15 @@ export interface components {
          * @enum {string}
          */
         DayUnit: "calendar" | "business";
+        /** DependencyBiz */
+        DependencyBiz: {
+            /** Id */
+            id: number;
+            /** Business Code */
+            business_code: string;
+            /** Name */
+            name: string;
+        };
         /**
          * DependencyKind
          * @enum {string}
@@ -2166,6 +2196,35 @@ export interface components {
             /** Comment */
             comment?: string | null;
         };
+        /**
+         * OrderDependencyResponse
+         * @description このオーダーが待つ上流のオーダー（つながり1件）
+         */
+        OrderDependencyResponse: {
+            /** Id */
+            id: number;
+            kind: components["schemas"]["DependencyKind"];
+            match_rule: components["schemas"]["DependencyMatchRule"];
+            upstream_biz: components["schemas"]["DependencyBiz"];
+            /**
+             * Upstream Order Id
+             * @description null: no upstream order found (not met)
+             */
+            upstream_order_id: number | null;
+            upstream_status: components["schemas"]["OrderStatus"] | null;
+            /** Upstream Scheduled Start */
+            upstream_scheduled_start: string | null;
+            /**
+             * Met
+             * @description the upstream order has finished
+             */
+            met: boolean;
+            /**
+             * Overridden
+             * @description a releaser / admin approved starting without it
+             */
+            overridden: boolean;
+        };
         /** OrderDetailResponse */
         OrderDetailResponse: {
             /** Id */
@@ -2238,6 +2297,11 @@ export interface components {
              */
             steps_preview: boolean;
             /**
+             * Dependencies
+             * @description upstream orders this order waits for (active links)
+             */
+            dependencies: components["schemas"]["OrderDependencyResponse"][];
+            /**
              * Events
              * @description the order's events, oldest first
              */
@@ -2270,7 +2334,7 @@ export interface components {
          * @description オーダーの記録の種類（追記のみ）
          * @enum {string}
          */
-        OrderEventType: "created" | "status_changed" | "rescheduled" | "pinned" | "unpinned" | "early_start_approved" | "conflict_raised" | "conflict_resolved";
+        OrderEventType: "created" | "status_changed" | "rescheduled" | "pinned" | "unpinned" | "early_start_approved" | "conflict_raised" | "conflict_resolved" | "dependency_override_approved";
         /**
          * OrderReasonIn
          * @description 理由が必須の操作（保留・取消）
@@ -8296,6 +8360,98 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approve_dependency_override_endpoint_ope_orders__order_id__approve_dependency_override_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderReasonIn"];
             };
         };
         responses: {
