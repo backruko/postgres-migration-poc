@@ -136,6 +136,23 @@ class OpeStepRepository:
         )
         return list(db.scalars(stmt).all())
 
+    def get_events(self, db: Session, *, step_ids: list[int]) -> list[OpeStepEvent]:
+        """ステップの記録（古い順）"""
+        if not step_ids:
+            return []
+        stmt = select(OpeStepEvent).where(OpeStepEvent.step_id.in_(step_ids)).order_by(OpeStepEvent.id)
+        return list(db.scalars(stmt).all())
+
+    def latest_submitter(self, db: Session, *, step_id: int) -> int | None:
+        """最後に提出した職員（四つの目の確認用。提出の記録が無ければ None）"""
+        stmt = (
+            select(OpeStepEvent.actor_staff_id)
+            .where(OpeStepEvent.step_id == step_id, OpeStepEvent.to_state == StepState.SUBMITTED)
+            .order_by(OpeStepEvent.id.desc())
+            .limit(1)
+        )
+        return db.scalars(stmt).first()
+
     def add_event(
         self,
         db: Session,

@@ -10,6 +10,9 @@
 - 矛盾フラグのあるオーダーは、解決（resolve_conflict）するまでリリース・開始できない。
 - 誰が操作できるかはルーターの @require_roles で決める（ここでは判定しない）。
 - ステップ（5.3）: リリース時に固定したバージョンから作る（domain_ope/steps.py）。リリース前は詳細でプレビューを返す。
+- ステップの操作（5.4）: 作業中のオーダーのみ（保留中は止まる）。提出は作業者、承認・差し戻しは確認者で、
+  そのステップを最後に提出した人以外（四つの目）。最後のステップの承認でオーダーは自動で完了する
+  （矛盾フラグがあれば解決まで待ち、解決時に完了する）。ステップのあるオーダーは手動で完了にできない。
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -17,13 +20,14 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
+from src.core.error_codes import ErrorCode
+from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
 from src.domain_biz.models import BizMaster, SOPStatus, SOPVersion
-from src.domain_ope.models import EventSource, OpeOrder, OrderEventType, OrderStatus
+from src.domain_ope.models import EventSource, OpeOrder, OpeStep, OrderEventType, OrderStatus, StepState
 from src.domain_ope import steps
 from src.domain_ope.schemas import (
     AutoReleaseResult, ConflictAction, ConflictResolveIn, OrderDetailResponse, OrderEventResponse, OrderSopVersion,
-    OrderStepResponse,
+    OrderStepResponse, StepEventResponse,
 )
 from src.domain_plan import services as plan_services
 from src.domain_plan.schemas import PlanInstanceCancel
@@ -77,12 +81,16 @@ def _order_sop_version(db: Session, order: OpeOrder) -> OrderSopVersion | None:
 def _order_steps(db: Session, order: OpeOrder) -> tuple[list[OrderStepResponse], bool]:
     """リリース後は作ったステップ、リリース前は使う予定のバージョンからのプレビュー（取消済みの未リリースは空）"""
     if order.released_at is not None:
+        active = ope_step_repo.get_active(db, order_id=order.id)
+        events: dict[int, list[StepEventResponse]] = {}
+        for e in ope_step_repo.get_events(db, step_ids=[s.id for s in active]):
+            events.setdefault(e.step_id, []).append(StepEventResponse.model_validate(e))
         return [
             OrderStepResponse(
                 id=s.id, step_template_id=s.step_template_id, step_num=s.step_num, title=s.title, content=s.content,
-                is_blocking=s.is_blocking, state=s.state,
+                is_blocking=s.is_blocking, state=s.state, events=events.get(s.id, []),
             )
-            for s in ope_step_repo.get_active(db, order_id=order.id)
+            for s in active
         ], False
     if order.status == OrderStatus.CANCELED:
         return [], False
@@ -292,6 +300,7 @@ def start_order(db: Session, order_id: int, actor_staff_id: int, comment: str | 
             "starting before that day needs a releaser's approval."
         )
     _transition(db, order, OrderStatus.IN_PROGRESS, actor_staff_id, comment, {"early_start": True} if early else None)
+    steps.open_first_step(db, order)
     return _finish(db, order)
 
 
@@ -316,10 +325,77 @@ def resume_order(db: Session, order_id: int, actor_staff_id: int, comment: str |
 
 
 def finish_order(db: Session, order_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
-    """in_progress → finished（作業者。ステップ（Phase 5）ができるまでの暫定の完了操作）"""
+    """in_progress → finished（作業者。ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了する）"""
     order = _get_locked(db, order_id)
     _require_status(order, (OrderStatus.IN_PROGRESS,), "finish")
+    if ope_step_repo.get_active(db, order_id=order.id):
+        raise BadRequestError(f"Order {order.id} has steps; it finishes automatically when its last step is approved.")
     _transition(db, order, OrderStatus.FINISHED, actor_staff_id, comment)
+    return _finish(db, order)
+
+
+def _finish_if_complete(db: Session, order: OpeOrder) -> None:
+    """作業中で矛盾が無く、すべてのステップが承認済みならオーダーを完了にする（システムの記録）"""
+    if order.status == OrderStatus.IN_PROGRESS and not order.conflict and steps.all_approved(db, order):
+        order.status = OrderStatus.FINISHED
+        ope_order_repo.add_event(
+            db, order=order, event_type=OrderEventType.STATUS_CHANGED, from_status=OrderStatus.IN_PROGRESS,
+            to_status=OrderStatus.FINISHED, source=EventSource.SYSTEM, actor_staff_id=None,
+            detail={"cause": "all steps approved"},
+        )
+
+
+# ==========================================
+# ステップの操作（5.4）
+# ==========================================
+def _get_step_for_action(db: Session, step_id: int, allowed: StepState, action: str) -> tuple[OpeOrder, OpeStep]:
+    """ステップのオーダーを行ロックしてから、ステップの状態を確かめる（同じオーダーのステップの操作は順番に処理される）"""
+    found = db.get(OpeStep, step_id)
+    if found is None or found.retired_at is not None:
+        raise NotFoundError(f"Step(id={step_id}) not found.")
+    order = _get_locked(db, found.order_id)
+    db.refresh(found)  # ロックを取った後の状態で判定する
+    _require_status(order, (OrderStatus.IN_PROGRESS,), f"{action} a step of")
+    if found.state != allowed:
+        raise BadRequestError(
+            f"Cannot {action} step {found.step_num} of order {order.id}: it is {found.state.value} (allowed: {allowed.value})."
+        )
+    return order, found
+
+
+def _require_other_than_submitter(db: Session, step: OpeStep, actor_staff_id: int, action: str) -> None:
+    if ope_step_repo.latest_submitter(db, step_id=step.id) == actor_staff_id:
+        raise ForbiddenError(
+            f"You submitted step {step.step_num}; another checker must {action} it.", error_code=ErrorCode.FOUR_EYES,
+        )
+
+
+def submit_step(db: Session, step_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """todo → submitted（作業者）。is_blocking でなければ次のステップが開く。"""
+    order, step = _get_step_for_action(db, step_id, StepState.TODO, "submit")
+    steps.set_state(db, step, StepState.SUBMITTED, EventSource.HUMAN, actor_staff_id, comment)
+    if not step.is_blocking:
+        steps.open_next_step(db, order, step, "previous step submitted")
+    return _finish(db, order)
+
+
+def approve_step(db: Session, step_id: int, actor_staff_id: int, comment: str | None = None) -> OrderDetailResponse:
+    """submitted → approved（確認者・提出者以外）。is_blocking なら次のステップが開く。最後の承認でオーダーが完了する。"""
+    order, step = _get_step_for_action(db, step_id, StepState.SUBMITTED, "approve")
+    _require_other_than_submitter(db, step, actor_staff_id, "approve")
+    steps.set_state(db, step, StepState.APPROVED, EventSource.HUMAN, actor_staff_id, comment)
+    if step.is_blocking:
+        steps.open_next_step(db, order, step, "previous step approved")
+    db.flush()
+    _finish_if_complete(db, order)
+    return _finish(db, order)
+
+
+def reject_step(db: Session, step_id: int, actor_staff_id: int, reason: str) -> OrderDetailResponse:
+    """submitted → todo（確認者・提出者以外・理由必須）。そのステップだけを戻し、後のステップはそのまま。"""
+    order, step = _get_step_for_action(db, step_id, StepState.SUBMITTED, "reject")
+    _require_other_than_submitter(db, step, actor_staff_id, "reject")
+    steps.set_state(db, step, StepState.TODO, EventSource.HUMAN, actor_staff_id, reason)
     return _finish(db, order)
 
 
@@ -405,6 +481,9 @@ def resolve_conflict(db: Session, order_id: int, actor_staff_id: int, resolve_in
         actor_staff_id=actor_staff_id, reason=resolve_in.reason, detail=detail,
         from_status=from_status if cancel else None, to_status=OrderStatus.CANCELED if cancel else None,
     )
+    if not cancel:
+        db.flush()
+        _finish_if_complete(db, order)  # 矛盾の間に最後のステップが承認されていた → ここで完了
     db.flush()
     if not (cancel and _cancel_plan_instance(db, order, actor_staff_id, resolve_in.reason or "conflict resolved")):
         db.commit()

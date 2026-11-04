@@ -7,6 +7,8 @@
 - リリース時に、固定したバージョンの条件に合うステップだけを作る（合わないものは作らず、リリースの記録に残す）。
 - リリース後は固定。予定が動いて条件の結果が変わったら、order_sync が矛盾フラグを立てる（ここでは比較だけ）。
   矛盾を「plan に合わせる」で解決したときだけ、開始前のオーダーのステップを作り直す（古い行は retired_at で外す）。
+- 状態の進み方（5.4）: オーダーの開始で最初のステップが開く（locked → todo）。提出で次のステップが開く。
+  ただし is_blocking のステップは承認されるまで次を開かない。差し戻しはそのステップだけ todo に戻す。
 """
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -114,6 +116,43 @@ def _add_steps(db: Session, order: OpeOrder, plan: StepPlan, source: EventSource
             db, step=step, event_type=StepEventType.CREATED, to_state=StepState.LOCKED, source=source,
             actor_staff_id=actor_staff_id,
         )
+
+
+# ==========================================
+# 状態の変更（5.4）
+# ==========================================
+def set_state(
+    db: Session, step: OpeStep, to: StepState, source: EventSource, actor_staff_id: int | None,
+    reason: str | None = None, detail: dict[str, Any] | None = None,
+) -> None:
+    from_state = step.state
+    step.state = to
+    ope_step_repo.add_event(
+        db, step=step, event_type=StepEventType.STATE_CHANGED, from_state=from_state, to_state=to, source=source,
+        actor_staff_id=actor_staff_id, reason=reason, detail=detail,
+    )
+
+
+def open_first_step(db: Session, order: OpeOrder) -> None:
+    """オーダーの開始で最初のステップを開く（システムの記録。ステップの無いオーダーは何もしない）"""
+    active = ope_step_repo.get_active(db, order_id=order.id)
+    if active and active[0].state == StepState.LOCKED:
+        set_state(db, active[0], StepState.TODO, EventSource.SYSTEM, None, detail={"cause": "order started"})
+
+
+def open_next_step(db: Session, order: OpeOrder, after: OpeStep, cause: str) -> None:
+    """after の次のステップがまだ開いていなければ開く（差し戻し後の再提出などで、すでに開いていれば何もしない）"""
+    for step in ope_step_repo.get_active(db, order_id=order.id):
+        if step.step_num > after.step_num:
+            if step.state == StepState.LOCKED:
+                set_state(db, step, StepState.TODO, EventSource.SYSTEM, None, detail={"cause": cause, "after_step": after.step_num})
+            return
+
+
+def all_approved(db: Session, order: OpeOrder) -> bool:
+    """ステップがあり、すべて承認済みか（ステップの無いオーダーは False: 人が完了にする）"""
+    active = ope_step_repo.get_active(db, order_id=order.id)
+    return bool(active) and all(s.state == StepState.APPROVED for s in active)
 
 
 def is_unstarted_release(order: OpeOrder) -> bool:

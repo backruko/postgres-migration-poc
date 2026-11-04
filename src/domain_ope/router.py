@@ -7,8 +7,8 @@ from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
 from src.infrastructure.database import get_db
 from src.domain_ope.schemas import ConflictResolveIn, OrderCommentIn, OrderDetailResponse, OrderReasonIn, PinSopVersionIn
 from src.domain_ope.services import (
-    approve_early_start, cancel_order, finish_order, get_order, hold_order, pin_sop_version, release_order,
-    resolve_conflict, resume_order, start_order, unpin_sop_version,
+    approve_early_start, approve_step, cancel_order, finish_order, get_order, hold_order, pin_sop_version, reject_step,
+    release_order, resolve_conflict, resume_order, start_order, submit_step, unpin_sop_version,
 )
 from src.domain_staff.auth import get_current_staff, require_active, require_roles
 from src.domain_staff.models import RoleCode, StaffUser
@@ -90,7 +90,7 @@ def resume_order_endpoint(
 def finish_order_endpoint(
     order_id: int, body: OrderCommentIn | None = None, db: Session = Depends(get_db), current_staff: StaffUser = STAFF,
 ):
-    """in_progress → finished（ステップができるまでの暫定の完了操作）"""
+    """in_progress → finished（ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了します）"""
     return finish_order(db=db, order_id=order_id, actor_staff_id=current_staff.id, comment=(body or OrderCommentIn()).comment)
 
 @router.post("/orders/{order_id}/cancel", response_model=OrderDetailResponse, responses=RESPONSES)
@@ -106,3 +106,30 @@ def resolve_conflict_endpoint(
 ):
     """矛盾の解決: accept_plan（plan の新しい日時を採用）・keep（そのまま続ける）・cancel（取消。理由必須）"""
     return resolve_conflict(db=db, order_id=order_id, actor_staff_id=current_staff.id, resolve_in=body)
+
+
+# ==========================================
+# Step（ステップ）エンドポイント（作業中のオーダーのみ。返り値はオーダーの詳細）
+# ==========================================
+
+@router.post("/steps/{step_id}/submit", response_model=OrderDetailResponse, responses=RESPONSES)
+@require_roles(OPERATOR)
+def submit_step_endpoint(
+    step_id: int, body: OrderCommentIn | None = None, db: Session = Depends(get_db), current_staff: StaffUser = STAFF,
+):
+    """todo → submitted。is_blocking でなければ次のステップが開きます。"""
+    return submit_step(db=db, step_id=step_id, actor_staff_id=current_staff.id, comment=(body or OrderCommentIn()).comment)
+
+@router.post("/steps/{step_id}/approve", response_model=OrderDetailResponse, responses=RESPONSES)
+@require_roles([RoleCode.CHECKER])
+def approve_step_endpoint(
+    step_id: int, body: OrderCommentIn | None = None, db: Session = Depends(get_db), current_staff: StaffUser = STAFF,
+):
+    """submitted → approved（提出者以外）。is_blocking なら次のステップが開き、最後の承認でオーダーが完了します。"""
+    return approve_step(db=db, step_id=step_id, actor_staff_id=current_staff.id, comment=(body or OrderCommentIn()).comment)
+
+@router.post("/steps/{step_id}/reject", response_model=OrderDetailResponse, responses=RESPONSES)
+@require_roles([RoleCode.CHECKER])
+def reject_step_endpoint(step_id: int, body: OrderReasonIn, db: Session = Depends(get_db), current_staff: StaffUser = STAFF):
+    """submitted → todo（提出者以外・理由必須）。そのステップだけが戻り、後のステップはそのままです。"""
+    return reject_step(db=db, step_id=step_id, actor_staff_id=current_staff.id, reason=body.reason)

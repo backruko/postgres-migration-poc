@@ -1092,7 +1092,7 @@ export interface paths {
         put?: never;
         /**
          * Finish Order Endpoint
-         * @description in_progress → finished（ステップができるまでの暫定の完了操作）
+         * @description in_progress → finished（ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了します）
          */
         post: operations["finish_order_endpoint_ope_orders__order_id__finish_post"];
         delete?: never;
@@ -1135,6 +1135,66 @@ export interface paths {
          * @description 矛盾の解決: accept_plan（plan の新しい日時を採用）・keep（そのまま続ける）・cancel（取消。理由必須）
          */
         post: operations["resolve_conflict_endpoint_ope_orders__order_id__resolve_conflict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/steps/{step_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Step Endpoint
+         * @description todo → submitted。is_blocking でなければ次のステップが開きます。
+         */
+        post: operations["submit_step_endpoint_ope_steps__step_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/steps/{step_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Step Endpoint
+         * @description submitted → approved（提出者以外）。is_blocking なら次のステップが開き、最後の承認でオーダーが完了します。
+         */
+        post: operations["approve_step_endpoint_ope_steps__step_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ope/steps/{step_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Step Endpoint
+         * @description submitted → todo（提出者以外・理由必須）。そのステップだけが戻り、後のステップはそのままです。
+         */
+        post: operations["reject_step_endpoint_ope_steps__step_id__reject_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1834,7 +1894,7 @@ export interface components {
          *     意味が直感的にわかるように、すべて大文字の文字列（スネークケース）で定義します。
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "STAFF_NOT_ACTIVE" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "ORDER_IN_PROGRESS" | "DELETE_FAILED_RECORD_IN_USE" | "INTERNAL_SERVER_ERROR";
+        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "FOUR_EYES" | "STAFF_NOT_ACTIVE" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "ORDER_IN_PROGRESS" | "DELETE_FAILED_RECORD_IN_USE" | "INTERNAL_SERVER_ERROR";
         /** ErrorResponse */
         ErrorResponse: {
             /**
@@ -2165,6 +2225,11 @@ export interface components {
             is_blocking: boolean;
             /** @description null in a preview */
             state: components["schemas"]["StepState"] | null;
+            /**
+             * Events
+             * @description the step's events, oldest first (empty in a preview)
+             */
+            events?: components["schemas"]["StepEventResponse"][];
         };
         /** PinSopVersionIn */
         PinSopVersionIn: {
@@ -2924,6 +2989,34 @@ export interface components {
             /** Email */
             email?: string | null;
         };
+        /** StepEventResponse */
+        StepEventResponse: {
+            /** Id */
+            id: number;
+            event_type: components["schemas"]["StepEventType"];
+            from_state: components["schemas"]["StepState"] | null;
+            to_state: components["schemas"]["StepState"] | null;
+            source: components["schemas"]["EventSource"];
+            /** Actor Staff Id */
+            actor_staff_id: number | null;
+            /** Reason */
+            reason: string | null;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+        };
+        /**
+         * StepEventType
+         * @description ステップの記録の種類（追記のみ）
+         * @enum {string}
+         */
+        StepEventType: "created" | "state_changed" | "retired";
         /**
          * StepState
          * @description ステップの状態。approved が最終状態（差し戻しは submitted → todo）
@@ -8408,6 +8501,282 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ConflictResolveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_step_endpoint_ope_steps__step_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                step_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approve_step_endpoint_ope_steps__step_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                step_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderCommentIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reject_step_endpoint_ope_steps__step_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                step_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderReasonIn"];
             };
         };
         responses: {

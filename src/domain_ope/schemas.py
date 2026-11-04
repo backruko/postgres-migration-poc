@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.domain_ope.models import EventSource, OrderEventType, OrderStatus, StepState
+from src.domain_ope.models import EventSource, OrderEventType, OrderStatus, StepEventType, StepState
 
 
 # ==========================================
@@ -62,6 +62,20 @@ class OrderEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class StepEventResponse(BaseModel):
+    id: int
+    event_type: StepEventType
+    from_state: StepState | None
+    to_state: StepState | None
+    source: EventSource
+    actor_staff_id: int | None
+    reason: str | None
+    detail: dict[str, Any] | None
+    occurred_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class OrderStepResponse(BaseModel):
     """オーダーのステップ（リリース前はプレビュー: id と state は null）"""
     id: int | None = Field(description="null in a preview (pending order: steps are created at release)")
@@ -71,6 +85,7 @@ class OrderStepResponse(BaseModel):
     content: str | None
     is_blocking: bool
     state: StepState | None = Field(description="null in a preview")
+    events: list[StepEventResponse] = Field(default_factory=list, description="the step's events, oldest first (empty in a preview)")
 
 
 class OrderSopVersion(BaseModel):
