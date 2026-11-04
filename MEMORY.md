@@ -15,7 +15,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   not pushed). **Phase 4 is complete. Phase 5 (steps, maker-checker) started 2026-10-30: decisions made and step plan
   approved (§2 "Phase 5 step plan"); step 5.1 (step template condition + is_blocking) done — committed and pushed
   by the user as `05850c1 phase4(compelete)` (with `5dbbe0f phase4`). Step 5.2 (ope_step / ope_step_event tables,
-  migration `966b78ff950f`) built 2026-11-04, **uncommitted, waiting for the user's review**. Next: step 5.3.**
+  migration `966b78ff950f`) committed 2026-11-04 as `fc58dd0` (not pushed). Next: step 5.3.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
 - **DB:** latest Alembic head is `966b78ff950f` (ope steps and step events). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
@@ -332,7 +332,7 @@ when the last step is approved; a ready order whose step conditions change after
 | # | Step | Status |
 |---|---|---|
 | 5.1 | biz `sop_step_template.condition` (JSONB, default `{"type": "always"}`) + `is_blocking` (default false); migration `971958268657`; schemas `StepCondition` = discriminated union `AlwaysCondition` / `MonthInCondition(months 1–12, deduped + sorted)` / `FirstInWeekCondition`; `clone_active_to_draft` copies both; tests in `tests/test_biz.py` | **done** (`05850c1`, pushed by the user) |
-| 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event`; migration `966b78ff950f` | **built, uncommitted** (2026-11-04) |
+| 5.2 | ope tables `ope_step` (order_id, step_template_id, step_num, snapshot title / content / is_blocking, state) + append-only `ope_step_event`; migration `966b78ff950f` | **done** (`fc58dd0`, not pushed) |
 | 5.3 | Build steps: live preview while pending (in the order detail), create + freeze at release, conflict flag when a system move changes a ready order's step set | **next** |
 | 5.4 | Step actions: submit (operator) / approve / reject (checker, four-eyes, reason for reject), unlock rules, start opens step 1, auto-finish on the last approval; manual finish only for zero-step orders | |
 | 5.5 | Frontend: steps + actions in the order drawer, step progress ("3/5") on dashboard rows | |
