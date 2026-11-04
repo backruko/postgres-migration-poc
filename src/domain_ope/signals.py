@@ -9,7 +9,7 @@
 照合できなかった信号は人が対応する（handle_signal: オーダーを指定して完了にするか、対応済みにするだけ）。
 """
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -122,3 +122,22 @@ def handle_signal(db: Session, signal_id: int, actor_staff_id: int, handle_in: S
     db.commit()
     db.refresh(signal)
     return SignalResponse.model_validate(signal)
+
+
+def list_signals(
+    db: Session, scope: Literal["open", "all"] = "open", client_code: str | None = None, since: datetime | None = None,
+    limit: int = 200,
+) -> list[SignalResponse]:
+    """
+    信号の一覧（新しい順）。scope=open（既定）は人の対応が必要なもの（unmatched / ambiguous で未対応）だけ。
+    ダッシュボードの「照合できなかった信号」に使う。
+    """
+    stmt = select(OpeSignal)
+    if scope == "open":
+        stmt = stmt.where(OpeSignal.result.in_((SignalResult.UNMATCHED, SignalResult.AMBIGUOUS)), OpeSignal.handled_at.is_(None))
+    if client_code:
+        stmt = stmt.where(OpeSignal.client_code == client_code.strip().upper())
+    if since is not None:
+        stmt = stmt.where(OpeSignal.recorded_at >= since)
+    stmt = stmt.order_by(OpeSignal.recorded_at.desc(), OpeSignal.id.desc()).limit(limit)
+    return [SignalResponse.model_validate(s) for s in db.scalars(stmt)]

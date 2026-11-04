@@ -1,6 +1,7 @@
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
@@ -150,6 +151,18 @@ def reject_step_endpoint(step_id: int, body: OrderReasonIn, db: Session = Depend
 # ==========================================
 # Signal（顧客側の出来事の信号。Phase 7）
 # ==========================================
+
+@router.get("/signals", response_model=list[SignalResponse], responses=RESPONSES)
+@require_active()
+def list_signals_endpoint(
+    scope: Literal["open", "all"] = Query("open", description="open: unmatched / ambiguous and not handled yet"),
+    client_code: str | None = None,
+    since: datetime | None = Query(None, description="recorded at or after (with a timezone offset)"),
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    """信号の一覧（新しい順）。既定は人の対応が必要なもの（照合できず、まだ対応していない信号）だけです。"""
+    return signals.list_signals(db=db, scope=scope, client_code=client_code, since=since, limit=limit)
 
 @router.post("/signals", response_model=SignalResponse, status_code=201, responses=RESPONSES)
 @require_roles([RoleCode.SIGNAL_SENDER])

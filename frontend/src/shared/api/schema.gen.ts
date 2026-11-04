@@ -1294,7 +1294,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Signals Endpoint
+         * @description 信号の一覧（新しい順）。既定は人の対応が必要なもの（照合できず、まだ対応していない信号）だけです。
+         */
+        get: operations["list_signals_endpoint_ope_signals_get"];
         put?: never;
         /**
          * Receive Signal Endpoint
@@ -2046,6 +2050,12 @@ export interface components {
              * @default false
              */
             blocked: boolean;
+            /**
+             * Late
+             * @description past its scheduled end and not finished / canceled (computed)
+             * @default false
+             */
+            late: boolean;
         };
         /**
          * DailyVoidedItem
@@ -2385,6 +2395,12 @@ export interface components {
              * @default false
              */
             early_start_approved: boolean;
+            /**
+             * Late
+             * @description past its scheduled end and not finished / canceled (computed)
+             * @default false
+             */
+            late: boolean;
             /** @description the SOP version this order runs (null: none approved / none was frozen at release) */
             sop_version?: components["schemas"]["OrderSopVersion"] | null;
             /**
@@ -9560,6 +9576,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_signals_endpoint_ope_signals_get: {
+        parameters: {
+            query?: {
+                /** @description open: unmatched / ambiguous and not handled yet */
+                scope?: "open" | "all";
+                client_code?: string | null;
+                /** @description recorded at or after (with a timezone offset) */
+                since?: string | null;
+                limit?: number;
+            };
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignalResponse"][];
                 };
             };
             /** @description Bad Request(リクエスト不正) */

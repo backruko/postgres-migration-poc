@@ -145,6 +145,7 @@ class OrderResponse(BaseModel):
     conflict: bool
     conflict_reason: str | None
     early_start_approved: bool = Field(default=False, description="a releaser approved starting before the scheduled day")
+    late: bool = Field(default=False, description="past its scheduled end and not finished / canceled (computed)")
     sop_version: OrderSopVersion | None = Field(
         default=None, description="the SOP version this order runs (null: none approved / none was frozen at release)"
     )

@@ -29,6 +29,7 @@ class DailyOrderSummary(BaseModel):
     steps_total: int = Field(default=0, description="the order's steps (0: not released yet, or no steps)")
     steps_approved: int = Field(default=0, description="steps approved so far")
     blocked: bool = Field(default=False, description="hard dependencies not met (and not overridden): start is refused")
+    late: bool = Field(default=False, description="past its scheduled end and not finished / canceled (computed)")
 
 
 class DailyOccurrence(BaseModel):

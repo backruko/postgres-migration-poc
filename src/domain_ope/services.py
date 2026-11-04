@@ -152,6 +152,7 @@ def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
         {
             **{c.key: getattr(order, c.key) for c in OpeOrder.__table__.columns},
             "early_start_approved": any(e.event_type == OrderEventType.EARLY_START_APPROVED for e in events),
+            "late": links.is_late(order, _now()),
             "sop_version": _order_sop_version(db, order),
             "steps": order_steps,
             "steps_preview": preview,

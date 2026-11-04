@@ -16,6 +16,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from src.coordination import services as ops_services
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import CompletionMode, ExecutionType
@@ -207,3 +208,40 @@ def test_input_validation_and_guard():
     paths = app.openapi()["paths"]
     for path in ("/ope/signals", "/ope/signals/{signal_id}/handle"):
         assert "x-staff-id" in {p["name"] for p in paths[path]["post"].get("parameters", [])}, path
+
+
+# ==========================================
+# 読む側（7.4）: 遅れ・照合できなかった信号の一覧
+# ==========================================
+def test_late_is_computed_from_the_scheduled_end(db, setup, staff, monkeypatch):
+    order = orders(db, setup)[2]
+    assert not ope.get_order(db, order.id).late
+    after_end = order.scheduled_end + timedelta(minutes=1)
+    monkeypatch.setattr(ope, "_now", lambda: after_end)
+    monkeypatch.setattr(ops_services, "_now", lambda: after_end)
+    assert ope.get_order(db, order.id).late
+
+    def summary():
+        dash = ops_services.get_daily_dashboard(db, order.scheduled_start.astimezone(JST).date(), "Asia/Tokyo")
+        return next(o.order for c in dash.clients for b in c.businesses for o in b.occurrences if o.order and o.order.id == order.id)
+
+    assert summary().late
+    ope.release_order(db, order.id, staff["releaser"])
+    send(db, setup, staff, order.occurrence_date.isoformat())  # 信号で完了 → 遅れではない
+    assert not ope.get_order(db, order.id).late and not summary().late
+
+
+def test_signal_list_shows_what_needs_a_person(db, setup, staff):
+    order = orders(db, setup)[2]
+    ope.release_order(db, order.id, staff["releaser"])
+    matched = send(db, setup, staff, order.occurrence_date.isoformat())
+    unmatched = send(db, setup, staff, "Nov 10")
+    other = send(db, setup, staff, "1999-01-01", client_code="ZZZZZ")
+
+    mine = [s.id for s in signals.list_signals(db, client_code=setup["code"])]
+    assert unmatched.id in mine and matched.id not in mine and other.id not in mine
+    assert matched.id in [s.id for s in signals.list_signals(db, scope="all", client_code=setup["code"])]
+    assert other.id in [s.id for s in signals.list_signals(db, client_code="zzzzz")]
+
+    signals.handle_signal(db, unmatched.id, staff["operator"], SignalHandleIn(note="誤送信"))
+    assert unmatched.id not in [s.id for s in signals.list_signals(db, client_code=setup["code"])]
