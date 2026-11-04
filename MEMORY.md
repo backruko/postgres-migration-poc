@@ -7,7 +7,8 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 
 - **Branches:** `main` = Plan MVP + Phases 1–5. Phases 1–3 merged 2026-10-28 (`23767b8`); **Phases 4–5 merged
   locally 2026-11-04 at the user's request (`71de514`, --no-ff, not pushed — the user pushes `main` and
-  `feature/ope-orders`)**. **Current work: `feature/ope-dependencies`** (from `main` after that merge), Phase 6.
+  `feature/ope-orders`)**. **Phase 6 merged locally 2026-11-04 (`b3538aa`, --no-ff, not pushed; `main` 29 ahead of
+  origin)**. **Current work: `feature/ope-signals`** (from `main` after that merge), Phase 7.
   The user pushes; I never do. (The user committed + pushed 5.5 themselves as `75cc109 phase5`; my MEMORY-only
   commit on top is `6a37fee`.)
 - **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
@@ -26,8 +27,8 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
   `cb0ae371f402`) committed 2026-11-04 (`3eaede4`, not pushed). Step 6.3 (link resolution, no migration) committed
   2026-11-04 (`1a364ca`, not pushed). Step 6.4 (start check + dependency override, migration `58425e70286d`)
   committed 2026-11-04 (`916ebee`, not pushed). Step 6.5 (frontend + small backend additions, no migration) committed
-  2026-11-04 (not pushed). With it **Phase 6 is complete**. Next: Phase 7
-  (client events / signals) — not planned yet; plan it with the user first (the doc has open questions on it).**
+  2026-11-04 (`3669528`, not pushed). With it **Phase 6 is complete** (merged into `main`). Phase 7 (client
+  events / signals) planned 2026-11-04 (§2 "Phase 7 step plan"). Next: 7.1.**
   The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
 - **DB:** latest Alembic head is `58425e70286d` (order event DEPENDENCY_OVERRIDE_APPROVED). Migrations: `ceee1634d6a7`
   (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
@@ -93,7 +94,7 @@ details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backe
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 60 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 60}` to see only newer edits, and
+**Last rev written by me: 62 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 62}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–6 built, rev 60).
 
@@ -458,7 +459,7 @@ like the rest of biz.
 | 6.2 | ope tables `ope_dependency` (upstream order, downstream order, definition, kind) — tables only; migration `cb0ae371f402` | **done** (`3eaede4`, not pushed) |
 | 6.3 | Link resolution: create / refresh concrete links when orders are created or moved (order_sync) and when a definition is added or removed | **done** (`1a364ca`, not pushed) |
 | 6.4 | Start check: hard links need the upstream order finished, else start → 400 listing blockers; force-start (releaser / admin, reason) as an order event; upstream canceled / on hold stays blocked; migration `58425e70286d` | **done** (`916ebee`, not pushed) |
-| 6.5 | Frontend: dependency settings for a business, upstream / downstream in the order drawer, "blocked" tag + force-start | **done** (not pushed) |
+| 6.5 | Frontend: dependency settings for a business, upstream / downstream in the order drawer, "blocked" tag + force-start | **done** (`3669528`, not pushed) |
 
 **6.1 as built** (`src/domain_biz/models.py` end, migration `2904467fd7b9`). `BizDependency`: `upstream_biz_id` /
 `downstream_biz_id` (FK biz_master RESTRICT), `match_rule` (`DependencyMatchRule` SAME_SHEET_EVENT |
@@ -563,7 +564,23 @@ a re-pointed / new link needs a new approval.
   offered to the releaser, 開始 hidden for the operator, blocked reason, dashboard 待ち true → override → false, start,
   delete — 14/14 passed. **Not checked: the browser** (the new page, the drawer section, the tag) — the user clicks
   through.
-7. Client events with automatic completion (signals).
+7. Client events with automatic completion (signals). ← **in progress** (branch `feature/ope-signals`)
+
+#### Phase 7 decisions (2026-11-04, doc rev 62)
+All four as I recommended: Phase 6 merged first, Phase 7 on a new branch; **a client event = a LIGHTWEIGHT business**
+with its own template / orders (a file feeding several jobs = they depend on that business via Phase 6 links);
+**transport: HTTP `POST /ope/signals` only**, sender = a staff account with a new role **`signal_sender`** (X-Staff-Id
+until real login; watchers later = scripts posting the same signal); **match = signal type + client + rule date**
+(`key` = the order's `occurrence_date` YYYY-MM-DD); none or several matches → stored unmatched for a person.
+
+#### Phase 7 step plan (approved 2026-11-04)
+| # | Step | Status |
+|---|---|---|
+| 7.1 | biz `execution_type` (SOP / LIGHTWEIGHT), `completion_mode` (MANUAL / AUTOMATIC), `signal_type` (required for AUTOMATIC); biz PATCH; migration; LIGHTWEIGHT orders get no steps at release | **next** |
+| 7.2 | `ope_signal` table (append-only: type, client_code, key, received_at, sender, match result + order) + role `signal_sender` — tables / role only | |
+| 7.3 | `POST /ope/signals` (signal_sender): store every signal, match, finish the order (system event); unmatched / ambiguous kept; manual way out (finish with reason) for AUTOMATIC | |
+| 7.4 | Read side: "late" computed on the dashboard, unmatched signals listed (`GET /ope/signals`) | |
+| 7.5 | Frontend: client-event settings on a business, 受領 (mark received) in the drawer, late tag, unmatched signals panel | |
 
 ### Open questions (in the doc)
 Client event scope (per business or per client) · reset later steps on rejection (proposed no) · "latest before due"
