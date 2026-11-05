@@ -1,5 +1,5 @@
 import { http, unwrap } from "../../../shared/api/http";
-import type { BizMaster, BizMasterUpdate } from "../types";
+import type { BizMaster, BizMasterUpdate, SopVersion } from "../types";
 
 /**
  * 選択肢として一度に取得する業務の上限。
@@ -16,5 +16,10 @@ export const bizApi = {
   /** 業務の設定の変更（送った項目だけ変わる）（PATCH /biz/{id}） */
   update(bizId: number, body: BizMasterUpdate): Promise<BizMaster> {
     return unwrap(http.PATCH("/biz/{biz_id}", { params: { path: { biz_id: bizId } }, body }));
+  },
+
+  /** 承認済み（草稿以外）の SOP バージョン、新しい順。オーダーに指定できる選択肢（GET /biz/{id}/versions） */
+  listVersions(bizId: number, signal?: AbortSignal): Promise<SopVersion[]> {
+    return unwrap(http.GET("/biz/{biz_id}/versions", { params: { path: { biz_id: bizId } }, signal }));
   },
 };

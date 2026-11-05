@@ -59,6 +59,16 @@ export const orderApi = {
     return unwrap(http.POST("/ope/orders/{order_id}/resolve-conflict", { ...path(orderId), body: { action, reason: reason || null } }));
   },
 
+  /** リリース前に使う SOP バージョンを指定（POST /ope/orders/{id}/pin） */
+  pin(orderId: number, sopVersionId: number, reason?: string): Promise<OrderDetail> {
+    return unwrap(http.POST("/ope/orders/{order_id}/pin", { ...path(orderId), body: { sop_version_id: sopVersionId, reason: reason || null } }));
+  },
+
+  /** 指定を外し、予定日に有効なバージョンに戻す（POST /ope/orders/{id}/unpin） */
+  unpin(orderId: number, comment?: string): Promise<OrderDetail> {
+    return unwrap(http.POST("/ope/orders/{order_id}/unpin", { ...path(orderId), body: { comment: comment || null } }));
+  },
+
   // ---- ステップ（作業中のオーダーのみ。返り値はオーダーの詳細） ----
 
   /** todo → submitted（POST /ope/steps/{id}/submit） */

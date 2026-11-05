@@ -178,6 +178,12 @@ def get_steps_by_version(db: Session, version_id: int) -> list[SOPStepTemplate]:
 # ==========================================
 # 0. 【現在時刻基準】今まさに有効な現行バージョンを取得するクエリ
 # ==========================================
+def list_approved_versions(db: Session, biz_id: int) -> list[SOPVersion]:
+    """業務の承認済み（草稿以外）のバージョン、新しい順。オーダーに指定（pin）できるバージョンの選択肢に使います。"""
+    get_biz(db, biz_id)  # 存在しない・削除済みの業務は 404
+    return sop_version_repo.get_approved(db, biz_master_id=biz_id)
+
+
 def get_current_active_version(db: Session, biz_id: int) -> SOPVersion:
     """現在日時を基準に、自動的に『今有効な現行バージョン』を1件取得します。"""
     now = datetime.now(timezone.utc)

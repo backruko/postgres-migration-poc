@@ -1,5 +1,8 @@
-import { Alert, App, Button, Descriptions, Drawer, Empty, Form, Input, Modal, Radio, Space, Spin, Tag, Timeline, Typography } from "antd";
+import { Alert, App, Button, Descriptions, Drawer, Empty, Form, Input, Modal, Radio, Select, Space, Spin, Tag, Timeline, Typography } from "antd";
 import { useState } from "react";
+import { bizApi } from "../../domain/biz/api/bizApi";
+import { pinOptions } from "../../domain/biz/lib/sopVersions";
+import { useApiQuery } from "../../shared/hooks/useApiQuery";
 import { orderApi } from "../../domain/ope/api";
 import { useOrder } from "../../domain/ope/hooks/useOrder";
 import {
@@ -38,9 +41,16 @@ function describeEvent(e: OrderEvent): string {
   return ORDER_EVENT_LABEL[e.event_type];
 }
 
+/** 記録の操作者: システム / 職員の名前（名前が取れないときだけ 職員 #id） */
+function actorLabel(e: { source: string; actor_staff_id: number | null; actor_name: string | null }): string {
+  if (e.source === "system") return "システム";
+  return e.actor_name ?? `職員 #${e.actor_staff_id}`;
+}
+
 interface ActionValues {
   text?: string;
   conflictAction?: ConflictAction;
+  sopVersionId?: number;
 }
 
 /** 確認中の操作（オーダーの操作か、ステップの操作か） */
@@ -68,6 +78,14 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
   const day = data ? inZone(data.scheduled_start, TIMEZONE).format("YYYY-MM-DD") : today;
   const actions = data ? availableActions(data, me.data, today, day) : [];
   const blocked = data ? startBlockedReason(data, today, day) : null;
+  // SOP バージョンの指定: モーダルを開いている間だけ、業務の承認済みバージョンを読む
+  const pinning = pending?.kind === "order" && pending.action === "pin";
+  const versions = useApiQuery(
+    (signal) => bizApi.listVersions(data?.biz_master_id as number, signal), [data?.biz_master_id, pinning], { enabled: pinning && data !== null },
+  );
+  const versionOptions = data && versions.data
+    ? pinOptions(versions.data, data.scheduled_start, data.pinned_sop_version_id, (iso) => inZone(iso, TIMEZONE).format("YYYY/M/D"))
+    : [];
 
   const openAction = (next: PendingAction) => {
     form.resetFields();
@@ -96,6 +114,8 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
       case "finish": return orderApi.finish(current.id, text);
       case "cancel": return orderApi.cancel(current.id, text ?? "");
       case "resolveConflict": return orderApi.resolveConflict(current.id, v.conflictAction ?? "accept_plan", text);
+      case "pin": return orderApi.pin(current.id, v.sopVersionId as number, text);
+      case "unpin": return orderApi.unpin(current.id, text);
     }
   };
 
@@ -232,7 +252,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
                 children: (
                   <div className="order-event">
                     <div><b>{describeEvent(e)}</b> <span className="muted mono">{fmt(e.occurred_at)}</span></div>
-                    <div className="muted">{e.source === "system" ? "システム" : `職員 #${e.actor_staff_id}`}{e.reason ? ` ・ ${e.reason}` : ""}</div>
+                    <div className="muted">{actorLabel(e)}{e.reason ? ` ・ ${e.reason}` : ""}</div>
                   </div>
                 ),
               }))}
@@ -265,8 +285,27 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
         {pending?.kind === "order" && pending.action === "cancel" && (
           <Typography.Paragraph type="secondary">オーダーを取り消すと、予定（カレンダー）からも取り消されます。元に戻せません。</Typography.Paragraph>
         )}
+        {pinning && (
+          <Typography.Paragraph type="secondary">
+            リリース前のオーダーに、予定日に有効なバージョン以外（古い・新しい承認済みのもの）を使わせます。リリースの時点で固定されます。
+          </Typography.Paragraph>
+        )}
+        {pending?.kind === "order" && pending.action === "unpin" && (
+          <Typography.Paragraph type="secondary">指定を外すと、予定日に有効なバージョンを使います。</Typography.Paragraph>
+        )}
         {error && <Alert type="error" showIcon message={error} className="modal-alert" />}
+        {versions.error && <Alert type="error" showIcon message={`バージョンを取得できませんでした: ${versions.error.message}`} className="modal-alert" />}
         <Form form={form} layout="vertical" onFinish={submit} disabled={submitting}>
+          {pinning && (
+            <Form.Item name="sopVersionId" label="SOP バージョン" rules={[{ required: true, message: "バージョンを選んでください" }]}>
+              <Select
+                options={versionOptions}
+                loading={versions.loading}
+                placeholder="承認済みのバージョンを選ぶ"
+                notFoundContent={versions.loading ? "読み込み中…" : "承認済みのバージョンがありません"}
+              />
+            </Form.Item>
+          )}
           {pending?.kind === "order" && pending.action === "resolveConflict" && (
             <Form.Item name="conflictAction" label="解決方法">
               <Radio.Group onChange={() => form.validateFields(["text"]).catch(() => undefined)}>
@@ -314,7 +353,7 @@ function StepRow({ step, actions, blocked, onAction }: {
       {rejected && <Alert type="warning" showIcon message={`差し戻し: ${rejected}`} className="order-step-alert" />}
       {last && !rejected && (
         <div className="muted order-step-last">
-          {describeStepEvent(last)}: 職員 #{last.actor_staff_id} ・ {fmt(last.occurred_at)}{last.reason ? ` ・ ${last.reason}` : ""}
+          {describeStepEvent(last)}: {actorLabel(last)} ・{fmt(last.occurred_at)}{last.reason ? ` ・ ${last.reason}` : ""}
         </div>
       )}
       {actions.length > 0 && (

@@ -50,6 +50,15 @@ class SOPVersionRepository(CRUDBase[SOPVersion, SOPVersionCreate, SOPVersionUpda
         )
         return db.scalars(stmt).first()
 
+    def get_approved(self, db: Session, *, biz_master_id: int) -> list[SOPVersion]:
+        """業務の承認済み（草稿以外）のバージョン、新しい順（オーダーに指定できるもの）"""
+        stmt = (
+            select(SOPVersion)
+            .where(SOPVersion.biz_master_id == biz_master_id, SOPVersion.status != SOPStatus.DRAFT)
+            .order_by(SOPVersion.version_number.desc())
+        )
+        return list(db.scalars(stmt).all())
+
 
 # ==========================================
 #  SOPStepTemplate Repository

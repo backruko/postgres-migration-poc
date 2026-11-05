@@ -54,7 +54,7 @@ def db():
 def staff(db):
     def make(*roles: RoleCode) -> int:
         return staff_services.create_staff(
-            db, StaffCreate(login_id="m-" + uuid.uuid4().hex[:10], name="step actor", roles=list(roles)),
+            db, StaffCreate(login_id="m-" + uuid.uuid4().hex[:10], name="step " + "+".join(r.value for r in roles), roles=list(roles)),
             actor=None, status=StaffStatus.ACTIVE,
         ).id
     return {
@@ -138,6 +138,19 @@ def test_full_flow_with_a_blocking_step_finishes_the_order(db, started, staff):
     submit = r.steps[0].events[2]
     assert (submit.to_state, submit.source, submit.actor_staff_id, submit.reason) == (SUBMITTED, EventSource.HUMAN, staff["operator"], "完了しました")
     assert db.get(OpeOrder, oid).status == OrderStatus.FINISHED  # type: ignore[union-attr]
+
+
+def test_events_carry_the_actor_name(db, started, staff):
+    r = ope.submit_step(db, step_id(started, 1), staff["operator"])
+    # オーダーの記録: リリース（リリース担当）・開始（作業者）は名前付き、作成（システム）は None
+    by_type = {(e.event_type, e.to_status): e for e in r.events}
+    assert by_type[(OrderEventType.STATUS_CHANGED, OrderStatus.READY)].actor_name == "step releaser"
+    assert by_type[(OrderEventType.STATUS_CHANGED, OrderStatus.IN_PROGRESS)].actor_name == "step operator"
+    assert all(e.actor_name is None for e in r.events if e.source == EventSource.SYSTEM)
+    # ステップの記録: 開いたのはシステム、提出は作業者
+    opened, submitted = r.steps[0].events[1:3]
+    assert (opened.source, opened.actor_name) == (EventSource.SYSTEM, None)
+    assert (submitted.to_state, submitted.actor_name) == (SUBMITTED, "step operator")
 
 
 def test_wrong_state_and_order_status_are_refused(db, started, staff):

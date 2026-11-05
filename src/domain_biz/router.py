@@ -7,7 +7,7 @@ from src.infrastructure.database import get_db
 from src.domain_biz.services import (
     create_biz, get_biz, get_bizes, update_biz, delete_biz, restore_biz, clone_active_to_draft, 
     create_step_template, approve_and_schedule_version, cancel_future_version,
-    get_current_active_version, create_new_sop_version, list_dependencies, list_client_dependencies, create_dependency,
+    get_current_active_version, list_approved_versions, create_new_sop_version, list_dependencies, list_client_dependencies, create_dependency,
     delete_dependency,
 )
 from src.domain_biz.schemas import (
@@ -66,6 +66,14 @@ def clone_active_to_draft_endpoint(biz_id: int, version_in: SOPVersionCreate, db
     【複数並行OK】現在有効な現行バージョンをベースに、ユーザーが指定した自由なタグ名で新しい草稿(DRAFT)を生成します。
     """
     return clone_active_to_draft(db=db, biz_id=biz_id, version_in=version_in)
+
+@router.get("/{biz_id}/versions", response_model=list[SOPVersionResponse], responses={**COMMON_ERRORS})
+def list_approved_versions_endpoint(biz_id: int, db: Session = Depends(get_db)):
+    """
+    承認済み（草稿以外）のバージョンを新しい順に返します。オーダーに指定（pin）できるバージョンの選択肢です。
+    status は保存された値です（有効かどうかは effective_at / expired_at で判断してください）。
+    """
+    return list_approved_versions(db=db, biz_id=biz_id)
 
 @router.get("/{biz_id}/versions/current-active", response_model=SOPVersionResponse, responses={**COMMON_ERRORS})
 def get_current_active_version_endpoint(biz_id: int, db: Session = Depends(get_db)):
