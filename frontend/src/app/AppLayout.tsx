@@ -5,6 +5,7 @@ import { ActingStaffPicker } from "./ActingStaffPicker";
 const PAGES = [
   { path: "/", label: "カレンダー", end: true },
   { path: "/daily", label: "日次ダッシュボード", end: false },
+  { path: "/reports/sla", label: "SLA", end: false },
   { path: "/settings/templates", label: "予定テンプレート設定", end: false },
   { path: "/settings/sheets", label: "年間計画シート", end: false },
   { path: "/settings/holidays", label: "休日カレンダー", end: false },
