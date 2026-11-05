@@ -2111,6 +2111,12 @@ export interface components {
          * @enum {string}
          */
         DayUnit: "calendar" | "business";
+        /**
+         * DeadlineMode
+         * @description 締切の決め方（テンプレートごと）
+         * @enum {string}
+         */
+        DeadlineMode: "end" | "offset" | "fixed_time";
         /** DependencyBiz */
         DependencyBiz: {
             /** Id */
@@ -2171,6 +2177,32 @@ export interface components {
         };
         /** ExplicitDatesTemplateCreate */
         ExplicitDatesTemplateCreate: {
+            /**
+             * @description end = scheduled end (start + duration); offset = minutes after the scheduled start; fixed_time = a local time on the scheduled day (+ deadline_day_offset days)
+             * @default end
+             */
+            deadline_mode: components["schemas"]["DeadlineMode"];
+            /**
+             * Deadline Offset Minutes
+             * @description offset only: minutes after the scheduled start
+             */
+            deadline_offset_minutes?: number | null;
+            /**
+             * Deadline Time
+             * @description fixed_time only: local deadline time
+             */
+            deadline_time?: string | null;
+            /**
+             * Deadline Day Offset
+             * @description fixed_time only: days after the scheduled day (default 0)
+             */
+            deadline_day_offset?: number | null;
+            /**
+             * Warn Before Minutes
+             * @description show 'due soon' this many minutes before the deadline (0 = off)
+             * @default 0
+             */
+            warn_before_minutes: number;
             /** Biz Master Id */
             biz_master_id: number;
             /**
@@ -2746,6 +2778,15 @@ export interface components {
             ui_metadata: {
                 [key: string]: unknown;
             } | null;
+            deadline_mode: components["schemas"]["DeadlineMode"];
+            /** Deadline Offset Minutes */
+            deadline_offset_minutes: number | null;
+            /** Deadline Time */
+            deadline_time: string | null;
+            /** Deadline Day Offset */
+            deadline_day_offset: number | null;
+            /** Warn Before Minutes */
+            warn_before_minutes: number;
             /** Revision */
             revision: number;
             /** Materialized Until */
@@ -2785,9 +2826,44 @@ export interface components {
             business_calendar_id?: number | null;
             holiday_policy?: components["schemas"]["HolidayPolicy"] | null;
             ui_metadata?: components["schemas"]["UIMetadata"] | null;
+            deadline_mode?: components["schemas"]["DeadlineMode"] | null;
+            /** Deadline Offset Minutes */
+            deadline_offset_minutes?: number | null;
+            /** Deadline Time */
+            deadline_time?: string | null;
+            /** Deadline Day Offset */
+            deadline_day_offset?: number | null;
+            /** Warn Before Minutes */
+            warn_before_minutes?: number | null;
         };
         /** RRuleTemplateCreate */
         RRuleTemplateCreate: {
+            /**
+             * @description end = scheduled end (start + duration); offset = minutes after the scheduled start; fixed_time = a local time on the scheduled day (+ deadline_day_offset days)
+             * @default end
+             */
+            deadline_mode: components["schemas"]["DeadlineMode"];
+            /**
+             * Deadline Offset Minutes
+             * @description offset only: minutes after the scheduled start
+             */
+            deadline_offset_minutes?: number | null;
+            /**
+             * Deadline Time
+             * @description fixed_time only: local deadline time
+             */
+            deadline_time?: string | null;
+            /**
+             * Deadline Day Offset
+             * @description fixed_time only: days after the scheduled day (default 0)
+             */
+            deadline_day_offset?: number | null;
+            /**
+             * Warn Before Minutes
+             * @description show 'due soon' this many minutes before the deadline (0 = off)
+             * @default 0
+             */
+            warn_before_minutes: number;
             /** Biz Master Id */
             biz_master_id: number;
             /**
@@ -3066,6 +3142,32 @@ export interface components {
         };
         /** ReferenceSheetTemplateCreate */
         ReferenceSheetTemplateCreate: {
+            /**
+             * @description end = scheduled end (start + duration); offset = minutes after the scheduled start; fixed_time = a local time on the scheduled day (+ deadline_day_offset days)
+             * @default end
+             */
+            deadline_mode: components["schemas"]["DeadlineMode"];
+            /**
+             * Deadline Offset Minutes
+             * @description offset only: minutes after the scheduled start
+             */
+            deadline_offset_minutes?: number | null;
+            /**
+             * Deadline Time
+             * @description fixed_time only: local deadline time
+             */
+            deadline_time?: string | null;
+            /**
+             * Deadline Day Offset
+             * @description fixed_time only: days after the scheduled day (default 0)
+             */
+            deadline_day_offset?: number | null;
+            /**
+             * Warn Before Minutes
+             * @description show 'due soon' this many minutes before the deadline (0 = off)
+             * @default 0
+             */
+            warn_before_minutes: number;
             /** Biz Master Id */
             biz_master_id: number;
             /**

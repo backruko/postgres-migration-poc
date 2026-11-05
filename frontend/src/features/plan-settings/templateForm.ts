@@ -142,7 +142,9 @@ const formatDates = (dates: Dayjs[] | undefined) => (dates ?? []).map((d) => d.f
 
 /** フォームの値を、OpenAPI の判別共用体（RRuleTemplateCreate など）の形に変換する */
 export function toCreateInput(v: FormValues, bizId: number): CreatePlanTemplateInput {
-  const base = { biz_master_id: bizId, ...commonFields(v), ui_metadata: toUiMetadata(v, null) };
+  // 締切はフォームに入るまで（N.4）既定の値を送る: 予定の終了・知らせなし
+  const deadline = { deadline_mode: "end" as const, warn_before_minutes: 0 };
+  const base = { biz_master_id: bizId, ...commonFields(v), ...deadline, ui_metadata: toUiMetadata(v, null) };
   switch (v.template_type) {
     case "rrule":
       return { ...base, template_type: "rrule", ...rruleFields(v) };

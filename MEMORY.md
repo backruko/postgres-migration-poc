@@ -38,7 +38,8 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   (c) bigger debts (small ones done in D.1 / D.2): SOP "impact before approval" list (needs an SOP version screen
   first), a real login replacing the `X-Staff-Id` header (design doc first). U.4 done (admin guard). Plan a new phase the
   same way as 5–7: questions first, a step plan approved by the user, one step at a time.
-- **DB:** latest Alembic head **`2f7614f1cb02`** (biz_dependency latest_before + lookback_days, L.1). Before it: **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
+- **DB:** latest Alembic head **`d17d631f5ad2`** (plan_template deadline fields, N.1); before it **`2f7614f1cb02`**
+  (biz_dependency latest_before + lookback_days, L.1). Before it: **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
   init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`
   (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657`
   (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8`
@@ -92,7 +93,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 72 (2026-11-05)** — read with `{"kind": "view", "sinceRev": 72}` to see only newer edits, and
+**Last rev written by me: 73 (2026-11-05)** — read with `{"kind": "view", "sinceRev": 73}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 built and merged, rev 69).
 
@@ -685,6 +686,24 @@ after "Link resolution" + ticked open question).
 | L.1 | `DependencyMatchRule.LATEST_BEFORE`; `biz_dependency.lookback_days` (1–366, required ⇔ latest_before; CHECKs use `match_rule::text` because a new enum value can't be used in the same transaction); create API / response; migration `2f7614f1cb02` (downgrade rebuilds the shared enum type and the ope CHECKs) | **done** (`bfaab32`) |
 | L.2 | `links._targets_for`: latest upstream order with `scheduled_start` in [own start − lookback, own start] (canceled included; tie → higher id), no match key stored, else a waiting row (`describe`: "no order of CODE in the N days before it"); `refresh_order` re-resolves not-started downstreams starting within lookback after an upstream order; `order_sync._slot_moved` refreshes on any time change (not only rule-date change); repo `get_latest_starting_before`, `get_open_orders_of(starting_from/until)`; `tests/test_latest_before.py` (client prefix `W`, weekly → daily) | **done** (`c653251`) |
 | L.3 | 業務の依存関係: option 直前の上流 + required 日数 input (default 35, `DEFAULT_LOOKBACK_DAYS`), table text 「直前の上流（35日前まで）」 (`matchRuleText`), body via `dependencyBody`; drawer hint 「（直前の上流）」 | **done** |
+
+### Phase N — deadlines and "due soon" (branch `feature/deadlines`, started 2026-11-05)
+Why: the person checking client files in WinSCP needs a warning before the deadline, not only 遅れ after it.
+User's decisions: **deadline per template, 3 modes** — `END` (scheduled end, default), `OFFSET` (minutes after the
+*scheduled* start; internal steps), `FIXED_TIME` (local time on the scheduled day + 0–7 days; external hard
+cut-offs); **warning lead on the template, default 0 = off** (avoid alert fatigue); dashboard first (まもなく tag +
+panel + auto-refresh), no messages yet; all not-finished orders. **The user insisted (blocker): `deadline_at` is
+stored on the order** (not computed on read) for SLA + polling performance; **the rule is fixed at release** (template
+edits re-stamp only 未リリース orders; released / running / finished never change; moves recompute from the order's
+own rule snapshot); **`finished_at` stored on the order** for SLA. Doc rev 73 (bullet after "Late").
+| # | Step | Status |
+|---|---|---|
+| N.1 | plan_template `deadline_mode` (`plan_deadline_mode_enum`), `deadline_offset_minutes` (1–10080), `deadline_time` + `deadline_day_offset` (0–7), `warn_before_minutes` (0–1440, default 0); CHECKs; schemas (`deadline_problem` shared); service: deadline fields don't bump revision / regenerate, mode switch clears unused fields, fixed time ≤ start on day 0 → 400; migration `d17d631f5ad2`; `tests/test_template_deadline.py` (prefix `F`); frontend create body sends defaults until N.4 | **done** |
+| N.2 | ope_order: rule snapshot + `deadline_at` + `warn_at` + `finished_at`; stamp at creation, recompute on move, set finished_at at finish; backfill (deadline = scheduled_end, finished_at from events) | next |
+| N.3 | template edit → re-stamp 未リリース orders (plan → coordination listener); 遅れ / まもなく from stored columns (+ index); dashboard / detail fields | — |
+| N.4 | frontend: template form 締切 + 何分前, まもなく tag, deadline on rows, 「締切が近い・遅れ」 panel, drawer, auto-refresh (measure `/ops/daily` first) | — |
+Seen once in N.1's full run: 1 intermittent failure that passed on rerun (not identified; suspect a random client-code
+collision in another test file — they still draw codes at random).
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

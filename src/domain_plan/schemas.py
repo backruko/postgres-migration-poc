@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from src.domain_plan.engine import DayUnit, HolidayPolicy
 from src.domain_plan.models import (
-    InstanceOrigin, TemplateType, VoidReason, validate_rrule_text, validate_timezone_name,
+    DeadlineMode, InstanceOrigin, TemplateType, VoidReason, validate_rrule_text, validate_timezone_name,
 )
 
 HEX_COLOR_PATTERN = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
@@ -314,9 +314,53 @@ class ReferenceSheetImportResult(BaseModel):
 
 # ==========================================
 # PlanTemplate
+# 0. 締切（N.1）: 決め方ごとに必要な項目
+# ==========================================
+DEADLINE_FIELDS = ("deadline_mode", "deadline_offset_minutes", "deadline_time", "deadline_day_offset", "warn_before_minutes")
+
+
+def deadline_problem(mode: DeadlineMode, offset_minutes: int | None, deadline_time: time | None, day_offset: int | None) -> str | None:
+    """締切の項目の組み合わせの誤り（無ければ None）。作成の入力と、更新後の値の両方で使う"""
+    if mode == DeadlineMode.OFFSET:
+        if offset_minutes is None:
+            return "deadline_mode 'offset' requires deadline_offset_minutes"
+        if deadline_time is not None or day_offset is not None:
+            return "deadline_time / deadline_day_offset are only used with deadline_mode 'fixed_time'"
+    elif mode == DeadlineMode.FIXED_TIME:
+        if deadline_time is None:
+            return "deadline_mode 'fixed_time' requires deadline_time"
+        if offset_minutes is not None:
+            return "deadline_offset_minutes is only used with deadline_mode 'offset'"
+    elif offset_minutes is not None or deadline_time is not None or day_offset is not None:
+        return "deadline_mode 'end' uses no other deadline fields"
+    return None
+
+
+class _DeadlineFields(BaseModel):
+    deadline_mode: DeadlineMode = Field(
+        default=DeadlineMode.END,
+        description="end = scheduled end (start + duration); offset = minutes after the scheduled start; "
+                    "fixed_time = a local time on the scheduled day (+ deadline_day_offset days)",
+    )
+    deadline_offset_minutes: int | None = Field(default=None, ge=1, le=10080, description="offset only: minutes after the scheduled start")
+    deadline_time: time | None = Field(default=None, description="fixed_time only: local deadline time")
+    deadline_day_offset: int | None = Field(default=None, ge=0, le=7, description="fixed_time only: days after the scheduled day (default 0)")
+    warn_before_minutes: int = Field(default=0, ge=0, le=1440, description="show 'due soon' this many minutes before the deadline (0 = off)")
+
+    @model_validator(mode="after")
+    def check_deadline(self):
+        if self.deadline_mode == DeadlineMode.FIXED_TIME and self.deadline_day_offset is None:
+            self.deadline_day_offset = 0
+        problem = deadline_problem(self.deadline_mode, self.deadline_offset_minutes, self.deadline_time, self.deadline_day_offset)
+        if problem:
+            raise ValueError(problem)
+        return self
+
+
+# ==========================================
 # 1. Base（全タイプ共通の必須項目）
 # ==========================================
-class PlanTemplateBase(BaseModel):
+class PlanTemplateBase(_DeadlineFields):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     biz_master_id: int
@@ -464,6 +508,13 @@ class PlanTemplateUpdate(BaseModel):
     # 表示用（null でクリア。部分マージではなく全体を置き換えます）
     ui_metadata: UIMetadata | None = None
 
+    # 締切（生成には影響しない）。決め方を変えると、使わない項目はサービスで空にする
+    deadline_mode: DeadlineMode | None = None
+    deadline_offset_minutes: int | None = Field(default=None, ge=1, le=10080)
+    deadline_time: time | None = None
+    deadline_day_offset: int | None = Field(default=None, ge=0, le=7)
+    warn_before_minutes: int | None = Field(default=None, ge=0, le=1440)
+
     @field_validator("timezone")
     @classmethod
     def check_timezone(cls, v: str | None) -> str | None:
@@ -546,6 +597,11 @@ class PlanTemplateResponse(BaseModel):
     business_calendar_id: int | None
     holiday_policy: HolidayPolicy
     ui_metadata: dict[str, Any] | None
+    deadline_mode: DeadlineMode
+    deadline_offset_minutes: int | None
+    deadline_time: time | None
+    deadline_day_offset: int | None
+    warn_before_minutes: int
     revision: int
     materialized_until: datetime | None
     explicit_dates: list[PlanExplicitDateResponse]

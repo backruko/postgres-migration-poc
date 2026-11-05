@@ -38,6 +38,13 @@ class TemplateType(str, enum.Enum):
     REFERENCE_SHEET_BASED = "reference_sheet_based"  # 顧客の年間計画シート上のイベントから算出
 
 
+class DeadlineMode(str, enum.Enum):
+    """締切の決め方（テンプレートごと）"""
+    END = "end"                # 予定の終了（開始 + 所要時間）
+    OFFSET = "offset"          # 予定開始の何分後（社内の工程: 予定が動けば締切も動く）
+    FIXED_TIME = "fixed_time"  # 予定日の何日後の何時（外部との受け渡し: 同じ日の中で動いても締切は動かない）
+
+
 class VoidReason(str, enum.Enum):
     TEMPLATE_REVISED = "template_revised"
     TEMPLATE_DELETED = "template_deleted"
@@ -295,6 +302,20 @@ class PlanTemplate(Base, SoftDeleteMixin):
         comment="非営業日に当たった場合の扱い",
     )
 
+    # --- 締切とその前の知らせ（N.1、2026-11-05）。生成には影響しない（変えても改訂・再生成しない） ---
+    # 締切の決め方: END = 予定の終了（従来どおり）/ OFFSET = 予定開始の何分後（所要時間を超えてよい。社内の工程）/
+    # FIXED_TIME = 予定日の何日後の何時（外部との受け渡しの締切。予定が同じ日の中で動いても締切は動かない）
+    deadline_mode: Mapped[DeadlineMode] = mapped_column(
+        Enum(DeadlineMode, name="plan_deadline_mode_enum"),
+        default=DeadlineMode.END, server_default=DeadlineMode.END.name, nullable=False, comment="締切の決め方",
+    )
+    deadline_offset_minutes: Mapped[int | None] = mapped_column(comment="OFFSET: 予定開始から締切までの分")
+    deadline_time: Mapped[time | None] = mapped_column(Time, comment="FIXED_TIME: 締切のローカル時刻")
+    deadline_day_offset: Mapped[int | None] = mapped_column(comment="FIXED_TIME: 予定日の何日後か（0 = 当日）")
+    warn_before_minutes: Mapped[int] = mapped_column(
+        default=0, server_default=text("0"), nullable=False, comment="締切の何分前に「まもなく」を出すか（0 = 出さない）"
+    )
+
     # --- 表示用メタデータ（例: {"bg_color": "#FF0000", "icon": "money-bag"}）。生成ルールには影響しない ---
     ui_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, comment="カレンダー表示用スタイル（インスタンス側で上書き可）")
 
@@ -339,6 +360,22 @@ class PlanTemplate(Base, SoftDeleteMixin):
             name="ck_plan_template_calendar_required",
         ),
         CheckConstraint("duration_minutes > 0", name="ck_plan_template_duration_positive"),
+        # 締切: 決め方ごとに必要な項目だけ（それ以外は NULL）。範囲は 開始から 1 分〜7 日、予定日の 0〜7 日後、知らせは 0〜1 日前
+        CheckConstraint(
+            "(deadline_mode = 'OFFSET') = (deadline_offset_minutes IS NOT NULL)",
+            name="ck_plan_template_deadline_offset",
+        ),
+        CheckConstraint(
+            "(deadline_mode = 'FIXED_TIME') = (deadline_time IS NOT NULL) "
+            "AND (deadline_mode = 'FIXED_TIME') = (deadline_day_offset IS NOT NULL)",
+            name="ck_plan_template_deadline_fixed",
+        ),
+        CheckConstraint(
+            "(deadline_offset_minutes IS NULL OR deadline_offset_minutes BETWEEN 1 AND 10080) "
+            "AND (deadline_day_offset IS NULL OR deadline_day_offset BETWEEN 0 AND 7) "
+            "AND warn_before_minutes BETWEEN 0 AND 1440",
+            name="ck_plan_template_deadline_range",
+        ),
         Index("ix_plan_template_sheet_marker", "reference_sheet_id", "reference_event_marker"),
     )
 
