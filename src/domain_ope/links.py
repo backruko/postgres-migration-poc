@@ -44,7 +44,10 @@ def is_not_started(order: OpeOrder) -> bool:
 def _key(order: OpeOrder, rule: DependencyMatchRule) -> int | date | None:
     if rule == DependencyMatchRule.SAME_SHEET_EVENT:
         return order.source_sheet_event_id
-    return order.occurrence_date
+    if rule == DependencyMatchRule.SAME_OCCURRENCE_DATE:
+        return order.occurrence_date
+    # 直前の上流（latest_before）は L.2 で作る。それまではつながりを作らない（キーが無い = 当てはまらない扱い）
+    return None
 
 
 def _upstream_targets(db: Session, dep: BizDependency, key: int | date) -> list[OpeOrder]:

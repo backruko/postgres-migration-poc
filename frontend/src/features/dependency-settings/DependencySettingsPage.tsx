@@ -212,7 +212,8 @@ export function DependencySettingsPage() {
           <Form.Item name="match_rule" label="突き合わせ（下流のオーダーがどの上流のオーダーを待つか）">
             <Radio.Group>
               <Space direction="vertical">
-                {(Object.keys(MATCH_RULE_LABEL) as DependencyMatchRule[]).map((r) => (
+                {/* 直前の上流（latest_before）は日数の入力と一緒に L.3 で選べるようにする */}
+                {(Object.keys(MATCH_RULE_LABEL) as DependencyMatchRule[]).filter((r) => r !== "latest_before").map((r) => (
                   <Radio key={r} value={r}>{MATCH_RULE_LABEL[r]} <span className="muted">— {MATCH_RULE_HELP[r]}</span></Radio>
                 ))}
               </Space>

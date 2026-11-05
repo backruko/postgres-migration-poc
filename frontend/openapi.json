@@ -10106,6 +10106,20 @@
           "kind": {
             "$ref": "#/components/schemas/DependencyKind",
             "default": "hard"
+          },
+          "lookback_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 366.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lookback Days",
+            "description": "latest_before only (required there): how many days back an upstream order may be"
           }
         },
         "type": "object",
@@ -10134,6 +10148,18 @@
           "kind": {
             "$ref": "#/components/schemas/DependencyKind"
           },
+          "lookback_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lookback Days",
+            "description": "latest_before only: how many days back an upstream order may be"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -10147,6 +10173,7 @@
           "downstream",
           "match_rule",
           "kind",
+          "lookback_days",
           "created_at"
         ],
         "title": "BizDependencyResponse"
@@ -11669,7 +11696,8 @@
         "type": "string",
         "enum": [
           "same_sheet_event",
-          "same_occurrence_date"
+          "same_occurrence_date",
+          "latest_before"
         ],
         "title": "DependencyMatchRule",
         "description": "下流のオーダーが、どの上流のオーダーを待つか"

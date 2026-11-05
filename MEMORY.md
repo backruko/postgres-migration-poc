@@ -35,7 +35,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   (c) bigger debts (small ones done in D.1 / D.2): SOP "impact before approval" list (needs an SOP version screen
   first), a real login replacing the `X-Staff-Id` header (design doc first). U.4 done (admin guard). Plan a new phase the
   same way as 5–7: questions first, a step plan approved by the user, one step at a time.
-- **DB:** latest Alembic head **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
+- **DB:** latest Alembic head **`2f7614f1cb02`** (biz_dependency latest_before + lookback_days, L.1). Before it: **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
   init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`
   (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657`
   (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8`
@@ -89,7 +89,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 69 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 69}` to see only newer edits, and
+**Last rev written by me: 72 (2026-11-05)** — read with `{"kind": "view", "sinceRev": 72}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 built and merged, rev 69).
 

@@ -355,7 +355,7 @@ def _dependency_response(db: Session, dep: BizDependency) -> BizDependencyRespon
 
     return BizDependencyResponse(
         id=dep.id, upstream=ref(dep.upstream_biz_id), downstream=ref(dep.downstream_biz_id),
-        match_rule=dep.match_rule, kind=dep.kind, created_at=dep.created_at,
+        match_rule=dep.match_rule, kind=dep.kind, lookback_days=dep.lookback_days, created_at=dep.created_at,
     )
 
 
@@ -408,6 +408,7 @@ def create_dependency(db: Session, downstream_biz_id: int, dep_in: BizDependency
         )
     dep = BizDependency(
         upstream_biz_id=upstream.id, downstream_biz_id=downstream.id, match_rule=dep_in.match_rule, kind=dep_in.kind,
+        lookback_days=dep_in.lookback_days,
     )
     db.add(dep)
     db.flush()
