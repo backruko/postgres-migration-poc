@@ -1379,6 +1379,11 @@ export interface components {
             match_rule: components["schemas"]["DependencyMatchRule"];
             /** @default hard */
             kind: components["schemas"]["DependencyKind"];
+            /**
+             * Lookback Days
+             * @description latest_before only (required there): how many days back an upstream order may be
+             */
+            lookback_days?: number | null;
         };
         /** BizDependencyResponse */
         BizDependencyResponse: {
@@ -1388,6 +1393,11 @@ export interface components {
             downstream: components["schemas"]["BizRef"];
             match_rule: components["schemas"]["DependencyMatchRule"];
             kind: components["schemas"]["DependencyKind"];
+            /**
+             * Lookback Days
+             * @description latest_before only: how many days back an upstream order may be
+             */
+            lookback_days: number | null;
             /**
              * Created At
              * Format: date-time
@@ -2120,7 +2130,7 @@ export interface components {
          * @description 下流のオーダーが、どの上流のオーダーを待つか
          * @enum {string}
          */
-        DependencyMatchRule: "same_sheet_event" | "same_occurrence_date";
+        DependencyMatchRule: "same_sheet_event" | "same_occurrence_date" | "latest_before";
         /**
          * ErrorCode
          * @description フロントエンドとバックエンドで共有するエラーコードの定数群。

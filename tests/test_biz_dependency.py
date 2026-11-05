@@ -8,6 +8,7 @@
 import uuid
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
@@ -96,6 +97,37 @@ def test_db_refuses_self_and_duplicate_pairs(db):
         BizDependency(upstream_biz_id=a, downstream_biz_id=b, match_rule=DATE),
     ])
     with pytest.raises(IntegrityError, match="uq_biz_dependency_pair"):
+        db.flush()
+    db.rollback()
+
+
+def test_latest_before_needs_a_lookback(db):
+    monthly, daily = client_with_businesses(db, 2)
+    dep = biz_services.create_dependency(db, daily, BizDependencyCreate(
+        upstream_biz_id=monthly, match_rule=DependencyMatchRule.LATEST_BEFORE, lookback_days=35,
+    ))
+    assert (dep.match_rule, dep.lookback_days) == (DependencyMatchRule.LATEST_BEFORE, 35)
+    assert biz_services.list_dependencies(db, daily)[0].lookback_days == 35
+    # 他のルールでは lookback_days は空
+    up, down = client_with_businesses(db, 2)
+    assert link(db, up, down, rule=DATE).lookback_days is None
+
+    # 入力: 直前の上流には必須、他のルールには指定できない、1〜366 日
+    with pytest.raises(ValidationError, match="required for latest_before"):
+        BizDependencyCreate(upstream_biz_id=monthly, match_rule=DependencyMatchRule.LATEST_BEFORE)
+    with pytest.raises(ValidationError, match="only used with latest_before"):
+        BizDependencyCreate(upstream_biz_id=monthly, match_rule=DATE, lookback_days=7)
+    with pytest.raises(ValidationError):
+        BizDependencyCreate(upstream_biz_id=monthly, match_rule=DependencyMatchRule.LATEST_BEFORE, lookback_days=0)
+
+    # DB でも同じ組み合わせを拒否する
+    a, b = client_with_businesses(db, 2)
+    db.add(BizDependency(upstream_biz_id=a, downstream_biz_id=b, match_rule=DependencyMatchRule.LATEST_BEFORE))
+    with pytest.raises(IntegrityError, match="ck_biz_dependency_lookback_rule"):
+        db.flush()
+    db.rollback()
+    db.add(BizDependency(upstream_biz_id=a, downstream_biz_id=b, match_rule=SHEET, lookback_days=3))
+    with pytest.raises(IntegrityError, match="ck_biz_dependency_lookback_rule"):
         db.flush()
     db.rollback()
 

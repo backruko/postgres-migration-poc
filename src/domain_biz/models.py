@@ -8,6 +8,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    Integer,
     String, 
     Text, 
     Enum, 
@@ -386,6 +387,8 @@ class DependencyMatchRule(str, enum.Enum):
     """下流のオーダーが、どの上流のオーダーを待つか"""
     SAME_SHEET_EVENT = "same_sheet_event"          # 同じシート日付（例: 同じ振込日から算出した受領と本処理）
     SAME_OCCURRENCE_DATE = "same_occurrence_date"  # 同じルール上の日付（例: 毎日の2つの業務）
+    # 直前の上流: 下流の予定開始以前で最新の上流のオーダー（lookback_days 日前まで。例: 月次の受領 → 毎日の処理）
+    LATEST_BEFORE = "latest_before"
 
 
 class DependencyKind(str, enum.Enum):
@@ -406,10 +409,17 @@ class BizDependency(Base):
         Enum(DependencyKind, name="biz_dependency_kind_enum"), nullable=False, default=DependencyKind.HARD,
         server_default=text("'HARD'"),
     )
+    # 直前の上流（latest_before）のときだけ: 何日前の上流のオーダーまで待つ対象にするか（それより古ければ「待ち」）
+    lookback_days: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         CheckConstraint("upstream_biz_id <> downstream_biz_id", name="ck_biz_dependency_not_self"),
+        CheckConstraint(
+            # ::text で比べる（追加した ENUM の値は同じトランザクションの CHECK で使えないため。マイグレーションと同じ式）
+            "(match_rule::text = 'LATEST_BEFORE') = (lookback_days IS NOT NULL)", name="ck_biz_dependency_lookback_rule"
+        ),
+        CheckConstraint("lookback_days IS NULL OR lookback_days BETWEEN 1 AND 366", name="ck_biz_dependency_lookback_range"),
         # 同じ組み合わせの定義は1件（循環は保存時にサービスで確かめる）
         Index("uq_biz_dependency_pair", "upstream_biz_id", "downstream_biz_id", unique=True),
     )

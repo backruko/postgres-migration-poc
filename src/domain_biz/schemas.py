@@ -173,6 +173,18 @@ class BizDependencyCreate(BaseModel):
     upstream_biz_id: int
     match_rule: DependencyMatchRule
     kind: DependencyKind = DependencyKind.HARD
+    lookback_days: int | None = Field(
+        default=None, ge=1, le=366,
+        description="latest_before only (required there): how many days back an upstream order may be",
+    )
+
+    @model_validator(mode="after")
+    def _lookback_only_for_latest_before(self):
+        if self.match_rule == DependencyMatchRule.LATEST_BEFORE and self.lookback_days is None:
+            raise ValueError("lookback_days is required for latest_before")
+        if self.match_rule != DependencyMatchRule.LATEST_BEFORE and self.lookback_days is not None:
+            raise ValueError("lookback_days is only used with latest_before")
+        return self
 
 
 class BizRef(BaseModel):
@@ -189,4 +201,5 @@ class BizDependencyResponse(BaseModel):
     downstream: BizRef
     match_rule: DependencyMatchRule
     kind: DependencyKind
+    lookback_days: int | None = Field(description="latest_before only: how many days back an upstream order may be")
     created_at: datetime

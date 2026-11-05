@@ -240,15 +240,34 @@ class OpeDependencyRepository:
         )
         return list(db.scalars(stmt).all())
 
-    def get_open_orders_of(self, db: Session, *, biz_id: int) -> list[OpeOrder]:
-        """業務の開始前のオーダー（pending / ready / それらから保留）"""
+    def get_open_orders_of(
+        self, db: Session, *, biz_id: int, starting_from: datetime | None = None, starting_until: datetime | None = None,
+    ) -> list[OpeOrder]:
+        """業務の開始前のオーダー（pending / ready / それらから保留）。期間を指定すると、その間に開始するものだけ"""
         not_started = (OrderStatus.PENDING, OrderStatus.READY)
         stmt = select(OpeOrder).where(
             OpeOrder.biz_master_id == biz_id,
             OpeOrder.status.in_(not_started)
             | ((OpeOrder.status == OrderStatus.ON_HOLD) & OpeOrder.status_before_hold.in_(not_started)),
         )
+        if starting_from is not None:
+            stmt = stmt.where(OpeOrder.scheduled_start >= starting_from)
+        if starting_until is not None:
+            stmt = stmt.where(OpeOrder.scheduled_start <= starting_until)
         return list(db.scalars(stmt.order_by(OpeOrder.id)).all())
+
+    def get_latest_starting_before(self, db: Session, *, biz_id: int, at: datetime, since: datetime) -> OpeOrder | None:
+        """
+        直前の上流: 業務のオーダーのうち、since ≤ 予定開始 ≤ at で最新のもの（取消済みも含む）。
+        同じ時刻なら新しいオーダー（枠が戻って作り直されたものが、取消済みより優先される）。
+        """
+        stmt = (
+            select(OpeOrder)
+            .where(OpeOrder.biz_master_id == biz_id, OpeOrder.scheduled_start <= at, OpeOrder.scheduled_start >= since)
+            .order_by(OpeOrder.scheduled_start.desc(), OpeOrder.id.desc())
+            .limit(1)
+        )
+        return db.scalars(stmt).first()
 
     def get_orders_matching(
         self, db: Session, *, biz_id: int, rule: DependencyMatchRule, key: int | date,

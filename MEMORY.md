@@ -21,7 +21,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   `test_order_links.py::test_sheet_rule_…` failed when a mock 本締 upstream (+0, 09:00) was already past but its +1
   downstream was future (correct waiting row, KeyError in the test) → now accepts a waiting row for those.
   `fix/test-client-codes` (test_plan flake) merged as `e666056`.
-- **Current: `feature/small-debts`** (from `main` `e666056`, not merged yet), no migrations. User's choices as I
+- **`feature/small-debts`** merged as `d6ad461` (no migrations); **`feature/admin-guard`** (U.4) merged as `f3d483e`. User's choices as I
   recommended. **D.1** `9036c8f`: `actor_name` (required, null for system) on `OrderEventResponse` /
   `StepEventResponse` via `staff_user_repo.get_names` (2 queries per order detail); drawer timeline + step line show
   the name (職員 #id fallback). **D.2**: open `GET /biz/{biz_id}/versions` (non-draft, newest first, 404 unknown biz;
@@ -29,13 +29,16 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   admin, pending only; labels 「SOP バージョンを指定」 / 「…の指定を解除」 — 固定 means frozen in this UI), version
   select (`domain/biz/lib/sopVersions.ts` `pinOptions`: tag ・ period, 「予定日に有効」, current pin disabled).
   plan_check biz 1 has only one approved version (v9.26817.0). Not browser-checked yet.
+- **Phase L — "latest before due" dependency rule (2026-11-05, branch `feature/latest-before`, merged into `main`)**:
+  see §2 "Phase L". **Migration `2f7614f1cb02` — the user must run `alembic upgrade head`** (and maybe the five
+  Phase 6–7 ones; never confirmed).
 - **Earlier "next" list (still valid):** Ask the user what to do next. Candidates: (a) the user's browser check of Phases 5–7
-  screens (below) and fixes from it; (b) open questions in the doc: "latest before due" dependency matching, the
+  screens (below) and fixes from it; (b) open questions in the doc ("latest before due" done in Phase L): the
   client-limited role, other signal transports (file arrival / DB watcher scripts posting to `POST /ope/signals`);
   (c) bigger debts (small ones done in D.1 / D.2): SOP "impact before approval" list (needs an SOP version screen
   first), a real login replacing the `X-Staff-Id` header (design doc first). U.4 done (admin guard). Plan a new phase the
   same way as 5–7: questions first, a step plan approved by the user, one step at a time.
-- **DB:** latest Alembic head **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
+- **DB:** latest Alembic head **`2f7614f1cb02`** (biz_dependency latest_before + lookback_days, L.1). Before it: **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
   init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`
   (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657`
   (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8`
@@ -56,7 +59,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   ~95–225 s (run times vary a lot). Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the
   order-sync listener — and with it the biz dependency listener — is registered there, so every plan test also syncs
   orders). Each test file uses its own client-code prefix letter: T D B O S A R V P K M G L N Q E H J (pick an unused
-  one for a new file). Client codes are `CHAR(4)` → only 4096 per prefix; `test_db` is dropped after each run, so
+  one for a new file; also used: W). Client codes are `CHAR(4)` → only 4096 per prefix; `test_db` is dropped after each run, so
   collisions happen within one run. **Fixed 2026-11-05** for `test_plan.py` (~34 codes per run, collided ~1 run in
   4–5): `new_client_code()` draws from a shuffled pool without replacement. Other files still use random codes (few
   per run, unlikely to collide); switch them to the same pattern if one ever flakes.
@@ -89,7 +92,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 69 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 69}` to see only newer edits, and
+**Last rev written by me: 72 (2026-11-05)** — read with `{"kind": "view", "sinceRev": 72}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 built and merged, rev 69).
 
@@ -673,14 +676,25 @@ User's ideas; all choices as I recommended.
 | U.3 | Template page edits need `admin` (業務管理者; not system_admin): `@require_roles([ADMIN])` on plan template writes (create / patch / delete / restore / dates / cache rebuild) and `PATCH /biz/{id}`; UI hides 新規作成 / 編集 / 削除 and the 業務の設定 編集 for non-admins (panel stays visible). The user's staff 1 has no admin role → must grant it | **done** (`34914a8`) |
 | U.4 | Branch `feature/admin-guard` (from `main` `d6ad461`). User's choices as I recommended: sheet dates, holidays / calendars, remaining biz writes (biz create / delete / restore, SOP version clone / approve / cancel / create, step templates) → `admin`; **calendar occurrence changes (変更 / 取消 / 臨時 / ルールに戻す / 取消の復元) → releaser or admin** (they move / cancel / create orders; closes the loophole of an operator moving an order to today and starting it without the early-start approval). No `require_active` left in plan. `auth._guard` sets `__required_roles__` on the wrapper (test marker). `tests/test_plan_settings_guard.py` checks every `/plans` + `/biz` route (writes: header + exact roles; reads open; walks `plan_router.routes` / `biz_router.routes` — `app.routes` holds `_IncludedRouter`s in this FastAPI). UI: sheet / holiday pages hide edits for non-admins (「変更は業務管理者だけができます」); calendar shows no actions / 臨時 for non releaser-admin (`domain/plan/lib/permissions.ts` `canChangeOccurrences`); 取消済みの予定 list without 元に戻す. Operators: dashboard work only | **done** |
 
+### Phase L — "latest before due" (branch `feature/latest-before`, 2026-11-05)
+User's decisions: compare by **scheduled start** (not rule date); a **canceled latest upstream stays awaited**;
+**look-back limit in days on the definition** (my alternative recommendation was no limit). Doc rev 72 (paragraph
+after "Link resolution" + ticked open question).
+| # | Step | Status |
+|---|---|---|
+| L.1 | `DependencyMatchRule.LATEST_BEFORE`; `biz_dependency.lookback_days` (1–366, required ⇔ latest_before; CHECKs use `match_rule::text` because a new enum value can't be used in the same transaction); create API / response; migration `2f7614f1cb02` (downgrade rebuilds the shared enum type and the ope CHECKs) | **done** (`bfaab32`) |
+| L.2 | `links._targets_for`: latest upstream order with `scheduled_start` in [own start − lookback, own start] (canceled included; tie → higher id), no match key stored, else a waiting row (`describe`: "no order of CODE in the N days before it"); `refresh_order` re-resolves not-started downstreams starting within lookback after an upstream order; `order_sync._slot_moved` refreshes on any time change (not only rule-date change); repo `get_latest_starting_before`, `get_open_orders_of(starting_from/until)`; `tests/test_latest_before.py` (client prefix `W`, weekly → daily) | **done** (`c653251`) |
+| L.3 | 業務の依存関係: option 直前の上流 + required 日数 input (default 35, `DEFAULT_LOOKBACK_DAYS`), table text 「直前の上流（35日前まで）」 (`matchRuleText`), body via `dependencyBody`; drawer hint 「（直前の上流）」 | **done** |
+
 ### Open questions (in the doc)
-**Still open:** "latest before due" matching for dependencies with different cadences · client-limited role details
+**Still open:** client-limited role details
 (name, one or several client codes per user, read-only or also its own client events) · signal transports beyond HTTP
 (file arrival, another database) — the matching key is decided (type + client + rule date).
 **Decided** (ticked in the doc): early start only with a releaser's approval; releaser + admin release / pin /
 force-start (now: approve a dependency override) / resolve conflicts; automatic release default 03:00 JST; rejecting
 a step resets only that step (2026-10-30); dependencies same client only (2026-11-04); client event = per business
-(2026-11-04).
+(2026-11-04); settings = admin, calendar occurrence changes = releaser / admin (2026-11-05, doc rev 70); latest
+before due = by scheduled start with a look-back in days (2026-11-05, doc rev 72).
 
 ### Planned: client-limited role (decided direction 2026-10-28, not built)
 A future role that sees only its own client code(s). Needs a per-user client scope (e.g. `staff_client(staff_user_id,
