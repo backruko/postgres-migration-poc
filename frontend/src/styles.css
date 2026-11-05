@@ -263,6 +263,7 @@ h1 .client { color: var(--accent); }
 .order-progress { font-size: 12px; }
 .order-deps { list-style: none; margin: 4px 0 10px; padding: 0; display: grid; gap: 4px; }
 .biz-settings { margin-bottom: 16px; max-width: 720px; }
+.attention-panel { display: grid; gap: 8px; margin-bottom: 16px; }
 .signals-panel { margin: 12px 0 16px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 6px; background: var(--sheet); }
 .order-dep { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
 .order-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

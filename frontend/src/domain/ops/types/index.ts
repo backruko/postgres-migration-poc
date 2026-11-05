@@ -15,3 +15,7 @@ export type DailyBusiness = Schemas["DailyBusiness"];
 export type DailyOccurrence = Schemas["DailyOccurrence"];
 export type DailyVoidedItem = Schemas["DailyVoidedItem"];
 export type DailyMilestone = Schemas["DailyMilestone"];
+
+// ---- 締切が近い・遅れのオーダー（日付によらず。N.3 / N.4） ----
+export type Attention = Schemas["AttentionResponse"];
+export type AttentionItem = Schemas["AttentionItem"];

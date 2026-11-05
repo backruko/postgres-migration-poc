@@ -3,6 +3,7 @@ import { categoryOf, DEFAULT_CATEGORY, type TemplateCategory } from "../../domai
 import type {
   CreatePlanTemplateInput,
   DayUnit,
+  DeadlineMode,
   HolidayPolicy,
   PlanTemplate,
   TemplateType,
@@ -34,6 +35,12 @@ export interface FormValues {
   offset_days?: number;
   offset_day_unit?: DayUnit;
   offset_minutes?: number;
+  // 締切（N.4）: 決め方ごとに使う項目だけ送る
+  deadline_mode: DeadlineMode;
+  deadline_offset_minutes?: number;
+  deadline_time?: Dayjs;
+  deadline_day_offset?: number;
+  warn_before_minutes: number;
   // ui_metadata
   bg_color?: string;
   icon?: string;
@@ -71,6 +78,9 @@ export function initialValues(): Partial<FormValues> {
     offset_days: 0,
     offset_day_unit: "calendar",
     offset_minutes: 0,
+    deadline_mode: "end",
+    deadline_day_offset: 0,
+    warn_before_minutes: 0,
     is_bold: false,
   };
 }
@@ -95,6 +105,11 @@ export function fromTemplate(t: PlanTemplate): FormValues {
     offset_days: t.offset_days ?? 0,
     offset_day_unit: t.offset_day_unit ?? "calendar",
     offset_minutes: t.offset_minutes ?? 0,
+    deadline_mode: t.deadline_mode,
+    deadline_offset_minutes: t.deadline_offset_minutes ?? undefined,
+    deadline_time: t.deadline_time ? dayjs(t.deadline_time.slice(0, 5), "HH:mm") : undefined,
+    deadline_day_offset: t.deadline_day_offset ?? 0,
+    warn_before_minutes: t.warn_before_minutes,
     bg_color: typeof ui.bg_color === "string" ? ui.bg_color : undefined,
     icon: typeof ui.icon === "string" ? ui.icon : undefined,
     is_bold: ui.is_bold === true,
@@ -138,13 +153,25 @@ const sheetFields = (v: FormValues) => ({
   offset_minutes: v.offset_minutes ?? 0,
 });
 
+/**
+ * 締切の項目。決め方で使わない項目は null（バックエンドも、使わない項目の値を拒否する）。
+ * 固定の時刻の「何日後」は未入力なら当日。
+ */
+export function deadlineFields(v: Pick<FormValues, "deadline_mode" | "deadline_offset_minutes" | "deadline_time" | "deadline_day_offset" | "warn_before_minutes">) {
+  return {
+    deadline_mode: v.deadline_mode,
+    deadline_offset_minutes: v.deadline_mode === "offset" ? v.deadline_offset_minutes ?? null : null,
+    deadline_time: v.deadline_mode === "fixed_time" && v.deadline_time ? v.deadline_time.format("HH:mm:00") : null,
+    deadline_day_offset: v.deadline_mode === "fixed_time" ? v.deadline_day_offset ?? 0 : null,
+    warn_before_minutes: v.warn_before_minutes ?? 0,
+  };
+}
+
 const formatDates = (dates: Dayjs[] | undefined) => (dates ?? []).map((d) => d.format("YYYY-MM-DD"));
 
 /** フォームの値を、OpenAPI の判別共用体（RRuleTemplateCreate など）の形に変換する */
 export function toCreateInput(v: FormValues, bizId: number): CreatePlanTemplateInput {
-  // 締切はフォームに入るまで（N.4）既定の値を送る: 予定の終了・知らせなし
-  const deadline = { deadline_mode: "end" as const, warn_before_minutes: 0 };
-  const base = { biz_master_id: bizId, ...commonFields(v), ...deadline, ui_metadata: toUiMetadata(v, null) };
+  const base = { biz_master_id: bizId, ...commonFields(v), ...deadlineFields(v), ui_metadata: toUiMetadata(v, null) };
   switch (v.template_type) {
     case "rrule":
       return { ...base, template_type: "rrule", ...rruleFields(v) };
@@ -161,7 +188,7 @@ export function toCreateInput(v: FormValues, bizId: number): CreatePlanTemplateI
  * 指定日は PATCH では変更できないため、diffDates で差分を取り、別の API で追加・削除する。
  */
 export function toUpdateInput(v: FormValues, current: PlanTemplate): UpdatePlanTemplateInput {
-  const base = { ...commonFields(v), ui_metadata: toUiMetadata(v, current.ui_metadata) };
+  const base = { ...commonFields(v), ...deadlineFields(v), ui_metadata: toUiMetadata(v, current.ui_metadata) };
   switch (current.template_type) {
     case "rrule":
       return { ...base, ...rruleFields(v) };

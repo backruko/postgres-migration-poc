@@ -14,6 +14,7 @@ import {
   STEP_STATE_LABEL, stepBlockedReason, stepProgress, type StepAction,
 } from "../../domain/ope/lib/stepActions";
 import { KIND_LABEL, MATCH_RULE_LABEL } from "../../domain/biz/lib/dependencies";
+import { DEADLINE_MODE_LABEL } from "../../domain/plan/lib/deadline";
 import type { ConflictAction, OrderDependency, OrderDependent, OrderDetail, OrderEvent, OrderStep } from "../../domain/ope/types";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { ApiError } from "../../shared/api/http";
@@ -158,6 +159,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
             {data.status_before_hold && <span className="muted">保留前: {ORDER_STATUS_LABEL[data.status_before_hold]}</span>}
             {data.early_start_approved && <Tag color="purple">予定日前の開始を承認済み</Tag>}
             {data.late && <Tag color="red">遅れ</Tag>}
+            {data.due_soon && <Tag color="gold">まもなく</Tag>}
             {data.execution_type === "lightweight" && (
               <Tag>{data.completion_mode === "automatic" ? "顧客側の出来事（信号で完了）" : "顧客側の出来事"}</Tag>
             )}
@@ -177,7 +179,16 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
                 <span className="muted">{data.released_at ? "なし（リリース時に承認済みのバージョンが無かった）" : "承認済みのバージョンなし"}</span>
               )}
             </Descriptions.Item>
+            <Descriptions.Item label="締切">
+              {fmt(data.deadline_at)} <span className="muted">（{DEADLINE_MODE_LABEL[data.deadline_mode]}{data.warn_at ? `・${fmt(data.warn_at)} から「まもなく」` : ""}）</span>
+            </Descriptions.Item>
             {data.released_at && <Descriptions.Item label="リリース">{fmt(data.released_at)}</Descriptions.Item>}
+            {data.finished_at && (
+              <Descriptions.Item label="完了">
+                {fmt(data.finished_at)}{" "}
+                {Date.parse(data.finished_at) > Date.parse(data.deadline_at) && <Tag color="red">締切後</Tag>}
+              </Descriptions.Item>
+            )}
             <Descriptions.Item label="オーダー番号"><span className="mono">#{data.id}</span></Descriptions.Item>
           </Descriptions>
 

@@ -8,7 +8,7 @@ import { timeIn } from "../../shared/lib/datetime";
 import { returnState, returnToHere } from "../../shared/lib/returnTo";
 import { Icon } from "../calendar/components/Icon";
 import { chipStyle } from "../calendar/lib/chipStyle";
-import { milestoneSource, shortDate, VOID_REASON_LABEL } from "./dailyDashboard";
+import { deadlineLabel, milestoneSource, shortDate, showsOwnDeadline, VOID_REASON_LABEL } from "./dailyDashboard";
 
 interface Props {
   client: DailyClient;
@@ -86,7 +86,11 @@ export function DailyClientSection({ client, date, timezone, onOpenOrder }: Prop
                   {o.origin === "one_off" && <Tag>臨時</Tag>}
                   {o.occurrence_date !== date && <span className="muted">元の日付 {shortDate(o.occurrence_date)}</span>}
                   {progress && <span className="mono muted order-progress" title="承認済みのステップ / ステップ数">{progress}</span>}
-                  {order?.late && <Tag color="red" title="予定の終了時刻を過ぎても完了していません">遅れ</Tag>}
+                  {order && showsOwnDeadline(order.deadline_at, o.ends_at) && (
+                    <span className="muted mono" title="この予定の締切（テンプレートの設定）">締切 {deadlineLabel(order.deadline_at, date, timezone)}</span>
+                  )}
+                  {order?.late && <Tag color="red" title="締切を過ぎても完了していません">遅れ</Tag>}
+                  {order?.due_soon && <Tag color="gold" title="締切が近づいています">まもなく</Tag>}
                   {order?.blocked && <Tag color="orange" title="上流のオーダーが完了するまで開始できません">待ち</Tag>}
                   {order?.conflict && <Tag color="warning" title={order.conflict_reason ?? undefined}>矛盾</Tag>}
                   {/* 行のクリック（オーダーの詳細）とは別に、予定テンプレートの設定画面へ */}

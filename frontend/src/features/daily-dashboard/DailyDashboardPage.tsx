@@ -2,10 +2,13 @@ import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { Alert, Button, DatePicker, Empty, Space, Spin, Tag } from "antd";
 import { useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
+import { useAttention } from "../../domain/ops/hooks/useAttention";
 import { useDailyDashboard } from "../../domain/ops/hooks/useDailyDashboard";
 import { TIMEZONE } from "../../shared/config";
 import { dayjs, todayIn } from "../../shared/lib/datetime";
+import { useAutoRefresh } from "../../shared/hooks/useAutoRefresh";
 import { ReturnLink } from "../../shared/ui/ReturnLink";
+import { AttentionPanel } from "./AttentionPanel";
 import { DailyClientSection } from "./DailyClientSection";
 import { OrderDrawer } from "./OrderDrawer";
 import { SignalsPanel } from "./SignalsPanel";
@@ -17,12 +20,22 @@ import { addDays, calendarDayLabel, dayLabel, parseDateParam, summarize } from "
  * 過去の日付では、無効化・取消された予定と取り消されたシート日付も理由付きで表示する（実績の確認用）。
  * 選択した日は URL の ?date= に保持する（未指定なら今日）。
  */
+/** 自動で読み直す間隔（N.4） */
+const AUTO_REFRESH_MS = 2 * 60 * 1000;
+
 export function DailyDashboardPage() {
   const [params, setParams] = useSearchParams();
   const today = todayIn(TIMEZONE);
   const date = parseDateParam(params.get("date"), today);
   const isPast = date < today;
   const dashboard = useDailyDashboard(date, TIMEZONE);
+  // 締切が近い・遅れのオーダー（日付によらず）。この画面を開いている間は 2 分ごとに両方を読み直す
+  // （計測: /ops/daily ≈ 24 ms・/ops/attention ≈ 11 ms。保存した締切を部分インデックスで引くので軽い）
+  const attention = useAttention();
+  useAutoRefresh(() => {
+    dashboard.reload();
+    attention.reload();
+  }, AUTO_REFRESH_MS);
   // 開いているオーダー（予定の行をクリックすると右のドロワーで詳細と操作）
   const [openOrder, setOpenOrder] = useState<{ id: number; title: string } | null>(null);
 
@@ -88,6 +101,13 @@ export function DailyDashboardPage() {
         />
       )}
 
+      <AttentionPanel
+        data={attention.data}
+        today={today}
+        timezone={TIMEZONE}
+        onOpenOrder={(id, title) => setOpenOrder({ id, title })}
+      />
+
       <SignalsPanel onChanged={dashboard.reload} />
 
       {data &&
@@ -110,7 +130,10 @@ export function DailyDashboardPage() {
         orderId={openOrder?.id ?? null}
         title={openOrder?.title ?? ""}
         onClose={() => setOpenOrder(null)}
-        onChanged={dashboard.reload}
+        onChanged={() => {
+          dashboard.reload();
+          attention.reload();
+        }}
       />
     </div>
   );
