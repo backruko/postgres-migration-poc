@@ -29,7 +29,9 @@ class DailyOrderSummary(BaseModel):
     steps_total: int = Field(default=0, description="the order's steps (0: not released yet, or no steps)")
     steps_approved: int = Field(default=0, description="steps approved so far")
     blocked: bool = Field(default=False, description="hard dependencies not met (and not overridden): start is refused")
-    late: bool = Field(default=False, description="past its scheduled end and not finished / canceled (computed)")
+    late: bool = Field(default=False, description="past its deadline and not finished / canceled")
+    due_soon: bool = Field(default=False, description="within the warning time before its deadline")
+    deadline_at: datetime = Field(description="the order's stored deadline")
 
 
 class DailyOccurrence(BaseModel):
@@ -89,6 +91,30 @@ class DailyClient(BaseModel):
     client_name: str
     milestones: list[DailyMilestone] = Field(description="sheet dates of this client on this day")
     businesses: list[DailyBusiness] = Field(description="businesses with something on this day, by business code")
+
+
+class AttentionItem(BaseModel):
+    """遅れ・まもなくのオーダー1件（日次ダッシュボードの上の一覧用。詳細と操作は GET /ope/orders/{id}）"""
+    order_id: int
+    client_code: str
+    biz_master_id: int
+    biz_code: str
+    biz_name: str
+    template_id: int
+    title: str = Field(description="the template's name")
+    status: OrderStatus
+    scheduled_start: datetime
+    deadline_at: datetime
+    warn_at: datetime | None
+    late: bool = Field(description="past its deadline")
+    due_soon: bool = Field(description="within the warning time before its deadline")
+
+
+class AttentionResponse(BaseModel):
+    """完了・取消以外で、遅れ・まもなくのオーダー（日付によらず、締切の早い順）"""
+    now: datetime = Field(description="the time the list was computed for")
+    items: list[AttentionItem]
+    truncated: bool = Field(description="true if more orders matched than the limit")
 
 
 class DailyDashboardResponse(BaseModel):

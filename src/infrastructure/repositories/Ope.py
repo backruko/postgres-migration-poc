@@ -133,6 +133,29 @@ class OpeOrderRepository:
         db.add(event)
         return event
 
+    def get_unreleased_of_template(self, db: Session, *, template_id: int) -> list[OpeOrder]:
+        """テンプレートのリリース前のオーダー（未リリース・それから保留。取消済みは除く）。締切の写し直し用（FOR UPDATE）"""
+        stmt = select(OpeOrder).where(
+            OpeOrder.template_id == template_id, OpeOrder.released_at.is_(None), OpeOrder.status != OrderStatus.CANCELED,
+        )
+        return list(db.scalars(stmt.order_by(OpeOrder.id).with_for_update()).all())
+
+    def get_needing_attention(self, db: Session, *, now: datetime, limit: int) -> list[OpeOrder]:
+        """
+        完了・取消以外で、締切を過ぎた（遅れ）か「まもなく」の時刻を過ぎたオーダー。日付によらず（昨日の遅れも残る）、締切の早い順。
+        部分インデックス ix_ope_order_open_deadline / ix_ope_order_open_warn を使う。
+        """
+        stmt = (
+            select(OpeOrder)
+            .where(
+                OpeOrder.status.not_in((OrderStatus.FINISHED, OrderStatus.CANCELED)),
+                (OpeOrder.deadline_at <= now) | (OpeOrder.warn_at <= now),
+            )
+            .order_by(OpeOrder.deadline_at, OpeOrder.id)
+            .limit(limit)
+        )
+        return list(db.scalars(stmt).all())
+
 
 # ==========================================
 #  OpeStep Repository

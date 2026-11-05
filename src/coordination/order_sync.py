@@ -32,6 +32,7 @@ from src.domain_biz.models import BizDependency, BizMaster
 from src.domain_ope import deadlines, links
 from src.domain_ope.models import EventSource, OpeOrder, OrderEventType, OrderStatus
 from src.domain_ope.steps import LOCAL_TIMEZONE, StepSetChange, scheduled_day, step_set_change, week_start
+from src.domain_plan import template_events
 from src.domain_plan.models import PlanInstance, PlanOccurrenceCache, PlanTemplate, VoidReason
 from src.domain_plan.slot_events import (
     SlotChange, SlotKey, live_instance_for_slot, register_slot_listener, slot_key_of,
@@ -50,6 +51,17 @@ def register() -> None:
     """plan の発生枠の変更・biz の依存関係の定義の変更の受け手として登録します（何度呼んでも1回だけ登録される）。"""
     register_slot_listener(apply_slot_changes)
     dependency_events.register_dependency_listener(apply_dependency_change)
+    template_events.register_template_listener(apply_template_deadline_change)
+
+
+def apply_template_deadline_change(db: Session, template: PlanTemplate) -> None:
+    """
+    テンプレートの締切の設定が変わった: リリース前のオーダーだけ、新しい決め方を写して締切を計算し直す（N.3、2026-11-05 の決定）。
+    リリース後（準備済み・作業中・完了）と取消済みのオーダーは、作成時（リリース前の最後の写し直し）の決め方のまま。
+    """
+    for order in ope_order_repo.get_unreleased_of_template(db, template_id=template.id):
+        deadlines.copy_rule(order, template)
+        deadlines.restamp(order)
 
 
 def apply_dependency_change(db: Session, change: dependency_events.DependencyChange, dependency: BizDependency) -> None:

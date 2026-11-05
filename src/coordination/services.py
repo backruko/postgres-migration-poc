@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from src.core.exceptions import BadRequestError
 from src.coordination.schemas import (
+    AttentionItem,
+    AttentionResponse,
     DailyBusiness,
     DailyCalendarStatus,
     DailyClient,
@@ -17,7 +19,7 @@ from src.coordination.schemas import (
 )
 from src.domain_biz.models import BizMaster
 from src.domain_plan import services as plan_services
-from src.domain_plan.models import validate_timezone_name
+from src.domain_plan.models import PlanTemplate, validate_timezone_name
 from src.domain_ope import links
 from src.infrastructure.repositories import (
     business_calendar_repo,
@@ -32,6 +34,32 @@ from src.infrastructure.repositories import (
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def get_attention(db: Session, limit: int = 200) -> AttentionResponse:
+    """
+    遅れ・まもなくのオーダーの一覧（N.3）。保存した締切・「まもなく」の開始を部分インデックスで引くので、
+    数分おきに読まれても軽い。日付によらない（昨日から遅れているオーダーも出る）。
+    """
+    now = _now()
+    orders = ope_order_repo.get_needing_attention(db, now=now, limit=limit + 1)
+    truncated = len(orders) > limit
+    orders = orders[:limit]
+    bizes = {b.id: b for b in db.query(BizMaster).filter(BizMaster.id.in_({o.biz_master_id for o in orders}))} if orders else {}
+    names = dict(db.query(PlanTemplate.id, PlanTemplate.name).execution_options(include_deleted=True)
+                 .filter(PlanTemplate.id.in_({o.template_id for o in orders}))) if orders else {}
+    items = [
+        AttentionItem(
+            order_id=o.id, client_code=o.client_code, biz_master_id=o.biz_master_id,
+            biz_code=bizes[o.biz_master_id].business_code if o.biz_master_id in bizes else "",
+            biz_name=bizes[o.biz_master_id].name if o.biz_master_id in bizes else "",
+            template_id=o.template_id, title=names.get(o.template_id, ""), status=o.status,
+            scheduled_start=o.scheduled_start, deadline_at=o.deadline_at, warn_at=o.warn_at,
+            late=links.is_late(o, now), due_soon=links.is_due_soon(o, now),
+        )
+        for o in orders
+    ]
+    return AttentionResponse(now=now, items=items, truncated=truncated)
 
 
 def get_daily_dashboard(db: Session, target_date: date | None, tz_name: str) -> DailyDashboardResponse:
@@ -69,7 +97,7 @@ def get_daily_dashboard(db: Session, target_date: date | None, tz_name: str) -> 
     orders = ope_order_repo.get_active_by_instances(db, instance_ids=[cache.instance_id for cache, _, _ in occurrences])
     progress = ope_step_repo.progress_by_orders(db, order_ids=[o.id for o in orders.values()])
     blocked = links.blocked_order_ids(db, list(orders.values()))
-    now = _now()  # 遅れの判定（表示のたびに計算する）
+    now = _now()  # 遅れ・まもなくの判定（保存した締切と比べる）
     for cache, instance, biz in occurrences:
         order = orders.get(cache.instance_id)
         business(biz).occurrences.append(DailyOccurrence(
@@ -88,6 +116,8 @@ def get_daily_dashboard(db: Session, target_date: date | None, tz_name: str) -> 
                 steps_total=progress.get(order.id, (0, 0))[0], steps_approved=progress.get(order.id, (0, 0))[1],
                 blocked=order.id in blocked,
                 late=links.is_late(order, now),
+                due_soon=links.is_due_soon(order, now),
+                deadline_at=order.deadline_at,
             ) if order else None,
         ))
 

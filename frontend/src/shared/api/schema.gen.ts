@@ -874,6 +874,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ops/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attention Endpoint
+         * @description 完了・取消以外で、締切を過ぎた（遅れ）か「まもなく」の時刻を過ぎたオーダーを、日付によらず締切の早い順に返します。
+         *     日次ダッシュボードの上の「締切が近い・遅れ」の一覧用（数分おきに読まれる想定。保存した締切を部分インデックスで引く）。
+         */
+        get: operations["get_attention_endpoint_ops_attention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/staff/me": {
         parameters: {
             query?: never;
@@ -1368,6 +1389,71 @@ export interface components {
              * @enum {string}
              */
             type: "always";
+        };
+        /**
+         * AttentionItem
+         * @description 遅れ・まもなくのオーダー1件（日次ダッシュボードの上の一覧用。詳細と操作は GET /ope/orders/{id}）
+         */
+        AttentionItem: {
+            /** Order Id */
+            order_id: number;
+            /** Client Code */
+            client_code: string;
+            /** Biz Master Id */
+            biz_master_id: number;
+            /** Biz Code */
+            biz_code: string;
+            /** Biz Name */
+            biz_name: string;
+            /** Template Id */
+            template_id: number;
+            /**
+             * Title
+             * @description the template's name
+             */
+            title: string;
+            status: components["schemas"]["OrderStatus"];
+            /**
+             * Scheduled Start
+             * Format: date-time
+             */
+            scheduled_start: string;
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /** Warn At */
+            warn_at: string | null;
+            /**
+             * Late
+             * @description past its deadline
+             */
+            late: boolean;
+            /**
+             * Due Soon
+             * @description within the warning time before its deadline
+             */
+            due_soon: boolean;
+        };
+        /**
+         * AttentionResponse
+         * @description 完了・取消以外で、遅れ・まもなくのオーダー（日付によらず、締切の早い順）
+         */
+        AttentionResponse: {
+            /**
+             * Now
+             * Format: date-time
+             * @description the time the list was computed for
+             */
+            now: string;
+            /** Items */
+            items: components["schemas"]["AttentionItem"][];
+            /**
+             * Truncated
+             * @description true if more orders matched than the limit
+             */
+            truncated: boolean;
         };
         /**
          * BizDependencyCreate
@@ -2067,10 +2153,22 @@ export interface components {
             blocked: boolean;
             /**
              * Late
-             * @description past its scheduled end and not finished / canceled (computed)
+             * @description past its deadline and not finished / canceled
              * @default false
              */
             late: boolean;
+            /**
+             * Due Soon
+             * @description within the warning time before its deadline
+             * @default false
+             */
+            due_soon: boolean;
+            /**
+             * Deadline At
+             * Format: date-time
+             * @description the order's stored deadline
+             */
+            deadline_at: string;
         };
         /**
          * DailyVoidedItem
@@ -2444,10 +2542,34 @@ export interface components {
             early_start_approved: boolean;
             /**
              * Late
-             * @description past its scheduled end and not finished / canceled (computed)
+             * @description past its deadline and not finished / canceled
              * @default false
              */
             late: boolean;
+            /**
+             * Due Soon
+             * @description within the warning time before its deadline and not finished / canceled
+             * @default false
+             */
+            due_soon: boolean;
+            /** @description how the deadline was set (copied from the template; fixed at release) */
+            deadline_mode: components["schemas"]["DeadlineMode"];
+            /**
+             * Deadline At
+             * Format: date-time
+             * @description the stored deadline
+             */
+            deadline_at: string;
+            /**
+             * Warn At
+             * @description from when 'due soon' shows (null: no warning)
+             */
+            warn_at: string | null;
+            /**
+             * Finished At
+             * @description when the order was finished / received
+             */
+            finished_at: string | null;
             /** @description the SOP version this order runs (null: none approved / none was frozen at release) */
             sop_version?: components["schemas"]["OrderSopVersion"] | null;
             /**
@@ -8292,6 +8414,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DailyDashboardResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_attention_endpoint_ops_attention_get: {
+        parameters: {
+            query?: {
+                /** @description 最大件数（締切の早い順） */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttentionResponse"];
                 };
             };
             /** @description Bad Request(リクエスト不正) */

@@ -6649,6 +6649,94 @@
         }
       }
     },
+    "/ops/attention": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Get Attention Endpoint",
+        "description": "完了・取消以外で、締切を過ぎた（遅れ）か「まもなく」の時刻を過ぎたオーダーを、日付によらず締切の早い順に返します。\n日次ダッシュボードの上の「締切が近い・遅れ」の一覧用（数分おきに読まれる想定。保存した締切を部分インデックスで引く）。",
+        "operationId": "get_attention_endpoint_ops_attention_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "最大件数（締切の早い順）",
+              "default": 200,
+              "title": "Limit"
+            },
+            "description": "最大件数（締切の早い順）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/staff/me": {
       "get": {
         "tags": [
@@ -10094,6 +10182,122 @@
         "title": "AlwaysCondition",
         "description": "すべてのオーダーに含める（既定）"
       },
+      "AttentionItem": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "client_code": {
+            "type": "string",
+            "title": "Client Code"
+          },
+          "biz_master_id": {
+            "type": "integer",
+            "title": "Biz Master Id"
+          },
+          "biz_code": {
+            "type": "string",
+            "title": "Biz Code"
+          },
+          "biz_name": {
+            "type": "string",
+            "title": "Biz Name"
+          },
+          "template_id": {
+            "type": "integer",
+            "title": "Template Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "the template's name"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "scheduled_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled Start"
+          },
+          "deadline_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deadline At"
+          },
+          "warn_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warn At"
+          },
+          "late": {
+            "type": "boolean",
+            "title": "Late",
+            "description": "past its deadline"
+          },
+          "due_soon": {
+            "type": "boolean",
+            "title": "Due Soon",
+            "description": "within the warning time before its deadline"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "client_code",
+          "biz_master_id",
+          "biz_code",
+          "biz_name",
+          "template_id",
+          "title",
+          "status",
+          "scheduled_start",
+          "deadline_at",
+          "warn_at",
+          "late",
+          "due_soon"
+        ],
+        "title": "AttentionItem",
+        "description": "遅れ・まもなくのオーダー1件（日次ダッシュボードの上の一覧用。詳細と操作は GET /ope/orders/{id}）"
+      },
+      "AttentionResponse": {
+        "properties": {
+          "now": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Now",
+            "description": "the time the list was computed for"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AttentionItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "true if more orders matched than the limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "now",
+          "items",
+          "truncated"
+        ],
+        "title": "AttentionResponse",
+        "description": "完了・取消以外で、遅れ・まもなくのオーダー（日付によらず、締切の早い順）"
+      },
       "BizDependencyCreate": {
         "properties": {
           "upstream_biz_id": {
@@ -11578,15 +11782,28 @@
           "late": {
             "type": "boolean",
             "title": "Late",
-            "description": "past its scheduled end and not finished / canceled (computed)",
+            "description": "past its deadline and not finished / canceled",
             "default": false
+          },
+          "due_soon": {
+            "type": "boolean",
+            "title": "Due Soon",
+            "description": "within the warning time before its deadline",
+            "default": false
+          },
+          "deadline_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deadline At",
+            "description": "the order's stored deadline"
           }
         },
         "type": "object",
         "required": [
           "id",
           "status",
-          "conflict"
+          "conflict",
+          "deadline_at"
         ],
         "title": "DailyOrderSummary",
         "description": "予定のオーダーの要約（詳細と操作は GET /ope/orders/{id}）"
@@ -12370,8 +12587,50 @@
           "late": {
             "type": "boolean",
             "title": "Late",
-            "description": "past its scheduled end and not finished / canceled (computed)",
+            "description": "past its deadline and not finished / canceled",
             "default": false
+          },
+          "due_soon": {
+            "type": "boolean",
+            "title": "Due Soon",
+            "description": "within the warning time before its deadline and not finished / canceled",
+            "default": false
+          },
+          "deadline_mode": {
+            "$ref": "#/components/schemas/DeadlineMode",
+            "description": "how the deadline was set (copied from the template; fixed at release)"
+          },
+          "deadline_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deadline At",
+            "description": "the stored deadline"
+          },
+          "warn_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warn At",
+            "description": "from when 'due soon' shows (null: no warning)"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At",
+            "description": "when the order was finished / received"
           },
           "sop_version": {
             "anyOf": [
@@ -12459,6 +12718,10 @@
           "released_at",
           "conflict",
           "conflict_reason",
+          "deadline_mode",
+          "deadline_at",
+          "warn_at",
+          "finished_at",
           "created_at",
           "updated_at",
           "execution_type",

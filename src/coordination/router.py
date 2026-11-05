@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 
 from src.core.schemas.error import COMMON_ERRORS
 from src.infrastructure.database import get_db
-from src.coordination.schemas import DailyDashboardResponse
-from src.coordination.services import get_daily_dashboard
+from src.coordination.schemas import AttentionResponse, DailyDashboardResponse
+from src.coordination.services import get_attention, get_daily_dashboard
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 
@@ -26,3 +26,15 @@ def get_daily_dashboard_endpoint(
     過去の日付では、無効化・取消された予定も理由付きで返します。
     """
     return get_daily_dashboard(db=db, target_date=target_date, tz_name=timezone)
+
+
+@router.get("/attention", response_model=AttentionResponse, responses={**COMMON_ERRORS})
+def get_attention_endpoint(
+    limit: int = Query(200, ge=1, le=1000, description="最大件数（締切の早い順）"),
+    db: Session = Depends(get_db),
+):
+    """
+    完了・取消以外で、締切を過ぎた（遅れ）か「まもなく」の時刻を過ぎたオーダーを、日付によらず締切の早い順に返します。
+    日次ダッシュボードの上の「締切が近い・遅れ」の一覧用（数分おきに読まれる想定。保存した締切を部分インデックスで引く）。
+    """
+    return get_attention(db=db, limit=limit)

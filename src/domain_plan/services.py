@@ -17,7 +17,7 @@ from src.infrastructure.repositories import (
     reference_sheet_repo,
 )
 from src.domain_biz.models import BizMaster
-from src.domain_plan import engine, slot_events
+from src.domain_plan import engine, slot_events, template_events
 from src.domain_plan.engine import DayUnit, HolidayPolicy
 from src.domain_plan.models import (
     merge_ui_metadata,
@@ -1070,6 +1070,10 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
         getattr(template, k) != v for k, v in update_data.items() if k != "name" and k not in DEADLINE_FIELDS
     )
     _normalize_deadline_update(template, update_data)
+    # 締切の設定・タイムゾーンが変わったら、リリース前のオーダーの締切を写し直してもらう（受け手は coordination）
+    deadline_changed = any(
+        getattr(template, k) != v for k, v in update_data.items() if k in DEADLINE_FIELDS or k == "timezone"
+    )
 
     if "business_calendar_id" in update_data:
         _get_calendar_if_set(db, update_data["business_calendar_id"])
@@ -1088,6 +1092,9 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
         plan_cache_repo.rename_template(db, template_id=template.id, title=template.name)
     if ui_changed:
         plan_cache_repo.refresh_ui_metadata(db, template=template)
+    if deadline_changed:
+        db.flush()
+        template_events.notify_deadline_changed(db, template)
 
     _commit(db, "PlanTemplate could not be updated due to a conflicting record.")
     db.refresh(template)

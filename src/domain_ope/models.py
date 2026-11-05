@@ -194,6 +194,9 @@ class OpeOrder(Base):
         # 完了したオーダーだけが完了日時を持つ
         CheckConstraint("(status = 'FINISHED') = (finished_at IS NOT NULL)", name="ck_ope_order_finished_at"),
         Index("ix_ope_order_start", "scheduled_start"),
+        # 遅れ・まもなくの一覧（/ops/attention）: 完了・取消以外のオーダーの締切・「まもなく」の開始
+        Index("ix_ope_order_open_deadline", "deadline_at", postgresql_where=text("status NOT IN ('FINISHED', 'CANCELED')")),
+        Index("ix_ope_order_open_warn", "warn_at", postgresql_where=text("status NOT IN ('FINISHED', 'CANCELED') AND warn_at IS NOT NULL")),
     )
 
 

@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
+from src.coordination import services as ops_services
 from src.domain_ope import services as ope
 from src.domain_ope.models import OpeOrder, OpeOrderEvent, OrderStatus
 from src.domain_plan import services as plan_services
@@ -120,12 +121,49 @@ def test_overnight_fixed_deadline(db, biz_id):
     assert o.deadline_at == datetime.combine(local_day(o.scheduled_start) + timedelta(days=1), time(6, 0), tzinfo=JST)
 
 
-def test_template_changes_do_not_rewrite_existing_orders(db, biz_id):
+def test_template_changes_restamp_only_unreleased_orders(db, biz_id, staff):
+    """N.3: テンプレートの締切を変えると、リリース前のオーダーだけ写し直す。リリース済みは作成時の決め方のまま"""
     t = daily(db, biz_id)
-    before = {o.id: o.deadline_at for o in orders_of(db, t.id)}
-    plan_services.update_template(db, t.id, PlanTemplateUpdate(deadline_mode=DeadlineMode.OFFSET, deadline_offset_minutes=600))
-    after = {o.id: (o.deadline_mode, o.deadline_at) for o in orders_of(db, t.id) if o.id in before}
-    assert all(mode == DeadlineMode.END and at == before[oid] for oid, (mode, at) in after.items())
+    orders = orders_of(db, t.id)
+    released = orders[2]
+    ope.release_order(db, released.id, staff["releaser"])
+    plan_services.update_template(db, t.id, PlanTemplateUpdate(deadline_mode=DeadlineMode.OFFSET, deadline_offset_minutes=600, warn_before_minutes=60))
+    for o in orders_of(db, t.id):
+        if o.id == released.id:
+            assert (o.deadline_mode, o.deadline_at, o.warn_at) == (DeadlineMode.END, o.scheduled_end, None)
+        else:
+            assert o.deadline_mode == DeadlineMode.OFFSET and o.deadline_at == o.scheduled_start + timedelta(minutes=600)
+            assert o.warn_at == o.deadline_at - timedelta(minutes=60)
+
+
+def test_late_and_due_soon_from_the_stored_deadline(db, biz_id, monkeypatch):
+    t = daily(db, biz_id, deadline_mode=DeadlineMode.OFFSET, deadline_offset_minutes=300, warn_before_minutes=30)
+    o = orders_of(db, t.id)[2]
+    assert o.warn_at is not None  # 知らせ 30 分前を設定している
+    states = {}
+    for label, at in (("before", o.warn_at - timedelta(minutes=1)), ("soon", o.warn_at), ("late", o.deadline_at + timedelta(minutes=1))):
+        monkeypatch.setattr(ope, "_now", lambda at=at: at)
+        d = ope.get_order(db, o.id)
+        states[label] = (d.due_soon, d.late)
+    assert states == {"before": (False, False), "soon": (True, False), "late": (False, True)}
+    assert ope.get_order(db, o.id).deadline_at == o.deadline_at
+
+
+def test_attention_lists_due_soon_and_late_orders_of_any_day(db, biz_id, staff, monkeypatch):
+    t = daily(db, biz_id, warn_before_minutes=30)
+    orders = orders_of(db, t.id)
+    first, second = orders[1], orders[2]
+    # 2件目の「まもなく」の時刻: 1件目は締切を過ぎて遅れ、2件目はまもなく、3件目以降はまだ
+    monkeypatch.setattr(ops_services, "_now", lambda: second.warn_at)
+    items = {i.order_id: i for i in ops_services.get_attention(db).items}
+    assert items[first.id].late and not items[first.id].due_soon
+    assert items[second.id].due_soon and not items[second.id].late
+    assert orders[3].id not in items
+    assert items[first.id].title == "Daily" and items[first.id].deadline_at == first.deadline_at
+
+    # 完了・取消したオーダーは出ない
+    ope.cancel_order(db, first.id, staff["releaser"], "不要")
+    assert first.id not in {i.order_id for i in ops_services.get_attention(db).items}
 
 
 def test_finished_at_is_stored_with_the_finish_event(db, biz_id, staff, monkeypatch):

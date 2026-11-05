@@ -166,6 +166,7 @@ def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
             **{c.key: getattr(order, c.key) for c in OpeOrder.__table__.columns},
             "early_start_approved": any(e.event_type == OrderEventType.EARLY_START_APPROVED for e in events),
             "late": links.is_late(order, _now()),
+            "due_soon": links.is_due_soon(order, _now()),
             "execution_type": biz.execution_type if biz else ExecutionType.SOP,
             "completion_mode": biz.completion_mode if biz else CompletionMode.MANUAL,
             "sop_version": _order_sop_version(db, order),

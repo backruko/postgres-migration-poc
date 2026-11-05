@@ -27,8 +27,13 @@ FINAL = (OrderStatus.FINISHED, OrderStatus.CANCELED)
 
 
 def is_late(order: OpeOrder, now: datetime) -> bool:
-    """遅れ = 予定の終了時刻を過ぎても完了・取消になっていない（保存しない。表示のたびに計算する。Phase 7）"""
-    return order.status not in FINAL and order.scheduled_end < now
+    """遅れ = 保存した締切（deadline_at）を過ぎても完了・取消になっていない（N.3。締切の決め方はテンプレートごと）"""
+    return order.status not in FINAL and order.deadline_at < now
+
+
+def is_due_soon(order: OpeOrder, now: datetime) -> bool:
+    """まもなく = 「まもなく」の開始（warn_at）以降で締切前、かつ完了・取消になっていない（知らせなしのオーダーは出ない）"""
+    return order.status not in FINAL and order.warn_at is not None and order.warn_at <= now < order.deadline_at
 
 REASON_DEFINITION_DELETED = "依存関係の定義が削除されました"
 REASON_UPSTREAM_CHANGED = "待つ上流のオーダーが変わりました"
