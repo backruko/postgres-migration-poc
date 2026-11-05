@@ -2,86 +2,85 @@
 
 Handoff for the next working session. Read this first, then the design doc (§2), `frontend/README.md` (frontend
 details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/` and `src/domain_staff/`
-(backend). Last updated: 2026-11-04 (evening), after Phase 7.
+(backend). Last updated: 2026-11-05 (evening), after the SLA report.
 
 ## 1. Current status
 
-- **All seven phases of the design doc's delivery plan are built and merged into `main` (locally).** Plan MVP +
-  Phase 1 daily dashboard · 2 generation job · 3 staff · 4 ope orders · 5 steps / maker-checker · 6 dependencies ·
-  7 client events / signals. Per-phase detail ("as built" notes, decisions, step plans) is in §2.
-- **Branches / commits (2026-11-04, nothing pushed by me):** I'm on **`main`** (`bf22125`, merge of Phase 7), **36
-  commits ahead of `origin/main`**. Merges, all `--no-ff`, made locally at the user's request: Phases 1–3 `23767b8`
-  (pushed long ago), Phases 4–5 `71de514`, Phase 6 `b3538aa`, Phase 7 `bf22125`. Feature branches:
-  `feature/ope-orders` (Phases 4–5; 1 commit ahead of origin: `6a37fee`), `feature/ope-dependencies` (Phase 6, never
-  pushed), `feature/ope-signals` (Phase 7, never pushed). **The user pushes; I never do.** The user sometimes commits
-  a step themselves (e.g. 5.5 as `75cc109 phase5`) — check `git log` before committing.
-- **Done 2026-11-05: `feature/ux-shortcuts`** (from `main` `bf22125`), frontend shortcuts + an admin guard
-  on the template page — see §2 "UX shortcuts". **Merged into `main` locally (`700350e`, --no-ff, not pushed; `main`
-  42 ahead of origin); U.1–U.3 clicked through in the browser by the user: OK.** No migration. U.1 `9b7cb38`, U.2 `f002f9f`, U.3 `34914a8`; U.4 = candidate. Test fix (2026-11-05):
-  `test_order_links.py::test_sheet_rule_…` failed when a mock 本締 upstream (+0, 09:00) was already past but its +1
-  downstream was future (correct waiting row, KeyError in the test) → now accepts a waiting row for those.
-  `fix/test-client-codes` (test_plan flake) merged as `e666056`.
-- **`feature/small-debts`** merged as `d6ad461` (no migrations); **`feature/admin-guard`** (U.4) merged as `f3d483e`. User's choices as I
-  recommended. **D.1** `9036c8f`: `actor_name` (required, null for system) on `OrderEventResponse` /
-  `StepEventResponse` via `staff_user_repo.get_names` (2 queries per order detail); drawer timeline + step line show
-  the name (職員 #id fallback). **D.2**: open `GET /biz/{biz_id}/versions` (non-draft, newest first, 404 unknown biz;
-  `biz_services.list_approved_versions`, `sop_version_repo.get_approved`); drawer actions `pin` / `unpin` (releaser /
-  admin, pending only; labels 「SOP バージョンを指定」 / 「…の指定を解除」 — 固定 means frozen in this UI), version
-  select (`domain/biz/lib/sopVersions.ts` `pinOptions`: tag ・ period, 「予定日に有効」, current pin disabled).
-  plan_check biz 1 has only one approved version (v9.26817.0). Not browser-checked yet.
-- **Phase L — "latest before due" dependency rule (2026-11-05, branch `feature/latest-before`, merged into `main`)**:
-  see §2 "Phase L". **Migration `2f7614f1cb02` — the user must run `alembic upgrade head`** (and maybe the five
-  Phase 6–7 ones; never confirmed).
-- **Earlier "next" list (still valid):** Ask the user what to do next. Candidates: (a) the user's browser check of Phases 5–7
-  screens (below) and fixes from it; (b) open questions in the doc ("latest before due" done in Phase L): the
-  client-limited role, other signal transports (file arrival / DB watcher scripts posting to `POST /ope/signals`);
-  (c) bigger debts (small ones done in D.1 / D.2): SOP "impact before approval" list (needs an SOP version screen
-  first), a real login replacing the `X-Staff-Id` header (design doc first). U.4 done (admin guard). Plan a new phase the
-  same way as 5–7: questions first, a step plan approved by the user, one step at a time.
-- **DB:** latest Alembic head **`51d8d829a2d2`** (ope_order attention indexes, N.3); before it **`c5bb40015e61`** (ope_order deadline snapshot + deadline_at / warn_at / finished_at, N.2), then **`d17d631f5ad2`** (plan_template deadline fields, N.1), then **`2f7614f1cb02`**
-  (biz_dependency latest_before + lookback_days, L.1). Before it: **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
-  init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`
-  (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657`
-  (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8`
-  (ope_step.retired_at, RETIRED) → `2904467fd7b9` (biz_dependency) → `cb0ae371f402` (ope_dependency) →
-  `58425e70286d` (order event DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec` (biz execution_type / completion_mode /
-  signal_type) → `3242f180527a` (ope_signal, role signal_sender).
-  **The user's dev DB** was at `6c8cc87274c8` (upgraded by the user 2026-11-04 during Phase 5); the later five
-  (`2904467fd7b9` … `3242f180527a`) were handed over — ask whether they ran `alembic upgrade head`. The user runs it
-  themselves; their uvicorn on 8000 auto-reloads, so a model change without the migration returns 500 until they
-  upgrade. Warn them whenever a step adds a migration. Dev DB facts: staff id 1 login `system` (system_admin); biz 1
-  has SOP version 1 `v1.1.0`; 890 orders backfilled 2026-10-30.
-  **`plan_check`** (throwaway) is at `3242f180527a`. Seeded: client `MOCK`, biz 1 `MOCK0001` (SOP version 1 with 3
-  step templates added via SQL: always / month_in [12] / first_in_week blocking), biz 2 `MOCK0002` (LIGHTWEIGHT +
-  AUTOMATIC, signal type `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff: 1
-  `check-admin` (system_admin), 2 `check-op` (suspended), 3 viewer+auditor, 4 operator, 5 releaser, 6 / 7 checkers,
-  8 admin, 9 / 10 signal_sender. Many orders there were moved / released / finished by harness runs.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **147 passed**,
-  ~95–225 s (run times vary a lot). Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the
-  order-sync listener — and with it the biz dependency listener — is registered there, so every plan test also syncs
-  orders). Each test file uses its own client-code prefix letter: T D B O S A R V P K M G L N Q E H J (pick an unused
-  one for a new file; also used: W). Client codes are `CHAR(4)` → only 4096 per prefix; `test_db` is dropped after each run, so
-  collisions happen within one run. **Fixed 2026-11-05** for `test_plan.py` (~34 codes per run, collided ~1 run in
-  4–5): `new_client_code()` draws from a shuffled pool without replacement. Other files still use random codes (few
-  per run, unlikely to collide); switch them to the same pattern if one ever flakes.
-  Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
-  Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic check` → no
-  drift. `.env` points at the user's `dev_db`: run alembic with `DATABASE_URL` = the same URL ending in `/plan_check`
-  (`export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed 's#/dev_db$#/plan_check#')`).
-  Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes. After backend schema changes:
-  `python scripts/export_openapi.py` then `npm run gen:api` (frontend types).
+- **Built and merged into `main`, and pushed by the user (`main` = `origin/main` = `706f166`, 2026-11-05):** all seven
+  phases of the design doc (Plan MVP + 1 daily dashboard · 2 generation job · 3 staff · 4 ope orders · 5 steps /
+  maker-checker · 6 dependencies · 7 client events / signals) plus the 2026-11-05 work below. Per-phase "as built"
+  notes, decisions and step plans are in §2. **The user pushes; I never do.** The user sometimes commits a step
+  themselves — check `git log` before committing. Working tree clean; no work in progress.
+- **2026-11-05 (one long session), all merged with `--no-ff`, each step reviewed + committed on the user's "go":**
+  | Work | Branch → merge | What (detail in §2) |
+  |---|---|---|
+  | UX shortcuts U.1–U.3 | `feature/ux-shortcuts` → `700350e` | calendar day double-click → dashboard; ⚙ row link → template (highlight); 「← 戻る」 links via router state; template / 業務の設定 edits = admin |
+  | Test fixes | `fix/test-client-codes` → `e666056`, `fix/test-client-codes-all` → `7ead116` | time-independent sheet-link test; **`tests/client_codes.py` `new_client_code(prefix)`** in every test file |
+  | Small debts D.1 / D.2 | `feature/small-debts` → `d6ad461` | staff names (`actor_name`) in timelines; SOP version pin / unpin in the drawer (`GET /biz/{id}/versions`) |
+  | Admin guard U.4 | `feature/admin-guard` → `f3d483e` | every `/plans` + `/biz` write = admin, except calendar occurrence changes (変更 / 取消 / 臨時 / ルールに戻す / 取消の復元) = releaser or admin; operators only view calendar / settings |
+  | Phase L "latest before due" | `feature/latest-before` → `cdd8960` | 3rd dependency rule 直前の上流 with `lookback_days` (migration `2f7614f1cb02`) |
+  | Phase N deadlines | `feature/deadlines` → `1ba7cdb` | per-template deadline (予定の終了 / 開始から / 固定の時刻) + warning lead (default 0); **stored on the order** (`deadline_at`, `warn_at`, rule snapshot, `finished_at`), fixed at release; 遅れ / まもなく from stored columns; `GET /ops/attention`; 2-min auto-refresh (migrations `d17d631f5ad2`, `c5bb40015e61`, `51d8d829a2d2`) |
+  | Dashboard tabs | `feature/dashboard-tabs` → `0c6d15e` | 日次ダッシュボード tabs 予定 / 締切・遅れ (n) / 信号 (n), `?tab=` |
+  | Logging | `fix/log-rotation` → `4cbeab2`, `44e1687` (main), `fix/sql-echo-switch` → `fb0c827` | `app.log` rotates 10 MB × 5 (`LOG_FILE` / `LOG_MAX_MB` / `LOG_BACKUPS` env vars); rotated files git-ignored; **SQL logging off by default**, `SQL_ECHO=1` (in `.env` or env) turns it on |
+  | SLA report | `feature/sla-report` → `706f166` | `GET /ops/sla` + nav 「SLA」 page `/reports/sla` (client × deadline month: 完了 / 遅れ / 期限内率 / 平均遅れ / 未完了の遅れ, CSV export) |
+- **Next: nothing planned — ask the user.** Remaining pool, smallest first: (1) notifications (mail / Teams / Slack)
+  for まもなく / 遅れ — needs the user's tool + webhook; (2) SFTP watcher "B" (§2 "Todo pool") — needs server access
+  and file rules; (3) SOP version screen + "impact before approval" list (no SOP UI exists yet); (4) client-limited
+  role (§2 "Planned"); (5) real login replacing `X-Staff-Id` (design doc first). Plan any of them like Phases 5–7:
+  questions first (AskUserQuestion with a recommended option), a step plan the user approves, one step at a time,
+  each left uncommitted until "go".
+- **Browser check — not yet clicked through by the user** (only U.1–U.3 were, OK): dashboard tabs + badges, the order
+  drawer (staff names in 記録 / step lines, SOP 指定 / 解除, 締切 / 完了 lines, まもなく), the 締切 section of the template
+  form + 締切 column, まもなく / 遅れ on rows, the 2-min auto-refresh, admin-only settings (sheets / holidays / templates /
+  業務の設定) and the operator's read-only calendar, 直前の上流 in 業務の依存関係, the SLA page + CSV in Excel. Earlier
+  screens from Phases 5–7 were never clicked through either. A "slow drawer spinner" report on 2026-11-05 could not be
+  reproduced: server ~25 ms, Vite proxy ~25 ms — most likely the uvicorn console paused by a text selection
+  (Windows QuickEdit); advised turning QuickEdit off.
+- **DB:** latest Alembic head **`51d8d829a2d2`**. Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
+  `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) → `f9bbe9648f15` (biz
+  release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657` (step template condition /
+  is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at) → `2904467fd7b9`
+  (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec`
+  (biz client-event settings) → `3242f180527a` (ope_signal, role signal_sender) → `2f7614f1cb02` (latest_before +
+  lookback_days, L.1) → `d17d631f5ad2` (plan_template deadline fields, N.1) → `c5bb40015e61` (ope_order deadline
+  snapshot + deadline_at / warn_at / finished_at, N.2) → `51d8d829a2d2` (attention partial indexes, N.3).
+  **The user's dev DB:** on 2026-11-05 at 16:39 their uvicorn (8000) was already reading the N.2 columns and serving
+  `/ops/attention`, so it was upgraded at least to `c5bb40015e61`, very likely to head — confirm with the user, never
+  run alembic against `dev_db` myself. The user runs `alembic upgrade head`; their uvicorn on 8000 auto-reloads, so a
+  model change without the migration returns 500 until they upgrade. **Warn them whenever a step adds a migration.**
+  Dev DB facts: staff 1 login `system` has system_admin + operator / checker / releaser but **not admin** (needs
+  業務管理者 to edit settings since U.3 / U.4); 1 client MOCK; biz 13 / 14 in use; `app.log.1` (1.35 GB, pre-rotation)
+  can be deleted by the user.
+  **`plan_check`** (throwaway, mine) is at `51d8d829a2d2`. Seeded: client `MOCK`, biz 1 `MOCK0001` (one approved SOP
+  version `v9.26817.0`; SOP version 1 with 3 step templates), biz 2 `MOCK0002` (LIGHTWEIGHT + AUTOMATIC
+  `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff: 1 `check-admin` (system_admin),
+  2 suspended, 3 viewer+auditor, **4 operator, 5 releaser**, 6 / 7 checkers, **8 admin**, 9 / 10 signal_sender. 14
+  open orders are past their deadline there (good for 遅れ / attention / SLA checks).
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **175 passed**,
+  ~2.5–6 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
+  and with it the biz dependency and template listeners — is registered there). **Every new test file uses
+  `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M G L N Q E
+  H J W F Y U. Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
+  errors. Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic
+  check` → no drift; run alembic with `export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed
+  's#/dev_db$#/plan_check#')` (`.env` points at the user's `dev_db`). Frontend: `cd frontend && npm run build` passes.
+  After backend schema changes: `python scripts/export_openapi.py` then `npm run gen:api`.
+  **Harness pattern:** uvicorn on 8001 against `plan_check` **with `LOG_FILE=app-8001.log`**, then bundle the real
+  frontend modules with esbuild (`--define:import.meta.env='{"VITE_API_BASE_URL":"http://127.0.0.1:8001",
+  "VITE_TIMEZONE":"Asia/Tokyo"}'`) and run them in node; wait for `/plans/calendars` = 200 before calling.
 - **Scheduled jobs (user's machine):** Task Scheduler `\postgres-migration-poc\PlanExtendJob` (daily 00:05,
-  `scripts/extend_plans.py` → `extend_plans.log`) and `\postgres-migration-poc\OrderReleaseJob` (every 15 min,
-  `scripts/release_orders.py` → `release_orders.log`), both registered by the user. Any new script that changes plan
-  must call `order_sync.register()`.
-- **Browser check:** the user clicked through 年間計画シート and 休日カレンダー (2026-10-28): no issues. **Not yet
-  clicked through:** 日次ダッシュボード incl. the order drawer (status actions, ステップ, 依存関係, 受領 / 遅れ), the
-  dashboard tags (3/5 progress, 待ち, 遅れ) and the 照合できなかった信号 panel, 予定テンプレート設定 (「次の予定」,
-  the 業務の設定 panel), 業務の依存関係 (`/settings/dependencies`), 職員 + nav picker 「操作する職員」.
+  `scripts/extend_plans.py`) and `\postgres-migration-poc\OrderReleaseJob` (every 15 min, `scripts/release_orders.py`).
+  Any new script that changes plan must call `order_sync.register()`.
 
 ### Commits by phase (newest first; full detail per step in §2)
 | Phase | Commits |
 |---|---|
+| SLA report (`feature/sla-report`) | `16045c6` S.2 page + CSV · `aae5c50` S.1 endpoint |
+| Dashboard tabs | `36ce2e9` |
+| N deadlines (`feature/deadlines`) | `7ab2cc3` N.4 frontend · `95c94fe` N.3 re-stamp + read side + attention · `503f3c6` N.2 order columns · `2e5228f` N.1 template fields |
+| L latest before due (`feature/latest-before`) | `e3541c3` L.3 · `c653251` L.2 · `bfaab32` L.1 |
+| U.4 admin guard / D.1–D.2 small debts | `60ce2cb` U.4 · `f4e6dbf` D.2 · `9036c8f` D.1 |
+| UX shortcuts U.1–U.3 | `34914a8` U.3 · `f002f9f` U.2 · `9b7cb38` U.1 |
 | 7 client events / signals (`feature/ope-signals`) | `22fec2a` 7.5 screens · `a7e1e03` 7.4 late + signal list · `0b5e762` 7.3 receive / match · `a9f8fc3` 7.2 ope_signal + role · `0ff76dd` 7.1 biz settings · `c1aade1` plan |
 | 6 dependencies (`feature/ope-dependencies`) | `3669528` 6.5 screens · `916ebee` 6.4 start check + override · `1a364ca` 6.3 link resolution · `3eaede4` 6.2 ope_dependency · `8ab5f92` 6.1 biz_dependency |
 | 5 steps (`feature/ope-orders`) | `6a37fee` docs · `75cc109` 5.5 (user) · `074840f` 5.4 · `abe6281` 5.3 · `11cd510` docs · `fc58dd0` 5.2 · `05850c1` / `5dbbe0f` 5.1 (user) |
@@ -93,9 +92,9 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 73 (2026-11-05)** — read with `{"kind": "view", "sinceRev": 73}` to see only newer edits, and
+**Last rev written by me: 77 (2026-11-05)** — read with `{"kind": "view", "sinceRev": 77}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
-The delivery-phase list in the doc carries the build status (phases 1–7 built and merged, rev 69).
+The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
 ### Domains (decided: plan and ope stay separate, no merge)
 | Domain | Owns | Status |
