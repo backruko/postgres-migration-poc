@@ -8,8 +8,12 @@
   何も無ければ待ち先なしの行（upstream_order_id NULL。条件を満たさない）。
 - 直すのは開始前の下流のオーダーだけ（pending / ready / それらから保留）。開始後・完了・取消のつながりはそのまま。
 - 合わなくなったつながりは消さずに removed_at と理由を付ける。待ち先なしの行は、上流が見つかったらその行を埋める。
+- latest_before（直前の上流。L.2、2026-11-05 の決定）: キーではなく時刻で決める。下流の予定開始以前で、
+  lookback_days 日前までに開始する上流のオーダーのうち最新の1件（取消済みでも。人が判断するまで待つ）。
+  無ければ待ち先なしの行。上流のオーダーができた・動いた・取り消されたら、その後 lookback_days 日の間に
+  開始する開始前の下流のオーダーを直し、下流が動いたら（時刻だけでも）その下流を直す。
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -42,12 +46,16 @@ def is_not_started(order: OpeOrder) -> bool:
 
 
 def _key(order: OpeOrder, rule: DependencyMatchRule) -> int | date | None:
+    """キーで突き合わせるルールのキー（latest_before はキーを使わないので None）"""
     if rule == DependencyMatchRule.SAME_SHEET_EVENT:
         return order.source_sheet_event_id
     if rule == DependencyMatchRule.SAME_OCCURRENCE_DATE:
         return order.occurrence_date
-    # 直前の上流（latest_before）は L.2 で作る。それまではつながりを作らない（キーが無い = 当てはまらない扱い）
     return None
+
+
+def _lookback(dep: BizDependency) -> timedelta:
+    return timedelta(days=dep.lookback_days or 0)
 
 
 def _upstream_targets(db: Session, dep: BizDependency, key: int | date) -> list[OpeOrder]:
@@ -57,6 +65,19 @@ def _upstream_targets(db: Session, dep: BizDependency, key: int | date) -> list[
     if live:
         return live
     return candidates[-1:]
+
+
+def _targets_for(db: Session, order: OpeOrder, dep: BizDependency) -> tuple[list[OpeOrder], int | date | None] | None:
+    """定義のルールで待つ上流のオーダーと、行に残すキー。当てはまらない（キーが無い）なら None"""
+    if dep.match_rule == DependencyMatchRule.LATEST_BEFORE:
+        latest = ope_dependency_repo.get_latest_starting_before(
+            db, biz_id=dep.upstream_biz_id, at=order.scheduled_start, since=order.scheduled_start - _lookback(dep),
+        )
+        return ([latest] if latest is not None else []), None
+    key = _key(order, dep.match_rule)
+    if key is None:
+        return None
+    return _upstream_targets(db, dep, key), key
 
 
 def _remove(link: OpeDependency, reason: str, now: datetime) -> None:
@@ -70,13 +91,14 @@ def resolve(db: Session, order: OpeOrder, dep: BizDependency) -> None:
         return
     now = _now()
     current = ope_dependency_repo.get_active(db, downstream_order_id=order.id, biz_dependency_id=dep.id)
-    key = _key(order, dep.match_rule)
-    if key is None:
+    found = _targets_for(db, order, dep)
+    if found is None:
         for link in current:
             _remove(link, REASON_RULE_NOT_APPLICABLE, now)
         return
 
-    targets = {o.id for o in _upstream_targets(db, dep, key) if o.id != order.id}
+    upstream_orders, key = found
+    targets = {o.id for o in upstream_orders if o.id != order.id}
     linked = {link.upstream_order_id for link in current if link.upstream_order_id is not None}
     waiting = [link for link in current if link.upstream_order_id is None]
     for link in current:
@@ -96,7 +118,7 @@ def resolve(db: Session, order: OpeOrder, dep: BizDependency) -> None:
     db.flush()
 
 
-def _link(order: OpeOrder, dep: BizDependency, key: int | date, upstream_order_id: int | None) -> OpeDependency:
+def _link(order: OpeOrder, dep: BizDependency, key: int | date | None, upstream_order_id: int | None) -> OpeDependency:
     return OpeDependency(
         downstream_order_id=order.id, upstream_order_id=upstream_order_id, biz_dependency_id=dep.id,
         upstream_biz_id=dep.upstream_biz_id, kind=dep.kind, match_rule=dep.match_rule,
@@ -130,6 +152,15 @@ def refresh_order(db: Session, order: OpeOrder) -> None:
         if downstream is not None:
             affected[downstream.id] = downstream
     for dep in upstream_defs:
+        if dep.match_rule == DependencyMatchRule.LATEST_BEFORE:
+            # このオーダーの開始から lookback_days 日の間に開始する下流は、このオーダーが「直前の上流」になりうる
+            # （動く前の位置で待っていた下流は、上のつながりの一覧に入っている）
+            for downstream in ope_dependency_repo.get_open_orders_of(
+                db, biz_id=dep.downstream_biz_id,
+                starting_from=order.scheduled_start, starting_until=order.scheduled_start + _lookback(dep),
+            ):
+                affected[downstream.id] = downstream
+            continue
         key = _key(order, dep.match_rule)
         if key is not None:
             for downstream in ope_dependency_repo.get_orders_matching(db, biz_id=dep.downstream_biz_id, rule=dep.match_rule, key=key):
@@ -180,6 +211,10 @@ def describe(db: Session, link: OpeDependency) -> str:
     biz = db.get(BizMaster, link.upstream_biz_id)
     code = biz.business_code if biz else f"biz {link.upstream_biz_id}"
     if link.upstream_order_id is None:
+        if link.match_rule == DependencyMatchRule.LATEST_BEFORE:
+            dep = db.get(BizDependency, link.biz_dependency_id) if link.biz_dependency_id else None
+            days = f" in the {dep.lookback_days} days" if dep and dep.lookback_days else ""
+            return f"no order of {code}{days} before it"
         key = link.match_date.isoformat() if link.match_date else f"sheet event {link.match_sheet_event_id}"
         return f"no order of {code} for {key}"
     upstream = db.get(OpeOrder, link.upstream_order_id)

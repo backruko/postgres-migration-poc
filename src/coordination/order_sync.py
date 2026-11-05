@@ -183,7 +183,8 @@ def _slot_moved(db: Session, order: OpeOrder, live: PlanInstance, change: SlotCh
             actor_staff_id=change.actor_staff_id if source == EventSource.HUMAN else None,
             reason=change.note if change.by_person else None, detail=_cause(change, before=before, after=after),
         )
-    if key_changed:
+    # 依存関係: キー（ルール上の日付）が変わった、または時刻が変わった（直前の上流は予定開始で突き合わせる）
+    if key_changed or times_changed:
         links.refresh_order(db, order)
 
 
