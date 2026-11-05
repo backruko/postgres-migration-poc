@@ -1,6 +1,6 @@
 # src/infrastructure/repositories/Ope.py
 """domain_ope 用のリポジトリ群。commit は呼び出し側（Service 層・plan のコミット）で行います。"""
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -124,6 +124,10 @@ class OpeOrderRepository:
             order_id=order.id, event_type=event_type, source=source, actor_staff_id=actor_staff_id,
             from_status=from_status, to_status=to_status, reason=reason, detail=detail,
         )
+        if to_status == OrderStatus.FINISHED:
+            # 完了（受領）日時をオーダーにも保存する（SLA の正。完了の経路はすべてこの記録を通る）。記録と同じ時刻にそろえる
+            occurred_at = occurred_at or datetime.now(timezone.utc)
+            order.finished_at = occurred_at
         if occurred_at is not None:
             event.occurred_at = occurred_at
         db.add(event)

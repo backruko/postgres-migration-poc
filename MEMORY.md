@@ -38,7 +38,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   (c) bigger debts (small ones done in D.1 / D.2): SOP "impact before approval" list (needs an SOP version screen
   first), a real login replacing the `X-Staff-Id` header (design doc first). U.4 done (admin guard). Plan a new phase the
   same way as 5–7: questions first, a step plan approved by the user, one step at a time.
-- **DB:** latest Alembic head **`d17d631f5ad2`** (plan_template deadline fields, N.1); before it **`2f7614f1cb02`**
+- **DB:** latest Alembic head **`c5bb40015e61`** (ope_order deadline snapshot + deadline_at / warn_at / finished_at, N.2); before it **`d17d631f5ad2`** (plan_template deadline fields, N.1), then **`2f7614f1cb02`**
   (biz_dependency latest_before + lookback_days, L.1). Before it: **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
   init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`
   (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657`
@@ -698,8 +698,8 @@ edits re-stamp only 未リリース orders; released / running / finished never 
 own rule snapshot); **`finished_at` stored on the order** for SLA. Doc rev 73 (bullet after "Late").
 | # | Step | Status |
 |---|---|---|
-| N.1 | plan_template `deadline_mode` (`plan_deadline_mode_enum`), `deadline_offset_minutes` (1–10080), `deadline_time` + `deadline_day_offset` (0–7), `warn_before_minutes` (0–1440, default 0); CHECKs; schemas (`deadline_problem` shared); service: deadline fields don't bump revision / regenerate, mode switch clears unused fields, fixed time ≤ start on day 0 → 400; migration `d17d631f5ad2`; `tests/test_template_deadline.py` (prefix `F`); frontend create body sends defaults until N.4 | **done** |
-| N.2 | ope_order: rule snapshot + `deadline_at` + `warn_at` + `finished_at`; stamp at creation, recompute on move, set finished_at at finish; backfill (deadline = scheduled_end, finished_at from events) | next |
+| N.1 (`2e5228f`) | plan_template `deadline_mode` (`plan_deadline_mode_enum`), `deadline_offset_minutes` (1–10080), `deadline_time` + `deadline_day_offset` (0–7), `warn_before_minutes` (0–1440, default 0); CHECKs; schemas (`deadline_problem` shared); service: deadline fields don't bump revision / regenerate, mode switch clears unused fields, fixed time ≤ start on day 0 → 400; migration `d17d631f5ad2`; `tests/test_template_deadline.py` (prefix `F`); frontend create body sends defaults until N.4 | **done** |
+| N.2 | ope_order: rule snapshot (`deadline_mode` reuses `plan_deadline_mode_enum`, offset, time, day offset, `deadline_timezone`, `warn_before_minutes`) + `deadline_at` (NOT NULL) + `warn_at` + `finished_at`; CHECKs (rule, warn_at ⇔ warn, finished_at ⇔ FINISHED); `domain_ope/deadlines.py` (`copy_rule`, `compute`, `restamp`; fixed time = local date of scheduled_start + days); stamped in `order_sync.create_order`, `_slot_moved`, `resolve_conflict` accept_plan; `finished_at` set in `ope_order_repo.add_event` when to_status FINISHED; migration `c5bb40015e61` with backfill; `tests/test_order_deadlines.py` (prefix `Y`); direct-ORM tests pass END defaults | **done** |
 | N.3 | template edit → re-stamp 未リリース orders (plan → coordination listener); 遅れ / まもなく from stored columns (+ index); dashboard / detail fields | — |
 | N.4 | frontend: template form 締切 + 何分前, まもなく tag, deadline on rows, 「締切が近い・遅れ」 panel, drawer, auto-refresh (measure `/ops/daily` first) | — |
 Seen once in N.1's full run: 1 intermittent failure that passed on rerun (not identified; suspect a random client-code

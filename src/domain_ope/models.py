@@ -1,5 +1,5 @@
 import enum
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any
 
 from sqlalchemy import (
@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Time,
     event,
     text,
 )
@@ -23,6 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from src.domain_biz.models import DependencyKind, DependencyMatchRule
+from src.domain_plan.models import DeadlineMode
 from src.infrastructure.database import Base
 
 
@@ -125,6 +127,23 @@ class OpeOrder(Base):
     conflict: Mapped[bool] = mapped_column(default=False, server_default=text("false"), comment="plan の変更と矛盾しているか")
     conflict_reason: Mapped[str | None] = mapped_column(Text, comment="矛盾の内容（conflict のときのみ）")
 
+    # --- 締切（N.2、2026-11-05 の決定）: SLA の正。作成時にテンプレートの決め方を写し、締切を保存する ---
+    # テンプレートの後の変更では変わらない（リリース前のオーダーだけ写し直す: N.3）。
+    # 予定が動いたら、このオーダー自身の写した決め方で締切を計算し直す（domain_ope/deadlines.py）
+    deadline_mode: Mapped[DeadlineMode] = mapped_column(
+        Enum(DeadlineMode, name="plan_deadline_mode_enum"), nullable=False, comment="締切の決め方（テンプレートの写し）",
+    )
+    deadline_offset_minutes: Mapped[int | None] = mapped_column(comment="OFFSET: 予定開始から締切までの分（写し）")
+    deadline_time: Mapped[time | None] = mapped_column(Time, comment="FIXED_TIME: 締切のローカル時刻（写し）")
+    deadline_day_offset: Mapped[int | None] = mapped_column(comment="FIXED_TIME: 予定日の何日後か（写し）")
+    deadline_timezone: Mapped[str] = mapped_column(String(64), nullable=False, comment="締切のローカル時刻のタイムゾーン（写し）")
+    warn_before_minutes: Mapped[int] = mapped_column(
+        nullable=False, default=0, server_default=text("0"), comment="締切の何分前に「まもなく」（写し。0 = 出さない）"
+    )
+    deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, comment="締切")
+    warn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="「まもなく」を出し始める日時（知らせなしは NULL）")
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="完了（受領）した日時（完了のときのみ）")
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -164,6 +183,16 @@ class OpeOrder(Base):
             "status NOT IN ('READY', 'IN_PROGRESS', 'FINISHED') OR released_at IS NOT NULL",
             name="ck_ope_order_released_at",
         ),
+        # 締切の写し: 決め方ごとに必要な項目だけ（テンプレートと同じ規則）。知らせがあるときだけ warn_at
+        CheckConstraint(
+            "(deadline_mode = 'OFFSET') = (deadline_offset_minutes IS NOT NULL) "
+            "AND (deadline_mode = 'FIXED_TIME') = (deadline_time IS NOT NULL) "
+            "AND (deadline_mode = 'FIXED_TIME') = (deadline_day_offset IS NOT NULL)",
+            name="ck_ope_order_deadline_rule",
+        ),
+        CheckConstraint("(warn_before_minutes = 0) = (warn_at IS NULL)", name="ck_ope_order_warn_at"),
+        # 完了したオーダーだけが完了日時を持つ
+        CheckConstraint("(status = 'FINISHED') = (finished_at IS NOT NULL)", name="ck_ope_order_finished_at"),
         Index("ix_ope_order_start", "scheduled_start"),
     )
 

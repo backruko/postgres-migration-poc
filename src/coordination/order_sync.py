@@ -29,7 +29,7 @@ from src.core.error_codes import ErrorCode
 from src.core.exceptions import DuplicatedRecordError
 from src.domain_biz import dependency_events
 from src.domain_biz.models import BizDependency, BizMaster
-from src.domain_ope import links
+from src.domain_ope import deadlines, links
 from src.domain_ope.models import EventSource, OpeOrder, OrderEventType, OrderStatus
 from src.domain_ope.steps import LOCAL_TIMEZONE, StepSetChange, scheduled_day, step_set_change, week_start
 from src.domain_plan.models import PlanInstance, PlanOccurrenceCache, PlanTemplate, VoidReason
@@ -149,6 +149,9 @@ def create_order(
         scheduled_end=instance.scheduled_end,
         status=OrderStatus.PENDING,
     )
+    # 締切: テンプレートの決め方を写して保存する（以後のテンプレートの変更では変わらない）
+    deadlines.copy_rule(order, template)
+    deadlines.restamp(order)
     db.add(order)
     db.flush()
     ope_order_repo.add_event(
@@ -176,6 +179,7 @@ def _slot_moved(db: Session, order: OpeOrder, live: PlanInstance, change: SlotCh
     order.occurrence_date = live.occurrence_date
     order.scheduled_start = live.scheduled_start
     order.scheduled_end = live.scheduled_end
+    deadlines.restamp(order)  # 締切はこのオーダーの写した決め方で計算し直す
     if times_changed:
         source = _source(change)
         ope_order_repo.add_event(
