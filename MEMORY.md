@@ -686,6 +686,20 @@ after "Link resolution" + ticked open question).
 | L.2 | `links._targets_for`: latest upstream order with `scheduled_start` in [own start − lookback, own start] (canceled included; tie → higher id), no match key stored, else a waiting row (`describe`: "no order of CODE in the N days before it"); `refresh_order` re-resolves not-started downstreams starting within lookback after an upstream order; `order_sync._slot_moved` refreshes on any time change (not only rule-date change); repo `get_latest_starting_before`, `get_open_orders_of(starting_from/until)`; `tests/test_latest_before.py` (client prefix `W`, weekly → daily) | **done** (`c653251`) |
 | L.3 | 業務の依存関係: option 直前の上流 + required 日数 input (default 35, `DEFAULT_LOOKBACK_DAYS`), table text 「直前の上流（35日前まで）」 (`matchRuleText`), body via `dependencyBody`; drawer hint 「（直前の上流）」 | **done** |
 
+### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
+**A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic
+release, a template at the expected arrival time (its end = the 遅れ deadline); a person checks the client's SFTP in
+WinSCP and presses 受領 in the drawer. Downstream jobs wait via 業務の依存関係.
+**B (todo, not planned):** a scheduled script (Task Scheduler, every few minutes) that lists the SFTP folders and posts
+`POST /ope/signals` for new files → the business switches to AUTOMATIC. Facts from the user (2026-11-05): source is
+**SFTP**; today **one user monitors it by hand in WinSCP**; the client's server has **several folders at different
+paths**; **some file names carry a timestamp, some don't**; "received" = **the file exists in the right path** (no
+marker / size check for now); the final signal of a client-side job = the file appearing in the right path.
+Still unknown: server account / access from the scheduler host (read-only?), the date to use when a name has no
+timestamp (arrival day JST?), whether files stay after download, how to avoid resends (state file recommended).
+Possible first step for both A and B: store the expected SFTP path + file pattern on the business and show it in the
+drawer next to 受領 (the person knows where to look; B's watcher reads the same config).
+
 ### Open questions (in the doc)
 **Still open:** client-limited role details
 (name, one or several client codes per user, read-only or also its own client events) · signal transports beyond HTTP
