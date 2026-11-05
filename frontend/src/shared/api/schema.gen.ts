@@ -2453,6 +2453,11 @@ export interface components {
             source: components["schemas"]["EventSource"];
             /** Actor Staff Id */
             actor_staff_id: number | null;
+            /**
+             * Actor Name
+             * @description name of the acting staff (null for system events)
+             */
+            actor_name: string | null;
             /** Reason */
             reason: string | null;
             /** Detail */
@@ -3386,6 +3391,11 @@ export interface components {
             source: components["schemas"]["EventSource"];
             /** Actor Staff Id */
             actor_staff_id: number | null;
+            /**
+             * Actor Name
+             * @description name of the acting staff (null for system events)
+             */
+            actor_name: string | null;
             /** Reason */
             reason: string | null;
             /** Detail */

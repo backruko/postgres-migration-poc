@@ -38,6 +38,12 @@ function describeEvent(e: OrderEvent): string {
   return ORDER_EVENT_LABEL[e.event_type];
 }
 
+/** 記録の操作者: システム / 職員の名前（名前が取れないときだけ 職員 #id） */
+function actorLabel(e: { source: string; actor_staff_id: number | null; actor_name: string | null }): string {
+  if (e.source === "system") return "システム";
+  return e.actor_name ?? `職員 #${e.actor_staff_id}`;
+}
+
 interface ActionValues {
   text?: string;
   conflictAction?: ConflictAction;
@@ -232,7 +238,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
                 children: (
                   <div className="order-event">
                     <div><b>{describeEvent(e)}</b> <span className="muted mono">{fmt(e.occurred_at)}</span></div>
-                    <div className="muted">{e.source === "system" ? "システム" : `職員 #${e.actor_staff_id}`}{e.reason ? ` ・ ${e.reason}` : ""}</div>
+                    <div className="muted">{actorLabel(e)}{e.reason ? ` ・ ${e.reason}` : ""}</div>
                   </div>
                 ),
               }))}
@@ -314,7 +320,7 @@ function StepRow({ step, actions, blocked, onAction }: {
       {rejected && <Alert type="warning" showIcon message={`差し戻し: ${rejected}`} className="order-step-alert" />}
       {last && !rejected && (
         <div className="muted order-step-last">
-          {describeStepEvent(last)}: 職員 #{last.actor_staff_id} ・ {fmt(last.occurred_at)}{last.reason ? ` ・ ${last.reason}` : ""}
+          {describeStepEvent(last)}: {actorLabel(last)} ・{fmt(last.occurred_at)}{last.reason ? ` ・ ${last.reason}` : ""}
         </div>
       )}
       {actions.length > 0 && (

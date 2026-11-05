@@ -23,7 +23,9 @@ from sqlalchemy.orm import Session
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
 from src.domain_biz.models import BizMaster, CompletionMode, ExecutionType, SOPStatus, SOPVersion
-from src.domain_ope.models import EventSource, OpeOrder, OpeOrderEvent, OpeStep, OrderEventType, OrderStatus, StepState
+from src.domain_ope.models import (
+    EventSource, OpeOrder, OpeOrderEvent, OpeStep, OpeStepEvent, OrderEventType, OrderStatus, StepState,
+)
 from src.domain_ope import links, steps
 from src.domain_ope.schemas import (
     AutoReleaseResult, ConflictAction, ConflictResolveIn, DependencyBiz, OrderDependencyResponse, OrderDependentResponse,
@@ -34,7 +36,7 @@ from src.domain_plan import services as plan_services
 from src.domain_plan.schemas import PlanInstanceCancel
 from src.domain_plan.slot_events import SlotKey, live_instance_for_slot
 from src.infrastructure.repositories import (
-    ope_dependency_repo, ope_order_repo, ope_step_repo, plan_instance_repo, sop_version_repo,
+    ope_dependency_repo, ope_order_repo, ope_step_repo, plan_instance_repo, sop_version_repo, staff_user_repo,
 )
 
 # 予定日の判定に使うタイムゾーン（シートの日付・休日と同じく日本の日付）
@@ -81,13 +83,22 @@ def _order_sop_version(db: Session, order: OpeOrder) -> OrderSopVersion | None:
                            source="pinned" if order.pinned_sop_version_id else "effective")
 
 
+def _with_actor_name(event: OpeOrderEvent | OpeStepEvent, names: dict[int, str]) -> dict[str, Any]:
+    """記録の列 + 操作した職員の名前（システムの記録・見つからない職員は None）"""
+    values = {c.key: getattr(event, c.key) for c in event.__table__.columns}
+    values["actor_name"] = names.get(event.actor_staff_id) if event.actor_staff_id is not None else None
+    return values
+
+
 def _order_steps(db: Session, order: OpeOrder) -> tuple[list[OrderStepResponse], bool]:
     """リリース後は作ったステップ、リリース前は使う予定のバージョンからのプレビュー（取消済みの未リリースは空）"""
     if order.released_at is not None:
         active = ope_step_repo.get_active(db, order_id=order.id)
+        step_events = ope_step_repo.get_events(db, step_ids=[s.id for s in active])
+        names = staff_user_repo.get_names(db, ids=(e.actor_staff_id for e in step_events))
         events: dict[int, list[StepEventResponse]] = {}
-        for e in ope_step_repo.get_events(db, step_ids=[s.id for s in active]):
-            events.setdefault(e.step_id, []).append(StepEventResponse.model_validate(e))
+        for e in step_events:
+            events.setdefault(e.step_id, []).append(StepEventResponse.model_validate(_with_actor_name(e, names)))
         return [
             OrderStepResponse(
                 id=s.id, step_template_id=s.step_template_id, step_num=s.step_num, title=s.title, content=s.content,
@@ -147,6 +158,7 @@ def _order_dependencies(db: Session, order: OpeOrder, events: list[OpeOrderEvent
 
 def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
     events = ope_order_repo.get_events(db, order_id=order.id)
+    names = staff_user_repo.get_names(db, ids=(e.actor_staff_id for e in events))
     order_steps, preview = _order_steps(db, order)
     biz = db.get(BizMaster, order.biz_master_id)
     return OrderDetailResponse.model_validate(
@@ -161,7 +173,7 @@ def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
             "steps_preview": preview,
             "dependencies": _order_dependencies(db, order, events),
             "dependents": _order_dependents(db, order),
-            "events": [OrderEventResponse.model_validate(e) for e in events],
+            "events": [OrderEventResponse.model_validate(_with_actor_name(e, names)) for e in events],
         }
     )
 

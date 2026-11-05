@@ -11571,6 +11571,18 @@
             ],
             "title": "Actor Staff Id"
           },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name",
+            "description": "name of the acting staff (null for system events)"
+          },
           "reason": {
             "anyOf": [
               {
@@ -11608,6 +11620,7 @@
           "to_status",
           "source",
           "actor_staff_id",
+          "actor_name",
           "reason",
           "detail",
           "occurred_at"
@@ -13890,6 +13903,18 @@
             ],
             "title": "Actor Staff Id"
           },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name",
+            "description": "name of the acting staff (null for system events)"
+          },
           "reason": {
             "anyOf": [
               {
@@ -13927,6 +13952,7 @@
           "to_state",
           "source",
           "actor_staff_id",
+          "actor_name",
           "reason",
           "detail",
           "occurred_at"

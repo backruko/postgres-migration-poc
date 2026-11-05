@@ -57,6 +57,7 @@ class OrderEventResponse(BaseModel):
     to_status: OrderStatus | None
     source: EventSource
     actor_staff_id: int | None
+    actor_name: str | None = Field(description="name of the acting staff (null for system events)")
     reason: str | None
     detail: dict[str, Any] | None
     occurred_at: datetime
@@ -71,6 +72,7 @@ class StepEventResponse(BaseModel):
     to_state: StepState | None
     source: EventSource
     actor_staff_id: int | None
+    actor_name: str | None = Field(description="name of the acting staff (null for system events)")
     reason: str | None
     detail: dict[str, Any] | None
     occurred_at: datetime
