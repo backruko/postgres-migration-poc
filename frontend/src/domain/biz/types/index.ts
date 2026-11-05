@@ -14,3 +14,6 @@ export type BizMasterUpdate = components["schemas"]["BizMasterUpdate"];
 export type ReleaseMode = components["schemas"]["ReleaseMode"];
 export type ExecutionType = components["schemas"]["ExecutionType"];
 export type CompletionMode = components["schemas"]["CompletionMode"];
+
+// ---- SOP バージョン（オーダーに指定できる承認済みのもの） ----
+export type SopVersion = components["schemas"]["SOPVersionResponse"];

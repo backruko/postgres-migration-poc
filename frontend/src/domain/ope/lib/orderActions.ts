@@ -45,7 +45,7 @@ export const CONFLICT_ACTION_LABEL: Record<ConflictAction, string> = {
 
 export type OrderAction =
   | "release" | "approveEarlyStart" | "approveDependencyOverride" | "start" | "hold" | "resume" | "finish" | "cancel"
-  | "resolveConflict";
+  | "resolveConflict" | "pin" | "unpin";
 
 const OPERATOR: RoleCode[] = ["operator"];
 const HOLDERS: RoleCode[] = ["operator", "releaser", "admin"];
@@ -61,6 +61,8 @@ const ROLES: Record<OrderAction, RoleCode[]> = {
   finish: OPERATOR,
   cancel: PRIVILEGED,
   resolveConflict: PRIVILEGED,
+  pin: PRIVILEGED,
+  unpin: PRIVILEGED,
 };
 
 export const ORDER_ACTION_LABEL: Record<OrderAction, string> = {
@@ -73,6 +75,8 @@ export const ORDER_ACTION_LABEL: Record<OrderAction, string> = {
   finish: "完了",
   cancel: "取消",
   resolveConflict: "矛盾を解決",
+  pin: "SOP バージョンを指定",
+  unpin: "SOP バージョンの指定を解除",
 };
 
 /** 理由の入力が必須の操作 */
@@ -113,6 +117,9 @@ export function availableActions(order: OrderDetail, staff: Staff | null | undef
   // 顧客側の出来事（LIGHTWEIGHT）は ready からも完了（受領）にできる
   if (order.steps.length === 0 && (s === "in_progress" || (s === "ready" && order.execution_type === "lightweight"))) actions.push("finish");
   if (s !== "finished" && s !== "canceled") actions.push("cancel");
+  // SOP バージョンの指定はリリース前のみ（リリースで固定される）
+  if (s === "pending") actions.push("pin");
+  if (s === "pending" && order.pinned_sop_version_id !== null) actions.push("unpin");
   return actions.filter(can);
 }
 

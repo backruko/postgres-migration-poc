@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import select
 
 from src.core.exceptions import BadRequestError, NotFoundError
+from src.domain_biz import services as biz_services
 from src.domain_biz.models import SOPStatus, SOPVersion
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
@@ -160,3 +161,12 @@ def test_pin_endpoints_are_guarded():
         op = paths[f"/ope/orders/{{order_id}}/{action}"]["post"]
         assert "x-staff-id" in {p["name"] for p in op.get("parameters", [])}
         assert {"401", "403"} <= set(op["responses"])
+
+
+def test_pinnable_versions_list_skips_drafts(db):
+    biz_id, orders = business_with_orders(db)
+    v1, v2, _ = versions(db, biz_id, switch_day=day_of(orders[5]))
+    # 指定できる選択肢 = 草稿以外、新しい順
+    assert [v.id for v in biz_services.list_approved_versions(db, biz_id)] == [v2.id, v1.id]
+    with pytest.raises(NotFoundError):
+        biz_services.list_approved_versions(db, 999_999_999)

@@ -20,11 +20,21 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   42 ahead of origin); U.1–U.3 clicked through in the browser by the user: OK.** No migration. U.1 `9b7cb38`, U.2 `f002f9f`, U.3 `34914a8`; U.4 = candidate. Test fix (2026-11-05):
   `test_order_links.py::test_sheet_rule_…` failed when a mock 本締 upstream (+0, 09:00) was already past but its +1
   downstream was future (correct waiting row, KeyError in the test) → now accepts a waiting row for those.
+  `fix/test-client-codes` (test_plan flake) merged as `e666056`.
+- **Current: `feature/small-debts`** (from `main` `e666056`, not merged yet), no migrations. User's choices as I
+  recommended. **D.1** `9036c8f`: `actor_name` (required, null for system) on `OrderEventResponse` /
+  `StepEventResponse` via `staff_user_repo.get_names` (2 queries per order detail); drawer timeline + step line show
+  the name (職員 #id fallback). **D.2**: open `GET /biz/{biz_id}/versions` (non-draft, newest first, 404 unknown biz;
+  `biz_services.list_approved_versions`, `sop_version_repo.get_approved`); drawer actions `pin` / `unpin` (releaser /
+  admin, pending only; labels 「SOP バージョンを指定」 / 「…の指定を解除」 — 固定 means frozen in this UI), version
+  select (`domain/biz/lib/sopVersions.ts` `pinOptions`: tag ・ period, 「予定日に有効」, current pin disabled).
+  plan_check biz 1 has only one approved version (v9.26817.0). Not browser-checked yet.
 - **Earlier "next" list (still valid):** Ask the user what to do next. Candidates: (a) the user's browser check of Phases 5–7
   screens (below) and fixes from it; (b) open questions in the doc: "latest before due" dependency matching, the
   client-limited role, other signal transports (file arrival / DB watcher scripts posting to `POST /ope/signals`);
-  (c) small debts: pin / unpin UI (API only), staff names instead of 職員 #id in
-  timelines, SOP "impact before approval" list, a real login replacing the `X-Staff-Id` header. Plan a new phase the
+  (c) bigger debts (small ones done in D.1 / D.2): SOP "impact before approval" list (needs an SOP version screen
+  first), a real login replacing the `X-Staff-Id` header (design doc first); (d) U.4 admin guard for the other
+  事前設定 writes. Plan a new phase the
   same way as 5–7: questions first, a step plan approved by the user, one step at a time.
 - **DB:** latest Alembic head **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
   init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`
