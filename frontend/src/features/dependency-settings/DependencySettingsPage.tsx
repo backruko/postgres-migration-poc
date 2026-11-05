@@ -1,14 +1,15 @@
 import { PlusOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Form, Modal, Radio, Select, Space, Table, Tag, Typography } from "antd";
+import { Alert, App, Button, Empty, Form, InputNumber, Modal, Radio, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { dependencyApi } from "../../domain/biz/api/dependencyApi";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import {
-  canManageDependencies, KIND_HELP, KIND_LABEL, MATCH_RULE_HELP, MATCH_RULE_LABEL,
+  canManageDependencies, DEFAULT_LOOKBACK_DAYS, dependencyBody, KIND_HELP, KIND_LABEL, LOOKBACK_RANGE, MATCH_RULE_HELP,
+  MATCH_RULE_LABEL, matchRuleText,
 } from "../../domain/biz/lib/dependencies";
-import type { BizDependency, BizDependencyCreate, DependencyKind, DependencyMatchRule } from "../../domain/biz/types";
+import type { BizDependency, DependencyKind, DependencyMatchRule } from "../../domain/biz/types";
 import { useClients } from "../../domain/client/hooks/useClients";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { ApiError } from "../../shared/api/http";
@@ -20,6 +21,8 @@ interface FormValues {
   downstream_biz_id?: number;
   match_rule: DependencyMatchRule;
   kind: DependencyKind;
+  /** 直前の上流のときだけ: 何日前の上流のオーダーまで待つか */
+  lookback_days?: number;
 }
 
 /**
@@ -44,6 +47,7 @@ export function DependencySettingsPage() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const matchRule = Form.useWatch("match_rule", form);
 
   const clientOptions = (clients.data ?? []).map((c) => ({ value: c.code, label: `${c.code} ${c.name}` }));
   const bizOptions = useMemo(
@@ -53,7 +57,7 @@ export function DependencySettingsPage() {
 
   const openForm = () => {
     form.resetFields();
-    form.setFieldsValue({ match_rule: "same_sheet_event", kind: "hard" });
+    form.setFieldsValue({ match_rule: "same_sheet_event", kind: "hard", lookback_days: DEFAULT_LOOKBACK_DAYS });
     setError(null);
     setOpen(true);
   };
@@ -63,8 +67,7 @@ export function DependencySettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const body: BizDependencyCreate = { upstream_biz_id: v.upstream_biz_id, match_rule: v.match_rule, kind: v.kind };
-      const created = await dependencyApi.create(v.downstream_biz_id, body);
+      const created = await dependencyApi.create(v.downstream_biz_id, dependencyBody({ ...v, upstream_biz_id: v.upstream_biz_id }));
       message.success(`${created.downstream.business_code} が ${created.upstream.business_code} を待つ依存関係を追加しました`);
       setOpen(false);
       deps.reload();
@@ -100,7 +103,7 @@ export function DependencySettingsPage() {
     { title: "上流（待たれる業務）", key: "upstream", render: (_, d) => biz(d.upstream) },
     { title: "", key: "arrow", width: 32, render: () => <span className="muted">→</span> },
     { title: "下流（待つ業務）", key: "downstream", render: (_, d) => biz(d.downstream) },
-    { title: "突き合わせ", dataIndex: "match_rule", render: (v: DependencyMatchRule) => <span title={MATCH_RULE_HELP[v]}>{MATCH_RULE_LABEL[v]}</span> },
+    { title: "突き合わせ", key: "match_rule", render: (_, d) => <span title={MATCH_RULE_HELP[d.match_rule]}>{matchRuleText(d)}</span> },
     {
       title: "種類",
       dataIndex: "kind",
@@ -212,13 +215,21 @@ export function DependencySettingsPage() {
           <Form.Item name="match_rule" label="突き合わせ（下流のオーダーがどの上流のオーダーを待つか）">
             <Radio.Group>
               <Space direction="vertical">
-                {/* 直前の上流（latest_before）は日数の入力と一緒に L.3 で選べるようにする */}
-                {(Object.keys(MATCH_RULE_LABEL) as DependencyMatchRule[]).filter((r) => r !== "latest_before").map((r) => (
+                {(Object.keys(MATCH_RULE_LABEL) as DependencyMatchRule[]).map((r) => (
                   <Radio key={r} value={r}>{MATCH_RULE_LABEL[r]} <span className="muted">— {MATCH_RULE_HELP[r]}</span></Radio>
                 ))}
               </Space>
             </Radio.Group>
           </Form.Item>
+          {matchRule === "latest_before" && (
+            <Form.Item
+              name="lookback_days"
+              label="何日前の上流のオーダーまで待つか（それより古ければ「上流のオーダーがありません」で待ちになります）"
+              rules={[{ required: true, message: "日数を入力してください" }]}
+            >
+              <InputNumber min={LOOKBACK_RANGE.min} max={LOOKBACK_RANGE.max} addonAfter="日前まで" style={{ width: 200 }} />
+            </Form.Item>
+          )}
           <Form.Item name="kind" label="種類">
             <Radio.Group>
               <Space direction="vertical">

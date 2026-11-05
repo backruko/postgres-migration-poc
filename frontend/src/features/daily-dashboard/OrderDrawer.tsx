@@ -13,7 +13,7 @@ import {
   availableStepActions, describeStepEvent, rejectionReason, STEP_ACTION_LABEL, STEP_REASON_REQUIRED, STEP_STATE_COLOR,
   STEP_STATE_LABEL, stepBlockedReason, stepProgress, type StepAction,
 } from "../../domain/ope/lib/stepActions";
-import { KIND_LABEL } from "../../domain/biz/lib/dependencies";
+import { KIND_LABEL, MATCH_RULE_LABEL } from "../../domain/biz/lib/dependencies";
 import type { ConflictAction, OrderDependency, OrderDependent, OrderDetail, OrderEvent, OrderStep } from "../../domain/ope/types";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { ApiError } from "../../shared/api/http";
@@ -380,6 +380,7 @@ function UpstreamRow({ dep }: { dep: OrderDependency }) {
   return (
     <li className="order-dep">
       <span className="mono">{dep.upstream_biz.business_code}</span> {dep.upstream_biz.name}
+      {dep.match_rule === "latest_before" && <span className="muted">（{MATCH_RULE_LABEL.latest_before}）</span>}
       {dep.upstream_order_id !== null ? (
         <>
           <span className="mono muted"> #{dep.upstream_order_id}</span>
