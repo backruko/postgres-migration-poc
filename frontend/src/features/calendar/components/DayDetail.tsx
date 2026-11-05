@@ -11,8 +11,9 @@ interface Props {
   timezone: string;
   now: number;
   today: string;
-  actions: OccurrenceActions;
-  onAddOneOff: (date: string) => void;
+  /** 予定の手動操作（リリース担当・業務管理者のみ。指定しなければ表示だけ） */
+  actions?: OccurrenceActions;
+  onAddOneOff?: (date: string) => void;
   onOpenDaily: (date: string) => void;
 }
 
@@ -28,9 +29,11 @@ export function DayDetail({ day, visible, templates, timezone, now, today, actio
         <h2>
           {m}月{d}日<span className="detail-wd">{weekdayJa(day.weekday)}曜日</span>
         </h2>
-        <Button size="small" icon={<PlusOutlined />} onClick={() => onAddOneOff(day.date)} disabled={!templates.size}>
-          臨時の予定
-        </Button>
+        {onAddOneOff && (
+          <Button size="small" icon={<PlusOutlined />} onClick={() => onAddOneOff(day.date)} disabled={!templates.size}>
+            臨時の予定
+          </Button>
+        )}
       </div>
       <Button type="link" size="small" icon={<DashboardOutlined />} className="detail-daily-link" onClick={() => onOpenDaily(day.date)}>
         日次ダッシュボードで開く

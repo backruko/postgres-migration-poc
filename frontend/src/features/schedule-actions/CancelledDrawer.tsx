@@ -20,6 +20,8 @@ interface Props {
   loading: boolean;
   error: ApiError | null;
   onClose: () => void;
+  /** 元に戻せるか（リリース担当・業務管理者のみ。できない場合は一覧の表示だけ） */
+  canRestore: boolean;
   /** 復元後にカレンダーと一覧を読み直す */
   onRestored: () => void;
 }
@@ -28,7 +30,7 @@ interface Props {
  * 取り消された予定の一覧（カレンダーには表示されない予定）。
  * 「元に戻す」で取消の直前と同じ日時に復元する。
  */
-export function CancelledDrawer({ open, month, timezone, items, loading, error, onClose, onRestored }: Props) {
+export function CancelledDrawer({ open, month, timezone, items, loading, error, onClose, canRestore, onRestored }: Props) {
   const { message } = App.useApp();
   const [restoringId, setRestoringId] = useState<number | null>(null);
 
@@ -53,7 +55,8 @@ export function CancelledDrawer({ open, month, timezone, items, loading, error, 
       width={Math.min(460, window.innerWidth)}
     >
       <Typography.Paragraph type="secondary" className="drawer-lead">
-        取り消した予定はカレンダーに表示されません。「元に戻す」で、取消の直前と同じ日時に戻せます。
+        取り消した予定はカレンダーに表示されません。
+        {canRestore ? "「元に戻す」で、取消の直前と同じ日時に戻せます。" : "元に戻せるのはリリース担当・業務管理者です。"}
       </Typography.Paragraph>
       {error && <Alert type="error" showIcon message={error.message} className="modal-alert" />}
       <Spin spinning={loading && items.length > 0}>
@@ -77,7 +80,7 @@ export function CancelledDrawer({ open, month, timezone, items, loading, error, 
             );
             return (
               <List.Item
-                actions={[
+                actions={!canRestore ? [] : [
                   item.restorable ? (
                     <Popconfirm
                       key="restore"

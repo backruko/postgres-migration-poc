@@ -3,7 +3,9 @@ import { Alert, App, Button, Empty, Radio, Select, Space, Table, Tag, Typography
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { canEditPlanSettings, PLAN_SETTINGS_ADMIN_ONLY } from "../../domain/biz/lib/settings";
 import { useClients } from "../../domain/client/hooks/useClients";
+import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { sheetApi } from "../../domain/plan/api";
 import { useBusinessCalendars } from "../../domain/plan/hooks/useClientCalendar";
 import { useReferenceSheets } from "../../domain/plan/hooks/useReferenceSheets";
@@ -28,6 +30,9 @@ export function SheetSettingsPage() {
   const { message, modal } = App.useApp();
   const [params, setParams] = useSearchParams();
   const clientCode = params.get("client")?.toUpperCase() || null;
+  // マーカー・日付の変更は業務管理者だけ（見るのは誰でも）
+  const me = useCurrentStaff();
+  const canEdit = canEditPlanSettings(me.data);
 
   const clients = useClients();
   const calendars = useBusinessCalendars();
@@ -90,7 +95,10 @@ export function SheetSettingsPage() {
     });
   };
 
-  const columns =(sheet: ReferenceSheet): ColumnsType<ReferenceSheetMarker> => [
+  const columns = (sheet: ReferenceSheet): ColumnsType<ReferenceSheetMarker> =>
+    canEdit ? [...baseColumns, actionColumn(sheet)] : baseColumns;
+
+  const baseColumns: ColumnsType<ReferenceSheetMarker> = [
     { title: "マーカー", dataIndex: "marker", render: (v: string) => <b>{v}</b> },
     { title: "説明", dataIndex: "description", render: (v: string | null) => v ?? <span className="muted">—</span> },
     {
@@ -149,32 +157,33 @@ export function SheetSettingsPage() {
         );
       },
     },
-    {
-      title: "操作",
-      key: "actions",
-      width: 200,
-      fixed: "right",
-      render: (_, m) => (
-        <Space size={0}>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEditor(sheet, m)} aria-label={`「${m.marker}」を編集`}>
-            編集
-          </Button>
-          {m.is_generated && (
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<StopOutlined />}
-              onClick={() => confirmStop(sheet, m)}
-              aria-label={`「${m.marker}」のルールでの生成をやめる`}
-            >
-              生成をやめる
-            </Button>
-          )}
-        </Space>
-      ),
-    },
   ];
+
+  const actionColumn = (sheet: ReferenceSheet): ColumnsType<ReferenceSheetMarker>[number] => ({
+    title: "操作",
+    key: "actions",
+    width: 200,
+    fixed: "right",
+    render: (_, m) => (
+      <Space size={0}>
+        <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEditor(sheet, m)} aria-label={`「${m.marker}」を編集`}>
+          編集
+        </Button>
+        {m.is_generated && (
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<StopOutlined />}
+            onClick={() => confirmStop(sheet, m)}
+            aria-label={`「${m.marker}」のルールでの生成をやめる`}
+          >
+            生成をやめる
+          </Button>
+        )}
+      </Space>
+    ),
+  });
 
   const clientOptions = (clients.data ?? []).map((c) => ({ value: c.code, label: `${c.code}　${c.name}` }));
   // URL の顧客が一覧に無い場合も、選択中であることが分かるようにする
@@ -223,11 +232,14 @@ export function SheetSettingsPage() {
                 <Typography.Text strong>{sheet.name}</Typography.Text>{" "}
                 <Typography.Text type="secondary" className="mono">
                   {sheet.period_start}〜{sheet.period_end}・マーカー {sheet.markers.length} 件
+                  {!canEdit && `・${PLAN_SETTINGS_ADMIN_ONLY}`}
                 </Typography.Text>
               </div>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(sheet, null)}>
-                ルールで日付を作るマーカーを追加
-              </Button>
+              {canEdit && (
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(sheet, null)}>
+                  ルールで日付を作るマーカーを追加
+                </Button>
+              )}
             </div>
             <Table<ReferenceSheetMarker>
               rowKey="id"
@@ -240,7 +252,7 @@ export function SheetSettingsPage() {
               expandable={{
                 expandedRowKeys: expanded,
                 onExpandedRowsChange: (keys) => setExpanded(keys as number[]),
-                expandedRowRender: (m) => <MarkerDates sheet={sheet} marker={m} today={today} onChanged={sheets.reload} />,
+                expandedRowRender: (m) => <MarkerDates sheet={sheet} marker={m} today={today} canEdit={canEdit} onChanged={sheets.reload} />,
               }}
             />
           </section>
