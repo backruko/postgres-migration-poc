@@ -36,16 +36,21 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
     is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
     copy of the current version into a draft.
   - **Login**: a simple password per staff + session cookie, replacing `X-Staff-Id` in `get_current_staff` (SSO later).
-  - **Deployment**: server / VM, uvicorn as a service, frontend production build same-origin with SPA fallback,
-    PostgreSQL + daily backup, the two scheduled jobs on the server, production `.env`; then a go-live checklist
-    (real master data, `create_orders.py`, browser checks).
+  - **Deployment** (user's decisions 2026-11-05, doc rev 78): **Linux VM + Docker Compose**, services `db`
+    (PostgreSQL 16, volume, daily `pg_dump`), `app` (uvicorn + production frontend build same-origin with SPA
+    fallback), **`worker`** = a loop replacing Task Scheduler: release due orders, sleep until the next release
+    moment capped at 60 s (≈1 min precision; overdue ones go out on the next pass), plus the daily plan extension at
+    00:05 (later: notifications). Chosen over per-order JIT timers (too many invalidation paths, lost on restart) and
+    over a 1-min OS cron. Worker built **in the deployment step** (order unchanged); the two local Task Scheduler
+    entries stay until then. Production `.env` outside the image; then a go-live checklist (real master data,
+    `create_orders.py`, browser checks).
 - **Pool (after go-live)**, smallest first: (1) notifications (mail / Teams / Slack)
   for まもなく / 遅れ — needs the user's tool + webhook; (2) SFTP watcher "B" (§2 "Todo pool") — needs server access
   and file rules; (3) SOP version screen + "impact before approval" list (no SOP UI exists yet); (4) client-limited
   role (§2 "Planned"); (5) real login replacing `X-Staff-Id` (design doc first). Plan any of them like Phases 5–7:
   questions first (AskUserQuestion with a recommended option), a step plan the user approves, one step at a time,
   each left uncommitted until "go".
-- **Browser check — not yet clicked through by the user** (only U.1–U.3 were, OK): dashboard tabs + badges, the order
+- **Browser check — done by the user, all fine (confirmed 2026-11-05, late session)** for the list below. Was: not yet clicked through (only U.1–U.3 were, OK): dashboard tabs + badges, the order
   drawer (staff names in 記録 / step lines, SOP 指定 / 解除, 締切 / 完了 lines, まもなく), the 締切 section of the template
   form + 締切 column, まもなく / 遅れ on rows, the 2-min auto-refresh, admin-only settings (sheets / holidays / templates /
   業務の設定) and the operator's read-only calendar, 直前の上流 in 業務の依存関係, the SLA page + CSV in Excel. Earlier
@@ -61,7 +66,8 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   lookback_days, L.1) → `d17d631f5ad2` (plan_template deadline fields, N.1) → `c5bb40015e61` (ope_order deadline
   snapshot + deadline_at / warn_at / finished_at, N.2) → `51d8d829a2d2` (attention partial indexes, N.3).
   **The user's dev DB:** on 2026-11-05 at 16:39 their uvicorn (8000) was already reading the N.2 columns and serving
-  `/ops/attention`, so it was upgraded at least to `c5bb40015e61`, very likely to head — confirm with the user, never
+  `/ops/attention`, so it was upgraded at least to `c5bb40015e61`; **the user confirmed it is at head `51d8d829a2d2`
+  (2026-11-05, late session)** — never
   run alembic against `dev_db` myself. The user runs `alembic upgrade head`; their uvicorn on 8000 auto-reloads, so a
   model change without the migration returns 500 until they upgrade. **Warn them whenever a step adds a migration.**
   Dev DB facts: staff 1 login `system` has system_admin + operator / checker / releaser but **not admin** (needs
@@ -108,7 +114,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 77 (2026-11-05)** — read with `{"kind": "view", "sinceRev": 77}` to see only newer edits, and
+**Last rev written by me: 78 (2026-11-05, MVP deployment paragraph after the delivery-phase list)** — read with `{"kind": "view", "sinceRev": 78}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
