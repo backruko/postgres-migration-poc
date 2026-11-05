@@ -1,8 +1,7 @@
-import { Alert, App, Button, Form, Input, InputNumber, Modal, Space, Table, Tag, Typography } from "antd";
+import { Alert, App, Button, Empty, Form, Input, InputNumber, Modal, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { signalApi } from "../../domain/ope/api/signalApi";
-import { useOpenSignals } from "../../domain/ope/hooks/useOpenSignals";
 import { canHandleSignals, SIGNAL_RESULT_LABEL } from "../../domain/ope/lib/signals";
 import type { Signal } from "../../domain/ope/types";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
@@ -11,6 +10,10 @@ import { TIMEZONE } from "../../shared/config";
 import { inZone } from "../../shared/lib/datetime";
 
 interface Props {
+  /** 人の対応が必要な信号（ページで取得する: タブの件数にも使う）。操作する職員が有効でないときは取得しない */
+  signals: { data: Signal[] | null; error: ApiError | null; reload: () => void };
+  /** 操作する職員が有効か（無効なら一覧を出さない） */
+  active: boolean;
   /** 対応でオーダーが変わったとき（ダッシュボードを取り直す） */
   onChanged: () => void;
 }
@@ -24,11 +27,9 @@ interface Values {
  * 照合できなかった信号（人の対応が必要なもの）。日付に関係なく、未対応のものすべてを日次ダッシュボードの上に出す。
  * 対応: オーダー番号を入れるとそのオーダーを完了にしてから対応済みに、入れなければ対応済みにするだけ（誤送信など）。
  */
-export function SignalsPanel({ onChanged }: Props) {
+export function SignalsPanel({ signals, active, onChanged }: Props) {
   const { message } = App.useApp();
   const me = useCurrentStaff();
-  const active = me.data?.status === "active";
-  const signals = useOpenSignals(active);
   const canHandle = canHandleSignals(me.data);
   const [form] = Form.useForm<Values>();
   const [target, setTarget] = useState<Signal | null>(null);
@@ -36,7 +37,9 @@ export function SignalsPanel({ onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const rows = signals.data ?? [];
-  if (!active || (rows.length === 0 && !signals.error)) return null;
+  if (!active) {
+    return <Empty description="信号を見るには、ナビの「操作する職員」で有効な職員を選んでください" />;
+  }
 
   const open = (s: Signal) => {
     form.resetFields();
@@ -88,9 +91,17 @@ export function SignalsPanel({ onChanged }: Props) {
 
   return (
     <section className="signals-panel" aria-label="照合できなかった信号">
-      <Typography.Title level={5}>照合できなかった信号 <span className="muted">（{rows.length} 件）</span></Typography.Title>
+      <Typography.Text type="secondary">照合できなかった信号（日付によらず、人の対応が必要なもの）</Typography.Text>
       {signals.error && <Alert type="error" showIcon message={`信号を取得できませんでした: ${signals.error.message}`} />}
-      <Table<Signal> rowKey="id" columns={columns} dataSource={rows} pagination={false} size="small" scroll={{ x: 760 }} />
+      <Table<Signal>
+        rowKey="id"
+        columns={columns}
+        dataSource={rows}
+        pagination={false}
+        size="small"
+        scroll={{ x: 760 }}
+        locale={{ emptyText: <Empty description="対応が必要な信号はありません" /> }}
+      />
 
       <Modal
         open={target !== null}

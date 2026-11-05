@@ -1,4 +1,4 @@
-import { Alert, Table, Tag } from "antd";
+import { Empty, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { ORDER_STATUS_COLOR, ORDER_STATUS_LABEL } from "../../domain/ope/lib/orderActions";
 import type { Attention, AttentionItem } from "../../domain/ops/types";
@@ -13,12 +13,12 @@ interface Props {
 }
 
 /**
- * 締切が近い・遅れのオーダー（日付によらず。N.4）。日次ダッシュボードの上に、該当があるときだけ出す。
+ * 締切が近い・遅れのオーダー（日付によらず。N.4）。日次ダッシュボードの「締切・遅れ」タブ。
  * 遅れ = 締切を過ぎて完了・取消になっていない、まもなく = テンプレートで設定した「何分前」から締切まで。
  */
 export function AttentionPanel({ data, today, timezone, onOpenOrder }: Props) {
   const items = data?.items ?? [];
-  if (!items.length) return null;
+  if (!items.length) return <Empty description="締切が近い・遅れのオーダーはありません" />;
   const late = items.filter((i) => i.late).length;
   const soon = items.length - late;
 
@@ -43,12 +43,9 @@ export function AttentionPanel({ data, today, timezone, onOpenOrder }: Props) {
 
   return (
     <section className="attention-panel" aria-label="締切が近い・遅れのオーダー">
-      <Alert
-        type={late ? "error" : "warning"}
-        showIcon
-        message={`締切が近い・遅れのオーダー: 遅れ ${late} 件・まもなく ${soon} 件${data?.truncated ? "（ほかにもあります）" : ""}`}
-        description="日付によらず、締切の早い順。行をクリックすると詳細と操作を開きます。"
-      />
+      <Typography.Text type="secondary">
+        遅れ {late} 件・まもなく {soon} 件{data?.truncated ? "（ほかにもあります）" : ""} ・ 日付によらず締切の早い順。行をクリックすると詳細と操作を開きます
+      </Typography.Text>
       <Table<AttentionItem>
         rowKey="order_id"
         columns={columns}
