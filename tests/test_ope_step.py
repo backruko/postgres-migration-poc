@@ -13,6 +13,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from tests.client_codes import new_client_code
 from src.domain_biz.models import SOPStatus, SOPStepTemplate, SOPVersion
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
@@ -52,7 +53,7 @@ def setup(db, monkeypatch):
     """
     monkeypatch.setattr(slot_events, "_listeners", [])
     # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
-    code = "P" + uuid.uuid4().hex[:3].upper()
+    code = new_client_code("P")
     client_repo.create(db, obj_in=ClientCreate(code=code, name="ope step test client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="ope step biz", business_seq=1, manager_email=None, description=None))
     version = SOPVersion(

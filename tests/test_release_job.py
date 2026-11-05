@@ -11,6 +11,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
+from tests.client_codes import new_client_code
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import ReleaseMode
 from src.domain_biz.schemas import BizMasterCreate, BizMasterUpdate
@@ -38,7 +39,7 @@ def db():
 
 def business(db, mode: ReleaseMode, release_time=time(3, 0), days_before=0):
     """業務と毎日 9:00 の予定（オーダーは自動で作られる）。オーダーを予定日順に返す"""
-    code = "R" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("R")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="release client"))
     biz = biz_services.create_biz(db, BizMasterCreate(client_code=code, name="release biz", business_seq=1, manager_email=None, description=None))
     biz_services.update_biz(db, biz.id, BizMasterUpdate.model_validate(

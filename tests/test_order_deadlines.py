@@ -16,6 +16,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from tests.client_codes import new_client_code
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.coordination import services as ops_services
@@ -45,7 +46,7 @@ def db():
 
 @pytest.fixture
 def biz_id(db):
-    code = "Y" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("Y")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="deadline client"))
     return biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="deadline biz", business_seq=1, manager_email=None, description=None)).id
 

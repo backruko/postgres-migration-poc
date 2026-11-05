@@ -8,12 +8,12 @@
 
 ※ テストごとに一意な顧客コードを使ってデータを分離しています（制約違反の確認は各テストの中でロールバックする）。
 """
-import uuid
 from datetime import date, datetime, time, timezone
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from tests.client_codes import new_client_code
 from src.domain_biz.models import BizDependency, DependencyKind, DependencyMatchRule
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
@@ -46,7 +46,7 @@ def setup(db, monkeypatch):
     ここではテーブルの制約だけを確かめるため、plan → オーダーの自動追従（4.3）を止める。
     """
     monkeypatch.setattr(slot_events, "_listeners", [])
-    code = "L" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("L")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="link client"))
     orders = {}
     biz_ids = {}

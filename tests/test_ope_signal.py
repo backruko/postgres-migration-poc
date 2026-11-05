@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from tests.client_codes import new_client_code
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.domain_ope.models import OpeOrder, OpeSignal, SignalResult
@@ -42,7 +43,7 @@ def db():
 
 @pytest.fixture
 def setup(db):
-    code = "H" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("H")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="signal client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="受領", business_seq=1, manager_email=None, description=None))
     template = plan_services.create_template(db, RRuleTemplateCreate(

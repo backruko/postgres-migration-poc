@@ -5,12 +5,12 @@
 
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
-import uuid
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
+from tests.client_codes import new_client_code
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import BizDependency, DependencyKind, DependencyMatchRule
@@ -33,7 +33,7 @@ def db():
 
 
 def client_with_businesses(db, count: int) -> list[int]:
-    code = "G" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("G")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="dependency client"))
     return [
         biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name=f"biz {n}", business_seq=n, manager_email=None, description=None)).id

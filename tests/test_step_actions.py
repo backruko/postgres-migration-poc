@@ -15,6 +15,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
+from tests.client_codes import new_client_code
 from src.coordination import services as ops_services
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, ForbiddenError
@@ -66,7 +67,7 @@ def staff(db):
 @pytest.fixture
 def started(db, staff, monkeypatch):
     """ステップ3件のオーダーをリリースして開始したもの（予定日を「今日」にして開始する）"""
-    code = "M" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("M")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="step action client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="step biz", business_seq=1, manager_email=None, description=None))
     version = SOPVersion(biz_master_id=biz.id, version_number=1, version_tag="v1.0.0", status=SOPStatus.ACTIVE,

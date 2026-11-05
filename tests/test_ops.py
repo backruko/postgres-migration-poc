@@ -9,6 +9,7 @@ from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 
+from tests.client_codes import new_client_code
 from src.coordination import services as ops_services
 from src.core.exceptions import BadRequestError
 from src.domain_biz.schemas import BizMasterCreate
@@ -49,7 +50,7 @@ def db():
 
 def make_client(db, name="test client") -> str:
     # test_plan.py の顧客（"T" で始まる）とコードが衝突しないよう、別の先頭文字を使う
-    code = "D" + uuid.uuid4().hex[:3].upper()
+    code = new_client_code("D")
     client_repo.create(db, obj_in=ClientCreate(code=code, name=name))
     return code
 

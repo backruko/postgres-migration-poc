@@ -11,6 +11,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
+from tests.client_codes import new_client_code
 from src.coordination import order_sync
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import DuplicatedRecordError
@@ -48,7 +49,7 @@ def db():
 @pytest.fixture
 def biz_id(db):
     # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
-    code = "S" + uuid.uuid4().hex[:3].upper()
+    code = new_client_code("S")
     client_repo.create(db, obj_in=ClientCreate(code=code, name="sync test client"))
     return biz_master_repo.create(
         db, obj_in=BizMasterCreate(client_code=code, name="sync biz", business_seq=1, manager_email=None, description=None)
