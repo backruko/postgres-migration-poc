@@ -188,6 +188,7 @@ h1 .client { color: var(--accent); }
 .detail-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .detail h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 22px; }
 .detail-wd { font-size: 15px; margin-left: 6px; color: var(--muted); }
+.detail-daily-link { display: inline-block; font-size: 12px; margin-top: 4px; }
 .detail-holiday { color: var(--sun); font-size: 13px; margin-top: 2px; }
 .detail-count { color: var(--muted); font-size: 12px; margin: 4px 0 12px; }
 .items { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }

@@ -1,5 +1,6 @@
-import { PlusOutlined } from "@ant-design/icons";
+import { DashboardOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button } from "antd";
+import { Link } from "react-router-dom";
 import type { CalendarDay, CalendarTemplateInfo, ClientOccurrence } from "../../../domain/plan/types";
 import { weekdayJa } from "../../../shared/lib/datetime";
 import { OccurrenceList, type OccurrenceActions } from "./OccurrenceList";
@@ -31,6 +32,9 @@ export function DayDetail({ day, visible, templates, timezone, now, today, actio
           臨時の予定
         </Button>
       </div>
+      <Link to={{ pathname: "/daily", search: `?date=${day.date}` }} className="detail-daily-link">
+        <DashboardOutlined /> 日次ダッシュボードで開く
+      </Link>
       {day.holiday_name && <div className="detail-holiday">休日 ・ {day.holiday_name}</div>}
       <div className="detail-count">予定 {items.length} 件</div>
       {items.length ? (

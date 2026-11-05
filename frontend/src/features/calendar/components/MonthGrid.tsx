@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import type { CalendarDay, ClientOccurrence } from "../../../domain/plan/types";
 import { weekdayJa } from "../../../shared/lib/datetime";
 import { OccurrenceChip } from "./OccurrenceChip";
@@ -22,8 +23,9 @@ export function dayClass(day: CalendarDay): string {
   return "";
 }
 
-/** 日曜始まりの月グリッド */
+/** 日曜始まりの月グリッド（クリックで日を選択、ダブルクリックでその日の日次ダッシュボードへ） */
 export function MonthGrid({ days, visible, selected, today, now, timezone, onSelect }: Props) {
+  const navigate = useNavigate();
   if (!days.length) return null;
   const leading = days[0].weekday % 7; // 日曜=0
   const trailing = (7 - ((leading + days.length) % 7)) % 7;
@@ -58,6 +60,8 @@ export function MonthGrid({ days, visible, selected, today, now, timezone, onSel
               aria-pressed={day.date === selected}
               aria-label={`${day.date} ${weekdayJa(day.weekday)}曜日 ${day.holiday_name ?? ""} 予定${items.length}件`}
               onClick={() => onSelect(day.date)}
+              onDoubleClick={() => navigate({ pathname: "/daily", search: `?date=${day.date}` })}
+              title="ダブルクリックでこの日の日次ダッシュボードを開く"
             >
               <span className="day-head">
                 <span className="day-num">{Number(day.date.slice(8))}</span>
