@@ -1,8 +1,8 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import { BizSettingsPanel } from "./BizSettingsPanel";
 import type { BizMaster } from "../../domain/biz/types";
@@ -13,6 +13,7 @@ import { describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domai
 import type { PlanTemplate } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
 import { inZone } from "../../shared/lib/datetime";
+import { ReturnLink } from "../../shared/ui/ReturnLink";
 import { chipStyle } from "../calendar/lib/chipStyle";
 import { TemplateFormModal } from "./TemplateFormModal";
 
@@ -96,6 +97,9 @@ export function PlanSettingsPage() {
   const [params, setParams] = useSearchParams();
   const parsed = Number(params.get("biz"));
   const bizId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  // ?template= は日次ダッシュボードからのリンク。その行を強調し、見える位置までスクロールする
+  const parsedTemplate = Number(params.get("template"));
+  const focusTemplateId = Number.isInteger(parsedTemplate) && parsedTemplate > 0 ? parsedTemplate : null;
 
   const bizes = useBizMasters();
   const options = useMemo(() => bizOptions(bizes.data ?? []), [bizes.data]);
@@ -105,6 +109,11 @@ export function PlanSettingsPage() {
 
   const { data, loading, error, reload } = usePlanTemplates(bizId);
   const withoutUpcoming = (data ?? []).filter((t) => !t.next_occurrence_at).length;
+  const focusLoaded = focusTemplateId !== null && (data ?? []).some((t) => t.id === focusTemplateId);
+  useEffect(() => {
+    if (!focusLoaded) return;
+    document.querySelector(`.template-row-focus`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusLoaded, focusTemplateId]);
   // 作成・編集モーダル（template が null なら新規作成）。閉じる間の表示が切り替わらないよう、閉じても template は残す
   const [editor, setEditor] = useState<{ open: boolean; template: PlanTemplate | null }>({ open: false, template: null });
   const openEditor = (template: PlanTemplate | null) => setEditor({ open: true, template });
@@ -163,7 +172,9 @@ export function PlanSettingsPage() {
     },
   ];
 
-  const selectBiz = (id?: number) => setParams(id ? { biz: String(id) } : {});
+  // 業務を選び直すと ?template=（強調）は外れる。日次ダッシュボードから来たときの「戻る」リンク（state）は残す
+  const location = useLocation();
+  const selectBiz = (id?: number) => setParams(id ? { biz: String(id) } : {}, { state: location.state });
 
   return (
     <div className="wrap">
@@ -171,6 +182,7 @@ export function PlanSettingsPage() {
         <div>
           <div className="eyebrow">事前設定</div>
           <h1>予定テンプレート</h1>
+          <ReturnLink />
         </div>
       </header>
 
@@ -229,6 +241,7 @@ export function PlanSettingsPage() {
           </div>
           <Table<PlanTemplate>
             rowKey="id"
+            rowClassName={(t) => (t.id === focusTemplateId ? "template-row-focus" : "")}
             columns={tableColumns}
             dataSource={data ?? []}
             loading={loading}

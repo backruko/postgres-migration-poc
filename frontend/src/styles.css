@@ -188,7 +188,8 @@ h1 .client { color: var(--accent); }
 .detail-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .detail h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 22px; }
 .detail-wd { font-size: 15px; margin-left: 6px; color: var(--muted); }
-.detail-daily-link { display: inline-block; font-size: 12px; margin-top: 4px; }
+.detail-daily-link.ant-btn { padding: 0; height: auto; font-size: 12px; margin-top: 4px; }
+.return-link { display: inline-block; font-size: 13px; margin-top: 4px; }
 .detail-holiday { color: var(--sun); font-size: 13px; margin-top: 2px; }
 .detail-count { color: var(--muted); font-size: 12px; margin: 4px 0 12px; }
 .items { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
@@ -253,6 +254,9 @@ h1 .client { color: var(--accent); }
 .daily-item.has-order { cursor: pointer; border-radius: 4px; margin-inline: -4px; padding: 2px 4px; }
 .daily-item.has-order:hover { background: var(--select); }
 .daily-item.has-order:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.daily-template-link { margin-inline-start: auto; color: var(--muted); padding: 0 4px; }
+.daily-template-link:hover, .daily-template-link:focus-visible { color: var(--accent); }
+.template-row-focus > td { background: var(--select) !important; }
 .order-status-tag { min-width: 64px; text-align: center; }
 .order-blocked { margin-top: 6px; font-size: 12px; }
 .order-event { display: grid; gap: 2px; font-size: 13px; }

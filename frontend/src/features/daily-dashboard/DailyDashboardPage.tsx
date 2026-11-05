@@ -1,10 +1,11 @@
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { Alert, Button, DatePicker, Empty, Space, Spin, Tag } from "antd";
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { useDailyDashboard } from "../../domain/ops/hooks/useDailyDashboard";
 import { TIMEZONE } from "../../shared/config";
 import { dayjs, todayIn } from "../../shared/lib/datetime";
+import { ReturnLink } from "../../shared/ui/ReturnLink";
 import { DailyClientSection } from "./DailyClientSection";
 import { OrderDrawer } from "./OrderDrawer";
 import { SignalsPanel } from "./SignalsPanel";
@@ -25,7 +26,9 @@ export function DailyDashboardPage() {
   // 開いているオーダー（予定の行をクリックすると右のドロワーで詳細と操作）
   const [openOrder, setOpenOrder] = useState<{ id: number; title: string } | null>(null);
 
-  const go = (next: string) => setParams({ date: next }, { replace: true });
+  // 日を切り替えても、カレンダーから来たときの「戻る」リンク（location.state）は残す
+  const location = useLocation();
+  const go = (next: string) => setParams({ date: next }, { replace: true, state: location.state });
 
   const data = dashboard.data?.date === date ? dashboard.data : null; // 別の日のデータを一瞬表示しない
   const summary = data ? summarize(data) : null;
@@ -39,6 +42,7 @@ export function DailyDashboardPage() {
             {dayLabel(date)}
             {dashboard.loading && <Spin size="small" className="header-spin" />}
           </h1>
+          <ReturnLink />
         </div>
         {summary && (
           <div className="summary">
