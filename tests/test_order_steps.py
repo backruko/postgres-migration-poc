@@ -15,6 +15,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
+from tests.client_codes import new_client_code
 from src.core.exceptions import BadRequestError
 from src.domain_biz.models import SOPStatus, SOPStepTemplate, SOPVersion
 from src.domain_biz.schemas import BizMasterCreate
@@ -77,7 +78,7 @@ def setup(db):
     毎日の予定と、承認済みバージョンのステップテンプレート4件:
     1 always / 2 month_in（base_tuesday の翌月のみ）/ 3 first_in_week / 4 always（is_blocking）
     """
-    code = "K" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("K")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="step client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="step biz", business_seq=1, manager_email=None, description=None))
     tuesday = base_tuesday()
@@ -152,7 +153,7 @@ def test_preview_follows_the_conditions_and_release_creates_the_steps(db, setup,
 
 
 def test_release_without_a_version_has_no_steps(db, staff):
-    code = "K" + uuid.uuid4().hex[:3].upper()
+    code = new_client_code("K")
     client_repo.create(db, obj_in=ClientCreate(code=code, name="no sop client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="no sop", business_seq=1, manager_email=None, description=None))
     template = plan_services.create_template(db, RRuleTemplateCreate(

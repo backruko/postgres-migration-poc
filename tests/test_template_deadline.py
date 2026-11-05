@@ -7,7 +7,6 @@
 
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
-import uuid
 from datetime import date, time
 
 import pytest
@@ -15,6 +14,7 @@ from pydantic import ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
+from tests.client_codes import new_client_code
 from src.core.exceptions import BadRequestError
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
@@ -37,7 +37,7 @@ def db():
 
 @pytest.fixture
 def biz_id(db):
-    code = "F" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("F")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="deadline client"))
     return biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="deadline biz", business_seq=1, manager_email=None, description=None)).id
 

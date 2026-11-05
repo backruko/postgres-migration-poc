@@ -15,6 +15,7 @@ from datetime import date, time, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
+from tests.client_codes import new_client_code
 from src.coordination import services as ops_services
 from src.core.exceptions import BadRequestError, DuplicatedRecordError
 from src.domain_biz import services as biz_services
@@ -63,7 +64,7 @@ def daily(db, biz_id: int):
 
 
 def setup_pair(db, kind=DependencyKind.HARD, with_upstream=True):
-    code = "Q" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("Q")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="dep start client"))
     up = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="受領", business_seq=1, manager_email=None, description=None))
     down = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="本処理", business_seq=2, manager_email=None, description=None))

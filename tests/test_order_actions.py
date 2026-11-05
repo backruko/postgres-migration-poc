@@ -12,6 +12,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from tests.client_codes import new_client_code
 from src.core.exceptions import BadRequestError, DuplicatedRecordError
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
@@ -46,7 +47,7 @@ def db():
 @pytest.fixture
 def setup(db):
     """顧客・業務・毎日 9:00 の予定（オーダーは自動で作られる）と職員"""
-    code = "A" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("A")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="actions client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="actions biz", business_seq=1, manager_email=None, description=None))
     template = plan_services.create_template(db, RRuleTemplateCreate(

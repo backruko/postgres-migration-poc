@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from tests.client_codes import new_client_code
 from src.core.exceptions import BadRequestError, DuplicatedRecordError
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import BizMaster, CompletionMode, ExecutionType, SOPStatus, SOPStepTemplate, SOPVersion
@@ -47,7 +48,7 @@ def db():
 
 
 def client_with_businesses(db, count: int) -> tuple[str, list[int]]:
-    code = "E" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("E")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="client event client"))
     ids = [
         biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name=f"biz {n}", business_seq=n, manager_email=None, description=None)).id

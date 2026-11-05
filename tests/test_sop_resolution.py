@@ -11,6 +11,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
+from tests.client_codes import new_client_code
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import SOPStatus, SOPVersion
@@ -41,7 +42,7 @@ def db():
 
 
 def business_with_orders(db):
-    code = "V" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("V")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="sop client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="sop biz", business_seq=1, manager_email=None, description=None))
     template = plan_services.create_template(db, RRuleTemplateCreate(

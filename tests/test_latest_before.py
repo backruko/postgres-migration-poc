@@ -14,6 +14,7 @@ from datetime import date, datetime, time, timedelta
 import pytest
 from sqlalchemy import select
 
+from tests.client_codes import new_client_code
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import DependencyMatchRule
 from src.domain_biz.schemas import BizDependencyCreate, BizMasterCreate
@@ -45,7 +46,7 @@ def db():
 
 @pytest.fixture
 def bizes(db):
-    code = "W" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("W")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="latest client"))
     up = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="週次の受領", business_seq=1, manager_email=None, description=None))
     down = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="毎日の処理", business_seq=2, manager_email=None, description=None))

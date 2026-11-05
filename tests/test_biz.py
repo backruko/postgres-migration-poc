@@ -4,13 +4,13 @@ domain_biz のテスト（業務のリリース設定）。
 
 ※ Service層は内部で commit するため、テストごとに一意な顧客コードを使ってデータを分離しています。
 """
-import uuid
 from datetime import time
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
+from tests.client_codes import new_client_code
 from src.domain_biz import services
 from src.domain_biz.models import ReleaseMode
 from src.domain_biz.schemas import BizMasterCreate, BizMasterResponse, BizMasterUpdate
@@ -32,7 +32,7 @@ def db():
 @pytest.fixture
 def biz(db):
     # test_plan.py ("T") / test_ops.py ("D") の顧客とコードが衝突しないよう、別の先頭文字を使う
-    code = "B" + uuid.uuid4().hex[:3].upper()
+    code = new_client_code("B")
     client_repo.create(db, obj_in=ClientCreate(code=code, name="biz test client"))
     return services.create_biz(
         db, BizMasterCreate(client_code=code, name="release test", business_seq=1, manager_email=None, description=None)

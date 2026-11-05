@@ -16,6 +16,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from tests.client_codes import new_client_code
 from src.coordination import services as ops_services
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.domain_biz import services as biz_services
@@ -62,7 +63,7 @@ def staff(db):
 @pytest.fixture
 def setup(db):
     """信号で完了する顧客側の出来事（LIGHTWEIGHT・AUTOMATIC）の業務と、毎日の予定"""
-    code = "J" + uuid.uuid4().hex[:3].upper()  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
+    code = new_client_code("J")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="signal client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="データ受領", business_seq=1, manager_email=None, description=None))
     biz_services.update_biz(db, biz.id, BizMasterUpdate.model_validate(
