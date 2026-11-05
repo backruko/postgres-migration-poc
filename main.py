@@ -1,13 +1,24 @@
 import logging
+import os
+from logging.handlers import RotatingFileHandler
 
-# ログの設定（ファイルとコンソールの両方に出力する）
+# ログの設定（ファイルとコンソールの両方に出力する）。
+# ファイルは大きさでローテーションする: LOG_MAX_MB（既定 10）を超えたら app.log → app.log.1 → … と送り、
+# LOG_BACKUPS（既定 5）個より古いものは消す（合計で最大 約 (LOG_BACKUPS + 1) × LOG_MAX_MB）。
+# ファイル名は LOG_FILE で変えられる（同じフォルダで別のサーバーを動かすときは別の名前にする:
+# Windows では、開いている別のプロセスがあるとローテーションの名前の変更に失敗する）。
 logging.basicConfig(
     level=logging.INFO,  # INFOレベル以上のログを出力
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("app.log", encoding="utf-8"),  # ファイルに保存
-        logging.StreamHandler()                            # コンソールにも表示
-    ]
+        RotatingFileHandler(
+            os.environ.get("LOG_FILE", "app.log"),
+            maxBytes=int(os.environ.get("LOG_MAX_MB", "10")) * 1024 * 1024,
+            backupCount=int(os.environ.get("LOG_BACKUPS", "5")),
+            encoding="utf-8",
+        ),
+        logging.StreamHandler(),  # コンソールにも表示
+    ],
 )
 
 from fastapi import FastAPI, Request, status

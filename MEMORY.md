@@ -785,6 +785,7 @@ home PC. Their office `.env` (dev DB) is not available there.
 - **"go" from the user** (also typed "GO" or "ご" with the Japanese IME) after a finished step = commit it; after a
   commit = start the next step (questions first). "commit and merge" = commit, then merge the feature branch into
   `main` locally with `--no-ff` (check `main` hasn't diverged first); they push.
+- **Logging (2026-11-05):** `app.log` rotates by size (`RotatingFileHandler` in `main.py`: 10 MB × 5 backups; env vars `LOG_FILE` / `LOG_MAX_MB` / `LOG_BACKUPS` — real env vars, `.env` is not exported). **Start my uvicorn on 8001 with `LOG_FILE=app-8001.log`** (Windows can't rename a file another process holds open). The user's old app.log was 1.3 GB (SQL echo); `echo=True` still doubles SQL on the console.
 - **Shell / editing lessons (2026-11-04):** write edit scripts to the scratchpad with the Write tool and run them
   with `python <file> < /dev/null` — never `python - <<'EOF' < /dev/null` (the redirect replaces the heredoc →
   interactive REPL that hangs), never `sed … $f` with a possibly empty `$f` (reads stdin, hangs). Build the whole new
