@@ -183,9 +183,14 @@ def test_sheet_rule_matches_the_same_sheet_event_and_skips_orders_without_one(db
     downs = orders_of(db, bizes["down"])
     sheet_downs = [d for d in downs if d.source_sheet_event_id is not None]
     assert sheet_downs
+    # 上流（+0日 9:00）が既に過去で下流（+1日）だけ未来の日は、上流のオーダーが無い（過去の予定にはオーダーを作らない）
+    # → 待ちの行になる。実行する時刻によってはこの日が混ざるので、両方を受け付ける
+    assert any(d.source_sheet_event_id in ups for d in sheet_downs)
     for d in sheet_downs:
         (row,) = active_links(db, d.id)
-        assert row.upstream_order_id == ups[d.source_sheet_event_id].id and row.match_sheet_event_id == d.source_sheet_event_id
+        assert row.match_sheet_event_id == d.source_sheet_event_id and row.upstream_biz_id == bizes["up"]
+        up = ups.get(d.source_sheet_event_id)
+        assert row.upstream_order_id == (up.id if up else None)
     # シート日付の無い下流のオーダーには、この定義は当てはまらない
     assert all(active_links(db, d.id) == [] for d in downs if d.source_sheet_event_id is None)
 

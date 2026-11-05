@@ -16,7 +16,9 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   pushed), `feature/ope-signals` (Phase 7, never pushed). **The user pushes; I never do.** The user sometimes commits
   a step themselves (e.g. 5.5 as `75cc109 phase5`) — check `git log` before committing.
 - **Current work (2026-11-05): `feature/ux-shortcuts`** (from `main` `bf22125`), frontend shortcuts + an admin guard
-  on the template page — see §2 "UX shortcuts". U.1 `9b7cb38`, U.2 `f002f9f`, U.3 committed; U.4 = candidate. Open: `test_order_links.py::test_sheet_rule_…` fails when a mock 本締 upstream (09:00, +0) is past but its +1 downstream is future (waiting row, KeyError in the test) — test fragility, seen 2026-11-05.
+  on the template page — see §2 "UX shortcuts". U.1 `9b7cb38`, U.2 `f002f9f`, U.3 `34914a8`; U.4 = candidate. Test fix (2026-11-05):
+  `test_order_links.py::test_sheet_rule_…` failed when a mock 本締 upstream (+0, 09:00) was already past but its +1
+  downstream was future (correct waiting row, KeyError in the test) → now accepts a waiting row for those.
 - **Earlier "next" list (still valid):** Ask the user what to do next. Candidates: (a) the user's browser check of Phases 5–7
   screens (below) and fixes from it; (b) open questions in the doc: "latest before due" dependency matching, the
   client-limited role, other signal transports (file arrival / DB watcher scripts posting to `POST /ope/signals`);
