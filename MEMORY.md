@@ -23,7 +23,23 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   | Dashboard tabs | `feature/dashboard-tabs` → `0c6d15e` | 日次ダッシュボード tabs 予定 / 締切・遅れ (n) / 信号 (n), `?tab=` |
   | Logging | `fix/log-rotation` → `4cbeab2`, `44e1687` (main), `fix/sql-echo-switch` → `fb0c827` | `app.log` rotates 10 MB × 5 (`LOG_FILE` / `LOG_MAX_MB` / `LOG_BACKUPS` env vars); rotated files git-ignored; **SQL logging off by default**, `SQL_ECHO=1` (in `.env` or env) turns it on |
   | SLA report | `feature/sla-report` → `706f166` | `GET /ops/sla` + nav 「SLA」 page `/reports/sla` (client × deadline month: 完了 / 遅れ / 期限内率 / 平均遅れ / 未完了の遅れ, CSV export) |
-- **Next: nothing planned — ask the user.** Remaining pool, smallest first: (1) notifications (mail / Teams / Slack)
+- **Next: the MVP roadmap (decided by the user 2026-11-05 evening).** Goal: a small MVP online on the **internal
+  network, own team only**. Order: **M1 → M2 → login → deployment**; the pool below waits until after go-live.
+  - **M1 client + business screens** (branch `feature/master-screens`, step plan proposed, not started): M1.1 backend —
+    client create / edit / deactivate / re-activate = admin (list open), deactivate refused while the client has active
+    businesses, `include_inactive` on the list, client code fixed; business `business_seq` optional → next free number
+    per client (never reusing a deleted business's number); M1.2 frontend — pages 「顧客」 `/settings/clients` and 「業務」
+    `/settings/businesses?client=` (list, 登録, edit, 無効 / 有効 or 削除 / 元に戻す, link to 予定テンプレート), admin-only
+    buttons. User's decisions: clients deactivate only (no hard delete); business code automatic and fixed.
+  - **M2 SOP**: backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
+    delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
+    is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
+    copy of the current version into a draft.
+  - **Login**: a simple password per staff + session cookie, replacing `X-Staff-Id` in `get_current_staff` (SSO later).
+  - **Deployment**: server / VM, uvicorn as a service, frontend production build same-origin with SPA fallback,
+    PostgreSQL + daily backup, the two scheduled jobs on the server, production `.env`; then a go-live checklist
+    (real master data, `create_orders.py`, browser checks).
+- **Pool (after go-live)**, smallest first: (1) notifications (mail / Teams / Slack)
   for まもなく / 遅れ — needs the user's tool + webhook; (2) SFTP watcher "B" (§2 "Todo pool") — needs server access
   and file rules; (3) SOP version screen + "impact before approval" list (no SOP UI exists yet); (4) client-limited
   role (§2 "Planned"); (5) real login replacing `X-Staff-Id` (design doc first). Plan any of them like Phases 5–7:
