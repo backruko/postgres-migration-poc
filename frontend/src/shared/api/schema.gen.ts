@@ -895,6 +895,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ops/sla": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Sla Report Endpoint
+         * @description SLA の集計: 顧客 × 締切の月（日本時間）。完了・遅れ・期限内率・平均遅れ（遅れたものだけ）・未完了の遅れ。
+         *     取消したオーダーは数えない。期間は最大 36 か月。有効な職員なら誰でも。
+         */
+        get: operations["get_sla_report_endpoint_ops_sla_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/staff/me": {
         parameters: {
             query?: never;
@@ -3550,6 +3571,64 @@ export interface components {
          * @enum {string}
          */
         SignalResult: "matched" | "duplicate" | "unmatched" | "ambiguous";
+        /**
+         * SlaResponse
+         * @description GET /ops/sla: 顧客 × 締切の月（月の昇順、同じ月は顧客コード順）
+         */
+        SlaResponse: {
+            /** From Month */
+            from_month: string;
+            /** To Month */
+            to_month: string;
+            /**
+             * Now
+             * Format: date-time
+             * @description the time open orders were judged against
+             */
+            now: string;
+            /** Rows */
+            rows: components["schemas"]["SlaRow"][];
+        };
+        /**
+         * SlaRow
+         * @description 顧客 × 月（締切の月、日本時間）の SLA。取消したオーダーは数えない
+         */
+        SlaRow: {
+            /**
+             * Month
+             * @description YYYY-MM (month of the deadline, JST)
+             */
+            month: string;
+            /** Client Code */
+            client_code: string;
+            /** Client Name */
+            client_name: string;
+            /**
+             * Finished
+             * @description finished (received) orders
+             */
+            finished: number;
+            /**
+             * Late
+             * @description finished after their deadline
+             */
+            late: number;
+            /**
+             * On Time Rate
+             * @description (finished - late) / finished * 100, 1 decimal (null: nothing finished)
+             */
+            on_time_rate: number | null;
+            /**
+             * Avg Minutes Late
+             * @description average minutes after the deadline, late orders only (null: none late)
+             */
+            avg_minutes_late: number | null;
+            /**
+             * Open Late
+             * @description not finished yet and already past their deadline (not in the other figures)
+             */
+            open_late: number;
+        };
         /** StaffCreate */
         StaffCreate: {
             /**
@@ -8486,6 +8565,99 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_sla_report_endpoint_ops_sla_get: {
+        parameters: {
+            query?: {
+                /** @description 最初の月 YYYY-MM（省略時は to の 11 か月前） */
+                from?: string | null;
+                /** @description 最後の月 YYYY-MM（省略時は今月、日本時間） */
+                to?: string | null;
+                /** @description 顧客コードで絞り込む（省略時は全顧客） */
+                client_code?: string | null;
+            };
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlaResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

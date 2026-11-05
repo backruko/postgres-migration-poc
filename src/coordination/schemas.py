@@ -117,6 +117,26 @@ class AttentionResponse(BaseModel):
     truncated: bool = Field(description="true if more orders matched than the limit")
 
 
+class SlaRow(BaseModel):
+    """顧客 × 月（締切の月、日本時間）の SLA。取消したオーダーは数えない"""
+    month: str = Field(description="YYYY-MM (month of the deadline, JST)")
+    client_code: str
+    client_name: str
+    finished: int = Field(description="finished (received) orders")
+    late: int = Field(description="finished after their deadline")
+    on_time_rate: float | None = Field(description="(finished - late) / finished * 100, 1 decimal (null: nothing finished)")
+    avg_minutes_late: float | None = Field(description="average minutes after the deadline, late orders only (null: none late)")
+    open_late: int = Field(description="not finished yet and already past their deadline (not in the other figures)")
+
+
+class SlaResponse(BaseModel):
+    """GET /ops/sla: 顧客 × 締切の月（月の昇順、同じ月は顧客コード順）"""
+    from_month: str
+    to_month: str
+    now: datetime = Field(description="the time open orders were judged against")
+    rows: list[SlaRow]
+
+
 class DailyDashboardResponse(BaseModel):
     date: date
     timezone: str

@@ -3,10 +3,11 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from src.core.schemas.error import COMMON_ERRORS
+from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
+from src.domain_staff.auth import require_active
 from src.infrastructure.database import get_db
-from src.coordination.schemas import AttentionResponse, DailyDashboardResponse
-from src.coordination.services import get_attention, get_daily_dashboard
+from src.coordination.schemas import AttentionResponse, DailyDashboardResponse, SlaResponse
+from src.coordination.services import get_attention, get_daily_dashboard, get_sla_report
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 
@@ -38,3 +39,18 @@ def get_attention_endpoint(
     日次ダッシュボードの上の「締切が近い・遅れ」の一覧用（数分おきに読まれる想定。保存した締切を部分インデックスで引く）。
     """
     return get_attention(db=db, limit=limit)
+
+
+@router.get("/sla", response_model=SlaResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_active()
+def get_sla_report_endpoint(
+    from_month: str | None = Query(None, alias="from", description="最初の月 YYYY-MM（省略時は to の 11 か月前）"),
+    to_month: str | None = Query(None, alias="to", description="最後の月 YYYY-MM（省略時は今月、日本時間）"),
+    client_code: str | None = Query(None, description="顧客コードで絞り込む（省略時は全顧客）"),
+    db: Session = Depends(get_db),
+):
+    """
+    SLA の集計: 顧客 × 締切の月（日本時間）。完了・遅れ・期限内率・平均遅れ（遅れたものだけ）・未完了の遅れ。
+    取消したオーダーは数えない。期間は最大 36 か月。有効な職員なら誰でも。
+    """
+    return get_sla_report(db=db, from_month=from_month, to_month=to_month, client_code=client_code)

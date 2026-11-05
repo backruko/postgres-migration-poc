@@ -2,6 +2,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from src.core.exceptions import BadRequestError
@@ -16,11 +17,14 @@ from src.coordination.schemas import (
     DailyOccurrence,
     DailyOrderSummary,
     DailyVoidedItem,
+    SlaResponse,
+    SlaRow,
 )
 from src.domain_biz.models import BizMaster
 from src.domain_plan import services as plan_services
 from src.domain_plan.models import PlanTemplate, validate_timezone_name
 from src.domain_ope import links
+from src.domain_ope.models import OpeOrder, OrderStatus
 from src.infrastructure.repositories import (
     business_calendar_repo,
     client_repo,
@@ -34,6 +38,84 @@ from src.infrastructure.repositories import (
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+SLA_TIMEZONE = ZoneInfo("Asia/Tokyo")  # 月の区切り（締切の日本時間の月）
+SLA_MAX_MONTHS = 36
+
+
+def _month_start(month: str) -> datetime:
+    """YYYY-MM → その月の初め（日本時間）。形式の誤りは 400"""
+    try:
+        year, mon = (int(p) for p in month.split("-"))
+        return datetime(year, mon, 1, tzinfo=SLA_TIMEZONE)
+    except (ValueError, TypeError):
+        raise BadRequestError(f"Month must be YYYY-MM (got '{month}').")
+
+
+def _add_months(start: datetime, months: int) -> datetime:
+    index = start.year * 12 + (start.month - 1) + months
+    return start.replace(year=index // 12, month=index % 12 + 1)
+
+
+def get_sla_report(db: Session, from_month: str | None, to_month: str | None, client_code: str | None) -> SlaResponse:
+    """
+    SLA の集計（S.1、2026-11-05 の決定）: 顧客 × 締切の月（日本時間）。取消したオーダーは数えない。
+    完了 = 完了（受領）したオーダー、遅れ = そのうち締切後に完了したもの、期限内率 = (完了 − 遅れ) / 完了、
+    平均遅れ = 遅れたものだけの平均（分）、未完了の遅れ = まだ完了していないのに締切を過ぎたもの（ほかの数には入れない）。
+    期間を省略すると、今月までの 12 か月。オーダーに保存した締切・完了日時だけで計算する（記録はたどらない）。
+    """
+    now = _now()
+    this_month = now.astimezone(SLA_TIMEZONE).strftime("%Y-%m")
+    end_start = _month_start(to_month or this_month)
+    start = _month_start(from_month) if from_month else _add_months(end_start, -11)
+    if start > end_start:
+        raise BadRequestError("from must not be after to.")
+    if (end_start.year - start.year) * 12 + end_start.month - start.month + 1 > SLA_MAX_MONTHS:
+        raise BadRequestError(f"The period can be at most {SLA_MAX_MONTHS} months.")
+    end = _add_months(end_start, 1)
+
+    month = func.to_char(func.timezone("Asia/Tokyo", OpeOrder.deadline_at), "YYYY-MM").label("month")
+    finished = OpeOrder.status == OrderStatus.FINISHED
+    late = and_(finished, OpeOrder.finished_at > OpeOrder.deadline_at)
+    minutes_late = func.extract("epoch", OpeOrder.finished_at - OpeOrder.deadline_at) / 60
+    open_late = and_(OpeOrder.status.not_in((OrderStatus.FINISHED, OrderStatus.CANCELED)), OpeOrder.deadline_at < now)
+    stmt = (
+        select(
+            OpeOrder.client_code,
+            month,
+            func.count().filter(finished).label("finished"),
+            func.count().filter(late).label("late"),
+            func.avg(minutes_late).filter(late).label("avg_late"),
+            func.count().filter(open_late).label("open_late"),
+        )
+        .where(
+            OpeOrder.status != OrderStatus.CANCELED,
+            OpeOrder.deadline_at >= start,
+            OpeOrder.deadline_at < end,
+        )
+        .group_by(OpeOrder.client_code, month)
+        .order_by(month, OpeOrder.client_code)
+    )
+    if client_code:
+        stmt = stmt.where(OpeOrder.client_code == client_code.strip().upper())
+    rows = [r for r in db.execute(stmt).all() if r.finished or r.open_late]  # 締切前の未完了しかない行は出さない
+    names = {c.code: c.name for c in client_repo.get_by_codes(db, codes=sorted({r.client_code for r in rows}))} if rows else {}
+    return SlaResponse(
+        from_month=start.strftime("%Y-%m"),
+        to_month=end_start.strftime("%Y-%m"),
+        now=now,
+        rows=[
+            SlaRow(
+                month=r.month, client_code=r.client_code, client_name=names.get(r.client_code, ""),
+                finished=r.finished, late=r.late,
+                on_time_rate=round((r.finished - r.late) * 100 / r.finished, 1) if r.finished else None,
+                avg_minutes_late=round(float(r.avg_late), 1) if r.avg_late is not None else None,
+                open_late=r.open_late,
+            )
+            for r in rows
+        ],
+    )
 
 
 def get_attention(db: Session, limit: int = 200) -> AttentionResponse:
