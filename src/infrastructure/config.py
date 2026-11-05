@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # 開発時は Vite のプロキシ経由で同一オリジンになるため不要
     cors_origins: list[str] = []
 
+    # 実行する SQL をすべてログに出すか（SQL_ECHO=1 / true。既定はオフ: 1 リクエストで数百行になり、コンソールとログを埋めるため。
+    # 調査のときだけオンにする）。.env にも書ける
+    sql_echo: bool = False
+
     # .env ファイルを自動的に読み込む設定
     model_config = SettingsConfigDict(
         env_file=env_file_to_load, 
