@@ -344,6 +344,26 @@
         ],
         "summary": "Create Biz Endpoint",
         "operationId": "create_biz_endpoint_biz__post",
+        "parameters": [
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -397,6 +417,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -738,6 +778,24 @@
               "type": "integer",
               "title": "Biz Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -783,6 +841,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -821,6 +899,24 @@
               "type": "integer",
               "title": "Biz Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -874,6 +970,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -904,6 +1020,24 @@
               "type": "integer",
               "title": "Biz Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -959,6 +1093,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1082,6 +1236,24 @@
               "type": "integer",
               "title": "Biz Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -1137,6 +1309,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1267,6 +1459,24 @@
               "type": "integer",
               "title": "Draft Version Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -1330,6 +1540,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1369,6 +1599,24 @@
               "type": "integer",
               "title": "Future Version Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -1422,6 +1670,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1452,6 +1720,24 @@
               "type": "integer",
               "title": "Version Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -1507,6 +1793,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1953,84 +2259,41 @@
       }
     },
     "/plans/calendars": {
-      "get": {
-        "tags": [
-          "plans"
-        ],
-        "summary": "Get Calendars Endpoint",
-        "operationId": "get_calendars_endpoint_plans_calendars_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/BusinessCalendarResponse"
-                  },
-                  "type": "array",
-                  "title": "Response Get Calendars Endpoint Plans Calendars Get"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request(リクエスト不正)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found(データが見つからない)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict (Record already exists etc.)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error(サーバーエラー)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
       "post": {
         "tags": [
           "plans"
         ],
         "summary": "Create Calendar Endpoint",
         "operationId": "create_calendar_endpoint_plans_calendars_post",
+        "parameters": [
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/BusinessCalendarCreate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -2083,12 +2346,95 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Get Calendars Endpoint",
+        "operationId": "get_calendars_endpoint_plans_calendars_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BusinessCalendarResponse"
+                  },
+                  "title": "Response Get Calendars Endpoint Plans Calendars Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2193,6 +2539,24 @@
               "type": "integer",
               "title": "Calendar Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -2248,6 +2612,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2386,6 +2770,24 @@
               "type": "integer",
               "title": "Calendar Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -2449,6 +2851,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2489,6 +2911,24 @@
               "format": "date",
               "title": "Holiday Date"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -2542,6 +2982,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2562,6 +3022,26 @@
         ],
         "summary": "Create Sheet Endpoint",
         "operationId": "create_sheet_endpoint_plans_sheets_post",
+        "parameters": [
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2615,6 +3095,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2740,6 +3240,24 @@
               "title": "Replace Events"
             },
             "description": "true: delete dates not in the file so the sheet matches it exactly"
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -2795,6 +3313,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2914,6 +3452,24 @@
               "type": "integer",
               "title": "Sheet Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -2977,6 +3533,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3016,6 +3592,24 @@
               "type": "string",
               "title": "Marker"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -3079,6 +3673,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3118,6 +3732,24 @@
               "type": "string",
               "title": "Marker"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -3181,6 +3813,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3210,6 +3862,24 @@
               "type": "integer",
               "title": "Event Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -3273,6 +3943,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3301,6 +3991,24 @@
               "type": "integer",
               "title": "Event Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -3346,6 +4054,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3384,6 +4112,24 @@
               "type": "integer",
               "title": "Event Id"
             }
+          },
+          {
+            "name": "x-staff-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "acting staff user id (development only, until login exists)",
+              "title": "X-Staff-Id"
+            },
+            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -3429,6 +4175,26 @@
           },
           "500": {
             "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
             "content": {
               "application/json": {
                 "schema": {

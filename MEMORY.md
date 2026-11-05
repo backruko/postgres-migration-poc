@@ -33,8 +33,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   screens (below) and fixes from it; (b) open questions in the doc: "latest before due" dependency matching, the
   client-limited role, other signal transports (file arrival / DB watcher scripts posting to `POST /ope/signals`);
   (c) bigger debts (small ones done in D.1 / D.2): SOP "impact before approval" list (needs an SOP version screen
-  first), a real login replacing the `X-Staff-Id` header (design doc first); (d) U.4 admin guard for the other
-  事前設定 writes. Plan a new phase the
+  first), a real login replacing the `X-Staff-Id` header (design doc first). U.4 done (admin guard). Plan a new phase the
   same way as 5–7: questions first, a step plan approved by the user, one step at a time.
 - **DB:** latest Alembic head **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
   init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`
@@ -672,7 +671,7 @@ User's ideas; all choices as I recommended.
 | U.1 | Calendar day: double-click → `/daily?date=`; 「日次ダッシュボードで開く」 link in the selected-day panel | **done** (`9b7cb38`) |
 | U.2 | Dashboard rows: ⚙ link (all users, also rows without an order; not voided rows) → `/settings/templates?biz=&template=` (row highlighted + scrolled into view); 「← 戻る」 links via router state (`shared/lib/returnTo.ts`, `shared/ui/ReturnLink.tsx`): dashboard → calendar (same client / month, day re-selected via `state.selectDate`), template page → dashboard day; state kept across day / business changes, chains (calendar → dashboard → template) | **done** (`f002f9f`) |
 | U.3 | Template page edits need `admin` (業務管理者; not system_admin): `@require_roles([ADMIN])` on plan template writes (create / patch / delete / restore / dates / cache rebuild) and `PATCH /biz/{id}`; UI hides 新規作成 / 編集 / 削除 and the 業務の設定 編集 for non-admins (panel stays visible). The user's staff 1 has no admin role → must grant it | **done** (`34914a8`) |
-| U.4 | Candidate (not approved): same guard for sheets / markers / sheet dates, holidays / calendars, remaining biz writes (create / delete / SOP versions / step templates) | — |
+| U.4 | Branch `feature/admin-guard` (from `main` `d6ad461`). User's choices as I recommended: sheet dates, holidays / calendars, remaining biz writes (biz create / delete / restore, SOP version clone / approve / cancel / create, step templates) → `admin`; **calendar occurrence changes (変更 / 取消 / 臨時 / ルールに戻す / 取消の復元) → releaser or admin** (they move / cancel / create orders; closes the loophole of an operator moving an order to today and starting it without the early-start approval). No `require_active` left in plan. `auth._guard` sets `__required_roles__` on the wrapper (test marker). `tests/test_plan_settings_guard.py` checks every `/plans` + `/biz` route (writes: header + exact roles; reads open; walks `plan_router.routes` / `biz_router.routes` — `app.routes` holds `_IncludedRouter`s in this FastAPI). UI: sheet / holiday pages hide edits for non-admins (「変更は業務管理者だけができます」); calendar shows no actions / 臨時 for non releaser-admin (`domain/plan/lib/permissions.ts` `canChangeOccurrences`); 取消済みの予定 list without 元に戻す. Operators: dashboard work only | **done** |
 
 ### Open questions (in the doc)
 **Still open:** "latest before due" matching for dependencies with different cadences · client-limited role details

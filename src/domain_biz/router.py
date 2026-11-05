@@ -25,7 +25,8 @@ router = APIRouter(prefix="/biz", tags=["biz"])
 # BizMaster エンドポイント
 # ==========================================
 
-@router.post("/", response_model=BizMasterResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+@router.post("/", response_model=BizMasterResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def create_biz_endpoint(biz_in: BizMasterCreate, db: Session = Depends(get_db)):
     return create_biz(db=db, biz_in=biz_in)
 
@@ -45,11 +46,13 @@ def get_bizes_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(ge
 def update_biz_endpoint(biz_id: int, biz_in: BizMasterUpdate, db: Session = Depends(get_db)):
     return update_biz(db=db, biz_id=biz_id, biz_in=biz_in)
 
-@router.delete("/{biz_id}", response_model=BizMasterResponse, responses={**COMMON_ERRORS})
+@router.delete("/{biz_id}", response_model=BizMasterResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def delete_biz_endpoint(biz_id: int, db: Session = Depends(get_db)):
     return delete_biz(db=db, biz_id=biz_id)
 
-@router.post("/{biz_id}/restore", response_model=BizMasterResponse, responses={**COMMON_ERRORS})
+@router.post("/{biz_id}/restore", response_model=BizMasterResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def restore_biz_endpoint(biz_id: int, db: Session = Depends(get_db)):
     """
     論理削除された BizMaster レコードを復元します。
@@ -60,7 +63,8 @@ def restore_biz_endpoint(biz_id: int, db: Session = Depends(get_db)):
 # SOPVersion エンドポイント
 # ==========================================
 
-@router.post("/{biz_id}/versions/clone", response_model=SOPVersionResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+@router.post("/{biz_id}/versions/clone", response_model=SOPVersionResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def clone_active_to_draft_endpoint(biz_id: int, version_in: SOPVersionCreate, db: Session = Depends(get_db)):
     """
     【複数並行OK】現在有効な現行バージョンをベースに、ユーザーが指定した自由なタグ名で新しい草稿(DRAFT)を生成します。
@@ -82,7 +86,8 @@ def get_current_active_version_endpoint(biz_id: int, db: Session = Depends(get_d
     """
     return get_current_active_version(db=db, biz_id=biz_id)
 
-@router.post("/{biz_id}/versions/{draft_version_id}/approve", response_model=SOPVersionResponse, responses={**COMMON_ERRORS})
+@router.post("/{biz_id}/versions/{draft_version_id}/approve", response_model=SOPVersionResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def approve_and_schedule_version_endpoint(biz_id: int, draft_version_id: int, schedule_in: SOPVersionScheduleIn, db: Session = Depends(get_db)):
     """
     【権限者専用】選ばれた特定の草稿(DRAFT)を承認し、未来の発効日に向けた予約枠(FUTURE)へ昇格させます。
@@ -95,14 +100,16 @@ def approve_and_schedule_version_endpoint(biz_id: int, draft_version_id: int, sc
         effective_at=schedule_in.effective_at
     )
 
-@router.post("/{biz_id}/versions/{future_version_id}/cancel", response_model=SOPVersionResponse, responses={**COMMON_ERRORS})
+@router.post("/{biz_id}/versions/{future_version_id}/cancel", response_model=SOPVersionResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def cancel_future_version_endpoint(biz_id: int, future_version_id: int, db: Session = Depends(get_db)):
     """
     【権限者専用】予約(FUTURE)を取り消し、現行版の期限を無期限(None)に自動復元した上で、データを再編集可能なDRAFTへと安全に引き戻します。
     """
     return cancel_future_version(db=db, biz_id=biz_id, future_version_id=future_version_id)
 
-@router.post("/{biz_id}/versions", response_model=SOPVersionResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+@router.post("/{biz_id}/versions", response_model=SOPVersionResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def create_new_sop_version_endpoint(biz_id: int, version_in: SOPVersionCreate, db: Session = Depends(get_db)):
     """
     【新規立ち上げ】特定の業務に、完全に新しい最初の草稿(DRAFT)を新規作成します。
@@ -113,7 +120,8 @@ def create_new_sop_version_endpoint(biz_id: int, version_in: SOPVersionCreate, d
 # SOPStepTemplate エンドポイント
 # ==========================================
 
-@router.post("/versions/{version_id}/steps", response_model=SOPStepTemplateResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+@router.post("/versions/{version_id}/steps", response_model=SOPStepTemplateResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def create_step_template_endpoint(version_id: int, step_in: SOPStepTemplateCreate, db: Session = Depends(get_db)):
     """
     【現行・未来ロック】特定のSOPバージョン内に、作業手順(ステップ)を新規作成します。

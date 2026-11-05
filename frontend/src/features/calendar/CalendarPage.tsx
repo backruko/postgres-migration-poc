@@ -7,6 +7,8 @@ import { instanceApi } from "../../domain/plan/api";
 import { useCancelledInstances } from "../../domain/plan/hooks/useCancelledInstances";
 import { useBusinessCalendars, useClientCalendar } from "../../domain/plan/hooks/useClientCalendar";
 import { categoryOf } from "../../domain/plan/lib/category";
+import { canChangeOccurrences } from "../../domain/plan/lib/permissions";
+import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import type { ClientCalendar, ClientOccurrence } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
 import { DEFAULT_CLIENT, DEFAULT_HOLIDAY_CALENDAR, TIMEZONE } from "../../shared/config";
@@ -77,6 +79,9 @@ export function CalendarPage() {
   const [cancelling, setCancelling] = useState<ClientOccurrence | null>(null);
   const [addingOn, setAddingOn] = useState<string | null>(null);
 
+  // 予定の手動操作（変更・取消・臨時・ルールに戻す・取消の復元）はリリース担当・業務管理者だけ（オーダーも動くため）
+  const me = useCurrentStaff();
+  const canChange = canChangeOccurrences(me.data);
   const actions: OccurrenceActions = useMemo(
     () => ({
       onEdit: setEditing,
@@ -199,8 +204,8 @@ export function CalendarPage() {
               timezone={TIMEZONE}
               now={now}
               today={today}
-              actions={actions}
-              onAddOneOff={setAddingOn}
+              actions={canChange ? actions : undefined}
+              onAddOneOff={canChange ? setAddingOn : undefined}
               onOpenDaily={openDaily}
             />
           </div>
@@ -211,8 +216,8 @@ export function CalendarPage() {
             timezone={TIMEZONE}
             now={now}
             today={today}
-            actions={actions}
-            onAddOneOff={setAddingOn}
+            actions={canChange ? actions : undefined}
+            onAddOneOff={canChange ? setAddingOn : undefined}
           />
         </>
       )}
@@ -227,6 +232,7 @@ export function CalendarPage() {
         loading={cancelled.loading}
         error={cancelled.error}
         onClose={() => setCancelledOpen(false)}
+        canRestore={canChange}
         onRestored={reload}
       />
       <OneOffModal

@@ -82,6 +82,8 @@ def _guard(required: frozenset[RoleCode] | None) -> Callable[[Endpoint], Endpoin
             wrapper = sync_wrapper
 
         wrapper.__signature__ = signature.replace(parameters=[*signature.parameters.values(), guard_param])
+        # どのロールが必要か（require_active は None）。テストでガードの付け忘れ・付け違いを確かめるための目印
+        wrapper.__required_roles__ = required
         return wrapper
     return decorator
 

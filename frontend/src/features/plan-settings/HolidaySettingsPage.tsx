@@ -3,7 +3,9 @@ import { Alert, App, Button, Empty, Select, Space, Table, Typography } from "ant
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { canEditPlanSettings, PLAN_SETTINGS_ADMIN_ONLY } from "../../domain/biz/lib/settings";
 import { calendarApi } from "../../domain/plan/api";
+import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { useBusinessCalendars } from "../../domain/plan/hooks/useClientCalendar";
 import { useHolidays } from "../../domain/plan/hooks/useHolidays";
 import { isSupportedJpHolidayYear, JP_HOLIDAY_YEARS } from "../../domain/plan/lib/jpHolidays";
@@ -27,6 +29,9 @@ export function HolidaySettingsPage() {
   const { message, modal } = App.useApp();
   const [params, setParams] = useSearchParams();
   const today = todayIn(TIMEZONE);
+  // 休日の追加・変更・削除は業務管理者だけ（見るのは誰でも）
+  const me = useCurrentStaff();
+  const canEdit = canEditPlanSettings(me.data);
 
   const calendars = useBusinessCalendars();
   const parsedId = Number(params.get("calendar"));
@@ -106,6 +111,8 @@ export function HolidaySettingsPage() {
   const columns: ColumnsType<Holiday> = [
     { title: "日付", dataIndex: "holiday_date", className: "mono", render: (d: string) => fmt(d) },
     { title: "名前", dataIndex: "name", render: (v: string | null) => v ?? <span className="muted">—</span> },
+  ];
+  if (canEdit) columns.push(
     {
       title: "操作",
       key: "actions",
@@ -124,7 +131,7 @@ export function HolidaySettingsPage() {
           </Space>
         ),
     },
-  ];
+  );
 
   const all = holidays.data ?? [];
   const rows = all.filter((h) => h.holiday_date.startsWith(`${year}-`));
@@ -174,8 +181,9 @@ export function HolidaySettingsPage() {
             <Typography.Text type="secondary">
               {calendar.name} の {year}年の休日 {rows.length} 件（今日以降 {upcoming} 件）・週末:{" "}
               {calendar.weekend_days.map((d) => "月火水木金土日"[d - 1]).join("・") || "なし"}
+              {!canEdit && `・${PLAN_SETTINGS_ADMIN_ONLY}`}
             </Typography.Text>
-            <Space wrap>
+            {canEdit && <Space wrap>
               <Button
                 icon={<ImportOutlined />}
                 onClick={confirmJpImport}
@@ -191,7 +199,7 @@ export function HolidaySettingsPage() {
               <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditor({ open: true, holiday: null })}>
                 休日を追加
               </Button>
-            </Space>
+            </Space>}
           </div>
           <Table<Holiday>
             rowKey="holiday_date"
@@ -204,7 +212,7 @@ export function HolidaySettingsPage() {
             locale={{ emptyText: <Empty description={`${year}年の休日は登録されていません`} /> }}
           />
           <HolidayFormModal
-            open={editor.open}
+            open={canEdit && editor.open}
             calendar={calendar}
             holiday={editor.holiday}
             existing={new Set(all.map((h) => h.holiday_date))}

@@ -23,6 +23,8 @@ interface Props {
   sheet: ReferenceSheet;
   marker: ReferenceSheetMarker;
   today: string;
+  /** 変更できるか（業務管理者のみ。できない場合は一覧の表示だけ） */
+  canEdit: boolean;
   /** 日付を変えたとき（シートの再読み込み用） */
   onChanged: () => void;
 }
@@ -41,7 +43,7 @@ const CASCADE_NOTE = "（このマーカーを参照するテンプレートの�
  * マーカーの日付の一覧と、日付ごとの変更・削除・ルールに戻す・追加。
  * 今日より前の日付は実績のため読み取り専用（既定では表示せず、「過去も表示」で確認できる）。
  */
-export function MarkerDates({ sheet, marker, today, onChanged }: Props) {
+export function MarkerDates({ sheet, marker, today, canEdit, onChanged }: Props) {
   const { message, modal } = App.useApp();
   const [showPast, setShowPast] = useState(false);
   // 追加・変更モーダル（event が null なら追加）。閉じる間の表示が切り替わらないよう、閉じても対象は残す
@@ -82,7 +84,7 @@ export function MarkerDates({ sheet, marker, today, onChanged }: Props) {
       onOk: () => run(() => sheetApi.revertEvent(e.id), `「${marker.marker}」をルールの日付に戻しました`),
     });
 
-  const columns: ColumnsType<ReferenceSheetEvent> = [
+  const allColumns: ColumnsType<ReferenceSheetEvent> = [
     {
       title: "日付",
       dataIndex: "event_date",
@@ -135,6 +137,8 @@ export function MarkerDates({ sheet, marker, today, onChanged }: Props) {
         ),
     },
   ];
+  // 変更できない職員には「操作」の列を出さない（「実績」の区別は行の色で分かる）
+  const columns = canEdit ? allColumns : allColumns.filter((c) => c.key !== "actions");
 
   const rows = listedEvents(marker, today, showPast);
 
@@ -147,9 +151,11 @@ export function MarkerDates({ sheet, marker, today, onChanged }: Props) {
             <Switch size="small" checked={showPast} onChange={setShowPast} /> 過去も表示（実績・変更不可）
           </label>
         </Space>
-        <Button size="small" icon={<PlusOutlined />} onClick={() => setEditor({ open: true, event: null })}>
-          日付を追加
-        </Button>
+        {canEdit && (
+          <Button size="small" icon={<PlusOutlined />} onClick={() => setEditor({ open: true, event: null })}>
+            日付を追加
+          </Button>
+        )}
       </div>
       <Table<ReferenceSheetEvent>
         rowKey="id"

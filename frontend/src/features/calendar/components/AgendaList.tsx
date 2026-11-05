@@ -12,8 +12,9 @@ interface Props {
   timezone: string;
   now: number;
   today: string;
-  actions: OccurrenceActions;
-  onAddOneOff: (date: string) => void;
+  /** 予定の手動操作（リリース担当・業務管理者のみ。指定しなければ表示だけ） */
+  actions?: OccurrenceActions;
+  onAddOneOff?: (date: string) => void;
 }
 
 /** 狭い画面用: 予定のある日（と休日）だけを日付順に並べたリスト */
@@ -24,11 +25,13 @@ export function AgendaList({ days, visible, templates, timezone, now, today, act
 
   return (
     <section className="agenda" aria-label="予定リスト">
-      <div className="agenda-day">
-        <Button icon={<PlusOutlined />} onClick={() => onAddOneOff(days[0]?.date ?? "")} disabled={!templates.size}>
-          臨時の予定を追加
-        </Button>
-      </div>
+      {onAddOneOff && (
+        <div className="agenda-day">
+          <Button icon={<PlusOutlined />} onClick={() => onAddOneOff(days[0]?.date ?? "")} disabled={!templates.size}>
+            臨時の予定を追加
+          </Button>
+        </div>
+      )}
       {rows.length === 0 && <p className="empty agenda-day">表示する予定がありません。</p>}
       {rows.map(({ day, items }) => {
         const [, m, d] = day.date.split("-").map(Number);

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
-from src.domain_staff.auth import get_current_staff, require_active, require_roles
+from src.domain_staff.auth import get_current_staff, require_roles
 from src.domain_staff.models import RoleCode, StaffUser
 from src.infrastructure.database import get_db
 from src.domain_plan.schemas import (
@@ -56,7 +56,8 @@ router = APIRouter(prefix="/plans", tags=["plans"])
 # BusinessCalendar（営業日カレンダー）エンドポイント
 # ==========================================
 
-@router.post("/calendars", response_model=BusinessCalendarResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+@router.post("/calendars", response_model=BusinessCalendarResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def create_calendar_endpoint(calendar_in: BusinessCalendarCreate, db: Session = Depends(get_db)):
     return create_calendar(db=db, calendar_in=calendar_in)
 
@@ -68,7 +69,8 @@ def get_calendars_endpoint(db: Session = Depends(get_db)):
 def get_calendar_endpoint(calendar_id: int, db: Session = Depends(get_db)):
     return get_calendar(db=db, calendar_id=calendar_id)
 
-@router.patch("/calendars/{calendar_id}", response_model=BusinessCalendarResponse, responses={**COMMON_ERRORS})
+@router.patch("/calendars/{calendar_id}", response_model=BusinessCalendarResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def update_calendar_endpoint(calendar_id: int, calendar_in: BusinessCalendarUpdate, db: Session = Depends(get_db)):
     """週末の曜日を変更すると、このカレンダーを使う全テンプレートの未来の予定が再計算されます。"""
     return update_calendar(db=db, calendar_id=calendar_id, calendar_in=calendar_in)
@@ -77,7 +79,8 @@ def update_calendar_endpoint(calendar_id: int, calendar_in: BusinessCalendarUpda
 def get_holidays_endpoint(calendar_id: int, year: int | None = None, db: Session = Depends(get_db)):
     return get_holidays(db=db, calendar_id=calendar_id, year=year)
 
-@router.post("/calendars/{calendar_id}/holidays", response_model=CalendarChangeResult, responses={**COMMON_ERRORS})
+@router.post("/calendars/{calendar_id}/holidays", response_model=CalendarChangeResult, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def add_holidays_endpoint(calendar_id: int, holidays_in: HolidaysAdd, db: Session = Depends(get_db)):
     """
     休日を一括登録します（登録済みの日付は名前のみ更新）。
@@ -86,7 +89,8 @@ def add_holidays_endpoint(calendar_id: int, holidays_in: HolidaysAdd, db: Sessio
     """
     return add_holidays(db=db, calendar_id=calendar_id, holidays_in=holidays_in)
 
-@router.delete("/calendars/{calendar_id}/holidays/{holiday_date}", response_model=CalendarChangeResult, responses={**COMMON_ERRORS})
+@router.delete("/calendars/{calendar_id}/holidays/{holiday_date}", response_model=CalendarChangeResult, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def delete_holiday_endpoint(calendar_id: int, holiday_date: date, db: Session = Depends(get_db)):
     """休日を削除します（その日は営業日に戻ります）。今日より前（日本時間）の休日は削除できません（400）。"""
     return delete_holiday(db=db, calendar_id=calendar_id, holiday_date=holiday_date)
@@ -95,11 +99,13 @@ def delete_holiday_endpoint(calendar_id: int, holiday_date: date, db: Session = 
 # ReferenceSheet（年間計画シート）エンドポイント
 # ==========================================
 
-@router.post("/sheets", response_model=ReferenceSheetResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+@router.post("/sheets", response_model=ReferenceSheetResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def create_sheet_endpoint(sheet_in: ReferenceSheetCreate, db: Session = Depends(get_db)):
     return create_sheet(db=db, sheet_in=sheet_in)
 
-@router.post("/sheets/import", response_model=ReferenceSheetImportResult, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+@router.post("/sheets/import", response_model=ReferenceSheetImportResult, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def import_sheet_endpoint(
     import_in: ReferenceSheetImport,
     response: Response,
@@ -124,11 +130,13 @@ def get_sheets_endpoint(client_code: str, db: Session = Depends(get_db)):
 def get_sheet_endpoint(sheet_id: int, db: Session = Depends(get_db)):
     return get_sheet(db=db, sheet_id=sheet_id)
 
-@router.post("/sheets/{sheet_id}/markers", response_model=ReferenceSheetResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+@router.post("/sheets/{sheet_id}/markers", response_model=ReferenceSheetResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def add_marker_endpoint(sheet_id: int, marker_in: ReferenceSheetMarkerCreate, db: Session = Depends(get_db)):
     return add_marker(db=db, sheet_id=sheet_id, marker_in=marker_in)
 
-@router.patch("/sheets/{sheet_id}/markers/{marker}", response_model=ReferenceSheetMarkerResponse, responses={**COMMON_ERRORS})
+@router.patch("/sheets/{sheet_id}/markers/{marker}", response_model=ReferenceSheetMarkerResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def update_marker_endpoint(sheet_id: int, marker: str, marker_in: ReferenceSheetMarkerUpdate, db: Session = Depends(get_db)):
     """
     マーカーの説明・生成ルールを変更します。
@@ -138,7 +146,8 @@ def update_marker_endpoint(sheet_id: int, marker: str, marker_in: ReferenceSheet
     """
     return update_marker(db=db, sheet_id=sheet_id, marker=marker, marker_in=marker_in)
 
-@router.post("/sheets/{sheet_id}/markers/{marker}/events", response_model=ReferenceSheetMarkerResponse, responses={**COMMON_ERRORS})
+@router.post("/sheets/{sheet_id}/markers/{marker}/events", response_model=ReferenceSheetMarkerResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def add_sheet_events_endpoint(sheet_id: int, marker: str, events_in: ReferenceSheetEventsCreate, db: Session = Depends(get_db)):
     """
     マーカーに日付を追加します（登録済みの日付は無視）。
@@ -146,16 +155,19 @@ def add_sheet_events_endpoint(sheet_id: int, marker: str, events_in: ReferenceSh
     """
     return add_sheet_events(db=db, sheet_id=sheet_id, marker=marker, events_in=events_in)
 
-@router.patch("/sheets/events/{event_id}", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS})
+@router.patch("/sheets/events/{event_id}", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def update_sheet_event_endpoint(event_id: int, event_in: ReferenceSheetEventUpdate, db: Session = Depends(get_db)):
     return update_sheet_event(db=db, event_id=event_id, event_in=event_in)
 
-@router.post("/sheets/events/{event_id}/revert", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS})
+@router.post("/sheets/events/{event_id}/revert", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def revert_sheet_event_endpoint(event_id: int, db: Session = Depends(get_db)):
     """生成マーカーの日付に対する人の編集・取消を取り消し、ルールの日付に戻します。"""
     return revert_sheet_event(db=db, event_id=event_id)
 
-@router.delete("/sheets/events/{event_id}", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS})
+@router.delete("/sheets/events/{event_id}", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def delete_sheet_event_endpoint(event_id: int, db: Session = Depends(get_db)):
     """日付を削除します。生成マーカーのルール由来の日付は、再生成で復活しないよう「取消」として記録されます。"""
     return delete_sheet_event(db=db, event_id=event_id)
@@ -227,7 +239,7 @@ def rebuild_cache_endpoint(template_id: int, db: Session = Depends(get_db)):
     return CacheRebuildResponse(template_id=template_id, occurrences=rebuild_cache(db=db, template_id=template_id))
 
 @router.post("/templates/{template_id}/instances", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
-@require_active()
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
 def add_one_off_instance_endpoint(
     template_id: int, one_off_in: PlanOneOffCreate, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
 ):
@@ -242,7 +254,7 @@ def add_one_off_instance_endpoint(
 # ==========================================
 
 @router.post("/instances/{instance_id}/override", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
-@require_active()
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
 def override_instance_endpoint(
     instance_id: int, override_in: PlanInstanceOverride, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
 ):
@@ -254,7 +266,7 @@ def override_instance_endpoint(
     return override_instance(db=db, instance_id=instance_id, override_in=override_in, actor_staff_id=current_staff.id)
 
 @router.post("/instances/{instance_id}/cancel", response_model=PlanInstanceResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
-@require_active()
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
 def cancel_instance_endpoint(
     instance_id: int, cancel_in: PlanInstanceCancel | None = None, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
 ):
@@ -262,7 +274,7 @@ def cancel_instance_endpoint(
     return cancel_instance(db=db, instance_id=instance_id, cancel_in=cancel_in or PlanInstanceCancel(), actor_staff_id=current_staff.id)
 
 @router.post("/instances/{instance_id}/restore", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
-@require_active()
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
 def restore_cancelled_instance_endpoint(instance_id: int, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff)):
     """
     取り消した予定を、取消の直前と同じ日時で元に戻します（臨時の予定・日時を変更した予定も可）。
@@ -271,7 +283,7 @@ def restore_cancelled_instance_endpoint(instance_id: int, db: Session = Depends(
     return restore_cancelled_instance(db=db, instance_id=instance_id, actor_staff_id=current_staff.id)
 
 @router.post("/instances/{instance_id}/revert", response_model=PlanRevertResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
-@require_active()
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
 def revert_instance_endpoint(
     instance_id: int, revert_in: PlanInstanceRevert | None = None, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
 ):
