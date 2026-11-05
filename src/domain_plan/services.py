@@ -17,10 +17,11 @@ from src.infrastructure.repositories import (
     reference_sheet_repo,
 )
 from src.domain_biz.models import BizMaster
-from src.domain_plan import engine, slot_events
+from src.domain_plan import engine, slot_events, template_events
 from src.domain_plan.engine import DayUnit, HolidayPolicy
 from src.domain_plan.models import (
     merge_ui_metadata,
+    DeadlineMode,
     validate_timezone_name,
     BusinessCalendar,
     BusinessCalendarHoliday,
@@ -37,6 +38,8 @@ from src.domain_plan.models import (
     VoidReason,
 )
 from src.domain_plan.schemas import (
+    DEADLINE_FIELDS,
+    deadline_problem,
     MarkerRule,
     BusinessCalendarCreate,
     BusinessCalendarUpdate,
@@ -84,7 +87,13 @@ FAR_FUTURE = datetime.max.replace(tzinfo=timezone.utc)
 RRULE_FIELDS = {"anchor_date", "rrule"}
 SHEET_FIELDS = {"reference_sheet_id", "reference_event_marker", "offset_days", "offset_day_unit", "offset_minutes"}
 # null を指定できる（＝解除できる）項目
-NULLABLE_UPDATE_FIELDS = {"business_calendar_id"}
+NULLABLE_UPDATE_FIELDS = {"business_calendar_id", "deadline_offset_minutes", "deadline_time", "deadline_day_offset"}
+# 決め方ごとに使う締切の項目（決め方を変えたら、使わない項目は空にする）
+DEADLINE_MODE_FIELDS = {
+    DeadlineMode.END: set(),
+    DeadlineMode.OFFSET: {"deadline_offset_minutes"},
+    DeadlineMode.FIXED_TIME: {"deadline_time", "deadline_day_offset"},
+}
 
 
 def _now() -> datetime:
@@ -976,6 +985,7 @@ def create_template(db: Session, template_in: PlanTemplateCreate) -> PlanTemplat
 
     template = PlanTemplate(**template_in.model_dump(exclude={"dates", "ui_metadata"}))
     template.ui_metadata = ui_metadata_to_dict(template_in.ui_metadata)
+    _check_deadline(template)
     if isinstance(template_in, ExplicitDatesTemplateCreate):
         template.explicit_dates = [PlanExplicitDate(local_date=d) for d in sorted(set(template_in.dates))]
     db.add(template)
@@ -997,6 +1007,34 @@ def get_template(db: Session, template_id: int) -> PlanTemplate:
 def get_templates(db: Session, biz_id: int) -> list[PlanTemplate]:
     _get_biz(db, biz_id)
     return _with_next_occurrence(db, plan_template_repo.get_by_biz(db, biz_master_id=biz_id))
+
+
+def _normalize_deadline_update(template: PlanTemplate, update_data: dict) -> None:
+    """締切の決め方を変えたら、新しい決め方で使わない項目を空にする（送られた値は残して、組み合わせの確認で誤りにする）"""
+    mode = update_data.get("deadline_mode")
+    if mode is None:
+        return
+    for field in set().union(*DEADLINE_MODE_FIELDS.values()) - DEADLINE_MODE_FIELDS[mode]:
+        update_data.setdefault(field, None)
+    if mode == DeadlineMode.FIXED_TIME and update_data.get("deadline_day_offset", template.deadline_day_offset) is None:
+        update_data["deadline_day_offset"] = 0
+
+
+def _check_deadline(template: PlanTemplate) -> None:
+    """締切の項目の組み合わせと、固定の時刻が同じ日の開始より後か（前なら翌日以降を指定してもらう）"""
+    problem = deadline_problem(
+        template.deadline_mode, template.deadline_offset_minutes, template.deadline_time, template.deadline_day_offset,
+    )
+    if problem:
+        raise BadRequestError(problem)
+    if template.deadline_mode == DeadlineMode.FIXED_TIME and template.deadline_day_offset == 0:
+        assert template.deadline_time is not None
+        start = template.start_time.hour * 60 + template.start_time.minute + (template.offset_minutes or 0)
+        deadline = template.deadline_time.hour * 60 + template.deadline_time.minute
+        if deadline <= start:
+            raise BadRequestError(
+                "deadline_time must be after the start on the scheduled day; use deadline_day_offset for a later day."
+            )
 
 
 def update_template(db: Session, template_id: int, template_in: PlanTemplateUpdate) -> PlanTemplate:
@@ -1027,7 +1065,15 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
         )
 
     name_changed = "name" in update_data and update_data["name"] != template.name
-    generation_changed = any(getattr(template, k) != v for k, v in update_data.items() if k != "name")
+    # 名前と締切は生成に影響しない（改訂・再生成しない）
+    generation_changed = any(
+        getattr(template, k) != v for k, v in update_data.items() if k != "name" and k not in DEADLINE_FIELDS
+    )
+    _normalize_deadline_update(template, update_data)
+    # 締切の設定・タイムゾーンが変わったら、リリース前のオーダーの締切を写し直してもらう（受け手は coordination）
+    deadline_changed = any(
+        getattr(template, k) != v for k, v in update_data.items() if k in DEADLINE_FIELDS or k == "timezone"
+    )
 
     if "business_calendar_id" in update_data:
         _get_calendar_if_set(db, update_data["business_calendar_id"])
@@ -1035,6 +1081,7 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
     for field, value in update_data.items():
         setattr(template, field, value)
     _check_calendar_settings(template)
+    _check_deadline(template)
     if ui_changed:
         # 表示のみの変更のためリビジョンは上げず、キャッシュの実効値だけ更新する
         template.ui_metadata = ui_metadata_to_dict(template_in.ui_metadata)
@@ -1045,6 +1092,9 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
         plan_cache_repo.rename_template(db, template_id=template.id, title=template.name)
     if ui_changed:
         plan_cache_repo.refresh_ui_metadata(db, template=template)
+    if deadline_changed:
+        db.flush()
+        template_events.notify_deadline_changed(db, template)
 
     _commit(db, "PlanTemplate could not be updated due to a conflicting record.")
     db.refresh(template)

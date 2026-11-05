@@ -9,6 +9,7 @@ export type TemplateType = Schemas["TemplateType"];
 export type InstanceOrigin = Schemas["InstanceOrigin"];
 export type HolidayPolicy = Schemas["HolidayPolicy"];
 export type DayUnit = Schemas["DayUnit"];
+export type DeadlineMode = Schemas["DeadlineMode"];
 
 // ---- カレンダー表示 ----
 export type ClientCalendar = Schemas["ClientCalendarResponse"];

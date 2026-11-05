@@ -1,5 +1,5 @@
 import type { DailyCalendarStatus, DailyDashboard, DailyMilestone, VoidReason } from "../../domain/ops/types";
-import { dayjs } from "../../shared/lib/datetime";
+import { dayjs, inZone } from "../../shared/lib/datetime";
 
 // ---------------- 日付（"YYYY-MM-DD" 文字列で扱う） ----------------
 
@@ -55,3 +55,17 @@ export function summarize(d: DailyDashboard) {
     milestones: d.clients.reduce((n, c) => n + c.milestones.length, 0),
   };
 }
+
+// ---------------- 締切（N.4） ----------------
+
+/**
+ * 締切の表示: 基準の日（YYYY-MM-DD、表示しているタイムゾーンで）と同じ日なら「15:00」、違えば「11/4 15:00」。
+ * 日次ダッシュボードの行では予定の日、上の一覧では今日を基準にする。
+ */
+export function deadlineLabel(deadlineIso: string, baseDay: string, tz: string): string {
+  const d = inZone(deadlineIso, tz);
+  return d.format("YYYY-MM-DD") === baseDay ? d.format("HH:mm") : d.format("M/D HH:mm");
+}
+
+/** 行に締切を出すか（予定の終了と同じなら出さない: 予定の時刻の表示で分かる） */
+export const showsOwnDeadline = (deadlineIso: string, endsIso: string) => Date.parse(deadlineIso) !== Date.parse(endsIso);

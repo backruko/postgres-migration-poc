@@ -26,7 +26,7 @@ from src.domain_biz.models import BizMaster, CompletionMode, ExecutionType, SOPS
 from src.domain_ope.models import (
     EventSource, OpeOrder, OpeOrderEvent, OpeStep, OpeStepEvent, OrderEventType, OrderStatus, StepState,
 )
-from src.domain_ope import links, steps
+from src.domain_ope import deadlines, links, steps
 from src.domain_ope.schemas import (
     AutoReleaseResult, ConflictAction, ConflictResolveIn, DependencyBiz, OrderDependencyResponse, OrderDependentResponse,
     OrderDetailResponse,
@@ -166,6 +166,7 @@ def _detail(db: Session, order: OpeOrder) -> OrderDetailResponse:
             **{c.key: getattr(order, c.key) for c in OpeOrder.__table__.columns},
             "early_start_approved": any(e.event_type == OrderEventType.EARLY_START_APPROVED for e in events),
             "late": links.is_late(order, _now()),
+            "due_soon": links.is_due_soon(order, _now()),
             "execution_type": biz.execution_type if biz else ExecutionType.SOP,
             "completion_mode": biz.completion_mode if biz else CompletionMode.MANUAL,
             "sop_version": _order_sop_version(db, order),
@@ -568,6 +569,7 @@ def resolve_conflict(db: Session, order_id: int, actor_staff_id: int, resolve_in
             order.occurrence_date = live.occurrence_date
             order.scheduled_start = live.scheduled_start
             order.scheduled_end = live.scheduled_end
+            deadlines.restamp(order)  # 締切はこのオーダーの写した決め方で計算し直す
 
         if not cancel and steps.is_unstarted_release(order):
             db.flush()

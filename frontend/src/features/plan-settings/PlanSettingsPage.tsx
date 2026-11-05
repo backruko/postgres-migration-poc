@@ -11,6 +11,7 @@ import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { templateApi } from "../../domain/plan/api";
 import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
 import { CATEGORY_LABEL, categoryOf, type TemplateCategory } from "../../domain/plan/lib/category";
+import { describeDeadline } from "../../domain/plan/lib/deadline";
 import { describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
 import type { PlanTemplate } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
@@ -57,6 +58,7 @@ const columns: ColumnsType<PlanTemplate> = [
     render: (_, t) => `${t.start_time.slice(0, 5)}〜 ${t.duration_minutes}分`,
   },
   { title: "休日の扱い", dataIndex: "holiday_policy", render: (p: PlanTemplate["holiday_policy"]) => POLICY_LABEL[p] },
+  { title: "締切", key: "deadline", render: (_: unknown, t: PlanTemplate) => describeDeadline(t) },
   {
     title: "次の予定",
     key: "next",
@@ -256,7 +258,7 @@ export function PlanSettingsPage() {
             loading={loading}
             pagination={false}
             size="middle"
-            scroll={{ x: 1024 }}
+            scroll={{ x: 1180 }}
             locale={{ emptyText: <Empty description="この業務にはテンプレートがありません" /> }}
           />
         </>

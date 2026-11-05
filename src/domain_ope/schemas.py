@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.domain_biz.models import CompletionMode, DependencyKind, DependencyMatchRule, ExecutionType
+from src.domain_plan.models import DeadlineMode
 from src.domain_ope.models import EventSource, OrderEventType, OrderStatus, SignalResult, StepEventType, StepState
 
 
@@ -147,7 +148,12 @@ class OrderResponse(BaseModel):
     conflict: bool
     conflict_reason: str | None
     early_start_approved: bool = Field(default=False, description="a releaser approved starting before the scheduled day")
-    late: bool = Field(default=False, description="past its scheduled end and not finished / canceled (computed)")
+    late: bool = Field(default=False, description="past its deadline and not finished / canceled")
+    due_soon: bool = Field(default=False, description="within the warning time before its deadline and not finished / canceled")
+    deadline_mode: DeadlineMode = Field(description="how the deadline was set (copied from the template; fixed at release)")
+    deadline_at: datetime = Field(description="the stored deadline")
+    warn_at: datetime | None = Field(description="from when 'due soon' shows (null: no warning)")
+    finished_at: datetime | None = Field(description="when the order was finished / received")
     sop_version: OrderSopVersion | None = Field(
         default=None, description="the SOP version this order runs (null: none approved / none was frozen at release)"
     )

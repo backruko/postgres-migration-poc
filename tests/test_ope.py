@@ -16,6 +16,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.domain_ope.models import EventSource, OpeOrder, OpeOrderEvent, OrderEventType, OrderStatus
+from src.domain_plan.models import DeadlineMode
 from src.domain_plan import services as plan_services
 from src.domain_plan import slot_events
 from src.domain_plan.models import TemplateType
@@ -70,6 +71,8 @@ def order_for(plan, instance, **overrides) -> OpeOrder:
         source_sheet_event_id=None, one_off_instance_id=None,
         current_instance_id=instance.id, biz_master_id=plan["biz_id"], client_code=plan["code"],
         scheduled_start=instance.scheduled_start, scheduled_end=instance.scheduled_end,
+        # 締切（N.2）: 既定の決め方（予定の終了）
+        deadline_mode=DeadlineMode.END, deadline_timezone="Asia/Tokyo", deadline_at=instance.scheduled_end,
     )
     values.update(overrides)
     return OpeOrder(**values)

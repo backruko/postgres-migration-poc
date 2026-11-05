@@ -17,6 +17,7 @@ from src.domain_biz.models import SOPStatus, SOPStepTemplate, SOPVersion
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.domain_ope.models import EventSource, OpeOrder, OpeStep, OpeStepEvent, StepEventType, StepState
+from src.domain_plan.models import DeadlineMode
 from src.domain_plan import services as plan_services
 from src.domain_plan import slot_events
 from src.domain_plan.models import TemplateType
@@ -73,6 +74,7 @@ def setup(db, monkeypatch):
     order = OpeOrder(
         template_id=template.id, occurrence_date=inst.occurrence_date, current_instance_id=inst.id,
         biz_master_id=biz.id, client_code=code, scheduled_start=inst.scheduled_start, scheduled_end=inst.scheduled_end,
+        deadline_mode=DeadlineMode.END, deadline_timezone="Asia/Tokyo", deadline_at=inst.scheduled_end,
     )
     db.add(order)
     db.commit()

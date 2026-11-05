@@ -1,5 +1,5 @@
 import { http, unwrap } from "../../../shared/api/http";
-import type { DailyDashboard } from "../types";
+import type { Attention, DailyDashboard } from "../types";
 
 export const dashboardApi = {
   /**
@@ -13,5 +13,13 @@ export const dashboardApi = {
         signal,
       }),
     );
+  },
+
+  /**
+   * 完了・取消以外で、締切を過ぎた（遅れ）か「まもなく」の時刻を過ぎたオーダー（GET /ops/attention）。
+   * 日付によらず締切の早い順（昨日から遅れているオーダーも出る）。
+   */
+  getAttention(limit = 200, signal?: AbortSignal): Promise<Attention> {
+    return unwrap(http.GET("/ops/attention", { params: { query: { limit } }, signal }));
   },
 };

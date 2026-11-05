@@ -22,8 +22,9 @@ import { templateApi } from "../../domain/plan/api";
 import { useBusinessCalendars } from "../../domain/plan/hooks/useClientCalendar";
 import { useReferenceSheets } from "../../domain/plan/hooks/useReferenceSheets";
 import { CATEGORY_LABEL, TEMPLATE_CATEGORIES } from "../../domain/plan/lib/category";
+import { DAY_OFFSET_OPTIONS, DEADLINE_MODE_HELP, DEADLINE_MODE_LABEL } from "../../domain/plan/lib/deadline";
 import { describeRrule, describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
-import type { HolidayPolicy, PlanTemplate, TemplateType } from "../../domain/plan/types";
+import type { DeadlineMode, HolidayPolicy, PlanTemplate, TemplateType } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
 import { COLOR_PRESETS, hexFromColorPicker } from "../../shared/ui/color";
 import { Icon, ICON_NAMES } from "../calendar/components/Icon";
@@ -66,6 +67,7 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
   const sheetId = Form.useWatch("reference_sheet_id", form);
   const marker = Form.useWatch("reference_event_marker", form);
   const offsetDays = Form.useWatch("offset_days", form);
+  const deadlineMode = Form.useWatch("deadline_mode", form);
 
   const calendars = useBusinessCalendars();
   const sheets = useReferenceSheets(biz.client_code, open && templateType === "reference_sheet_based");
@@ -326,6 +328,41 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
               placeholder={calendarRequired ? "選択してください" : "なし"}
               options={(calendars.data ?? []).map((c) => ({ value: c.id, label: `${c.name}（${c.code}）` }))}
             />
+          </Form.Item>
+        </Space>
+
+        <Divider orientation="left" plain>締切</Divider>
+        <Form.Item name="deadline_mode" label="締切の決め方">
+          <Radio.Group>
+            <Space direction="vertical">
+              {(Object.keys(DEADLINE_MODE_LABEL) as DeadlineMode[]).map((m) => (
+                <Radio key={m} value={m}>{DEADLINE_MODE_LABEL[m]} <span className="muted">— {DEADLINE_MODE_HELP[m]}</span></Radio>
+              ))}
+            </Space>
+          </Radio.Group>
+        </Form.Item>
+        <Space wrap align="start" size="large">
+          {deadlineMode === "offset" && (
+            <Form.Item name="deadline_offset_minutes" label="開始から" rules={[{ required: true, message: "分を入力してください" }]}>
+              <InputNumber min={1} max={10080} addonAfter="分後" style={{ width: 180 }} />
+            </Form.Item>
+          )}
+          {deadlineMode === "fixed_time" && (
+            <>
+              <Form.Item name="deadline_day_offset" label="予定日の">
+                <Select style={{ width: 120 }} options={DAY_OFFSET_OPTIONS} />
+              </Form.Item>
+              <Form.Item name="deadline_time" label="締切時刻" rules={[{ required: true, message: "締切時刻を選択してください" }]}>
+                <TimePicker format="HH:mm" minuteStep={5} />
+              </Form.Item>
+            </>
+          )}
+          <Form.Item
+            name="warn_before_minutes"
+            label="締切の何分前に「まもなく」を出すか"
+            extra="0 = 出さない（必要な予定だけに設定してください）"
+          >
+            <InputNumber min={0} max={1440} addonAfter="分前" style={{ width: 180 }} />
           </Form.Item>
         </Space>
 
