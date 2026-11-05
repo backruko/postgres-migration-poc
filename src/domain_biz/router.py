@@ -40,7 +40,8 @@ def get_bizes_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(ge
     """
     return get_bizes(db=db, skip=skip, limit=limit)
 
-@router.patch("/{biz_id}", response_model=BizMasterResponse, responses={**COMMON_ERRORS})
+@router.patch("/{biz_id}", response_model=BizMasterResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def update_biz_endpoint(biz_id: int, biz_in: BizMasterUpdate, db: Session = Depends(get_db)):
     return update_biz(db=db, biz_id=biz_id, biz_in=biz_in)
 

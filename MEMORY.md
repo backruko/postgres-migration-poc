@@ -1,117 +1,94 @@
 # MEMORY.md — Session handoff
 
 Handoff for the next working session. Read this first, then the design doc (§2), `frontend/README.md` (frontend
-details), `src/domain_plan/`, `src/coordination/` and `src/domain_staff/` (backend). Last updated: 2026-10-28 (evening).
+details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/` and `src/domain_staff/`
+(backend). Last updated: 2026-11-04 (evening), after Phase 7.
 
 ## 1. Current status
 
-- **Branches:** `main` = Plan MVP + Phases 1–5. Phases 1–3 merged 2026-10-28 (`23767b8`); **Phases 4–5 merged
-  locally 2026-11-04 at the user's request (`71de514`, --no-ff, not pushed — the user pushes `main` and
-  `feature/ope-orders`)**. **Phase 6 merged locally 2026-11-04 (`b3538aa`, --no-ff, not pushed; `main` 29 ahead of
-  origin)**. **Current work: `feature/ope-signals`** (from `main` after that merge), Phase 7.
-  The user pushes; I never do. (The user committed + pushed 5.5 themselves as `75cc109 phase5`; my MEMORY-only
-  commit on top is `6a37fee`.)
-- **Where we are:** Plan domain MVP done. Operations design (§2): **Phases 1 (daily dashboard), 2 (generation job +
-  next-occurrence guarantee) and 3 (staff: backend + screen) are done. Phase 4 (ope orders): step 4.1 (release
-  settings on businesses), 4.2 (ope tables, `0552e9f`, pushed), 4.3 (order sync, `7d94be7`) and 4.4 (status API,
-  `0389de2`) and 4.5 (automatic release job, `09f7455`) committed (4.3–4.5 not pushed). Step 4.6 (SOP version
-  resolution / pinning / freeze at release) and 4.7 (order screen on the dashboard) committed 2026-10-30 (4.3–4.7
-  not pushed). **Phase 4 is complete. Phase 5 (steps, maker-checker) started 2026-10-30: decisions made and step plan
-  approved (§2 "Phase 5 step plan"); step 5.1 (step template condition + is_blocking) done — committed and pushed
-  by the user as `05850c1 phase4(compelete)` (with `5dbbe0f phase4`). Step 5.2 (ope_step / ope_step_event tables,
-  migration `966b78ff950f`) committed 2026-11-04 as `fc58dd0` (not pushed). Step 5.3 (build steps, migration
-  `6c8cc87274c8`) committed 2026-11-04 as `abe6281` (not pushed). Step 5.4 (step actions, no migration) committed
-  2026-11-04 as `074840f` (not pushed). Step 5.5 (frontend: steps in the order drawer, "3/5" on dashboard rows;
-  small backend addition, no migration) committed 2026-11-04 (by the user, `75cc109`). With it **Phase 5 is complete**. Phase 6 (dependencies)
-  planned 2026-11-04 (§2 "Phase 6 step plan"); step 6.1 committed 2026-11-04 (`8ab5f92`, not pushed). Step 6.2 (ope_dependency table, migration
-  `cb0ae371f402`) committed 2026-11-04 (`3eaede4`, not pushed). Step 6.3 (link resolution, no migration) committed
-  2026-11-04 (`1a364ca`, not pushed). Step 6.4 (start check + dependency override, migration `58425e70286d`)
-  committed 2026-11-04 (`916ebee`, not pushed). Step 6.5 (frontend + small backend additions, no migration) committed
-  2026-11-04 (`3669528`, not pushed). With it **Phase 6 is complete** (merged into `main`). Phase 7 (client
-  events / signals) planned 2026-11-04 (§2 "Phase 7 step plan"). Step 7.1 (biz client-event settings, migration
-  `6a7849dbf2ec`) committed 2026-11-04 (`0ff76dd`, not pushed). Step 7.2 (ope_signal table + role signal_sender,
-  migration `3242f180527a`) committed 2026-11-04 (`a9f8fc3`, not pushed). Step 7.3 (receiving / matching signals, no
-  migration) committed 2026-11-04 (`0b5e762`, not pushed). Step 7.4 (late + signal list, no migration) committed
-  2026-11-04 (`a7e1e03`, not pushed). Step 7.5 (frontend + order detail fields, no migration) committed 2026-11-04;
-  Phase 7 merged into `main` locally (not pushed). With it **Phase 7 — the last phase of the doc's plan — is
-  complete**. Next: whatever the user picks (doc open questions).**
-  The user's dev DB is migrated to `5eede5808433` and backfilled (890 orders, 2026-10-30).
-- **DB:** latest Alembic head is `3242f180527a` (ope_signal + role signal_sender). Migrations: `ceee1634d6a7`
-  (squashed init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` →
-  `568c3287c359` (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` →
-  `971958268657` (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at, RETIRED) → `2904467fd7b9` (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (order event type DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec` (biz client-event settings) → `3242f180527a` (ope_signal, role signal_sender).
-  The user's dev DB: at `6c8cc87274c8` (upgraded by the user 2026-11-04); earlier, at `5eede5808433` on 2026-10-30 (staff id 1, login `system`, system_admin; biz 1 has SOP
-  version 1 `v1.1.0`); `971958268657`, `966b78ff950f` and `6c8cc87274c8` handed over; `2904467fd7b9`, `cb0ae371f402`, `58425e70286d`, `6a7849dbf2ec` and `3242f180527a` handed over 2026-11-04.
-  `plan_check` is at `3242f180527a`, backfilled (190 orders + HTTP-check changes), staff 1 `check-admin`
-  (system_admin), 2 `check-op` (suspended) + harness users.
-  The user runs `alembic upgrade head` on their dev DB themselves. Their uvicorn on 8000 auto-reloads, so a model change
-  without the migration makes it return 500 until they upgrade. Warn them whenever a step adds a migration.
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` (plan, ops, staff, biz, biz_dependency, ope, ope_dependency, order_links, dependency_start, client_events, ope_signal, signals, ope_step, order_steps, step_actions, order_sync, order_actions, release_job, sop_resolution) → 147 passed, ~95–225 s (6.3 adds ~14% to order creation; run times vary a lot) (the order-sync listener is registered in `conftest.py`, so every plan test also syncs orders) (runs against `test_db` via `tests/conftest.py`,
-  `create_all`, no migrations). Known flake: `test_plan.py` client codes are `"T"` + 3 hex digits and collide now and
-  then (~1 run in 5) → `DuplicatedRecordError` in a fixture; rerun. `test_ops.py` uses `"D"`, `test_biz.py` `"B"`.
-  The user hasn't asked for the fix yet (retry or counter in the fixture).
+- **All seven phases of the design doc's delivery plan are built and merged into `main` (locally).** Plan MVP +
+  Phase 1 daily dashboard · 2 generation job · 3 staff · 4 ope orders · 5 steps / maker-checker · 6 dependencies ·
+  7 client events / signals. Per-phase detail ("as built" notes, decisions, step plans) is in §2.
+- **Branches / commits (2026-11-04, nothing pushed by me):** I'm on **`main`** (`bf22125`, merge of Phase 7), **36
+  commits ahead of `origin/main`**. Merges, all `--no-ff`, made locally at the user's request: Phases 1–3 `23767b8`
+  (pushed long ago), Phases 4–5 `71de514`, Phase 6 `b3538aa`, Phase 7 `bf22125`. Feature branches:
+  `feature/ope-orders` (Phases 4–5; 1 commit ahead of origin: `6a37fee`), `feature/ope-dependencies` (Phase 6, never
+  pushed), `feature/ope-signals` (Phase 7, never pushed). **The user pushes; I never do.** The user sometimes commits
+  a step themselves (e.g. 5.5 as `75cc109 phase5`) — check `git log` before committing.
+- **Current work (2026-11-05): `feature/ux-shortcuts`** (from `main` `bf22125`), frontend shortcuts + an admin guard
+  on the template page — see §2 "UX shortcuts". U.1 `9b7cb38`, U.2 `f002f9f`, U.3 `34914a8`; U.4 = candidate. Test fix (2026-11-05):
+  `test_order_links.py::test_sheet_rule_…` failed when a mock 本締 upstream (+0, 09:00) was already past but its +1
+  downstream was future (correct waiting row, KeyError in the test) → now accepts a waiting row for those.
+- **Earlier "next" list (still valid):** Ask the user what to do next. Candidates: (a) the user's browser check of Phases 5–7
+  screens (below) and fixes from it; (b) open questions in the doc: "latest before due" dependency matching, the
+  client-limited role, other signal transports (file arrival / DB watcher scripts posting to `POST /ope/signals`);
+  (c) small debts: `test_plan.py` client-code flake, pin / unpin UI (API only), staff names instead of 職員 #id in
+  timelines, SOP "impact before approval" list, a real login replacing the `X-Staff-Id` header. Plan a new phase the
+  same way as 5–7: questions first, a step plan approved by the user, one step at a time.
+- **DB:** latest Alembic head **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
+  init) → `34bdbd214739` → `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359`
+  (staff) → `f9bbe9648f15` (biz release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657`
+  (step template condition / is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8`
+  (ope_step.retired_at, RETIRED) → `2904467fd7b9` (biz_dependency) → `cb0ae371f402` (ope_dependency) →
+  `58425e70286d` (order event DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec` (biz execution_type / completion_mode /
+  signal_type) → `3242f180527a` (ope_signal, role signal_sender).
+  **The user's dev DB** was at `6c8cc87274c8` (upgraded by the user 2026-11-04 during Phase 5); the later five
+  (`2904467fd7b9` … `3242f180527a`) were handed over — ask whether they ran `alembic upgrade head`. The user runs it
+  themselves; their uvicorn on 8000 auto-reloads, so a model change without the migration returns 500 until they
+  upgrade. Warn them whenever a step adds a migration. Dev DB facts: staff id 1 login `system` (system_admin); biz 1
+  has SOP version 1 `v1.1.0`; 890 orders backfilled 2026-10-30.
+  **`plan_check`** (throwaway) is at `3242f180527a`. Seeded: client `MOCK`, biz 1 `MOCK0001` (SOP version 1 with 3
+  step templates added via SQL: always / month_in [12] / first_in_week blocking), biz 2 `MOCK0002` (LIGHTWEIGHT +
+  AUTOMATIC, signal type `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff: 1
+  `check-admin` (system_admin), 2 `check-op` (suspended), 3 viewer+auditor, 4 operator, 5 releaser, 6 / 7 checkers,
+  8 admin, 9 / 10 signal_sender. Many orders there were moved / released / finished by harness runs.
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **147 passed**,
+  ~95–225 s (run times vary a lot). Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the
+  order-sync listener — and with it the biz dependency listener — is registered there, so every plan test also syncs
+  orders). Each test file uses its own client-code prefix letter: T D B O S A R V P K M G L N Q E H J (pick an unused
+  one for a new file). Known flake: `test_plan.py:69` client codes `"T"` + 3 hex digits collide ~1 run in 4–5 →
+  `DuplicatedRecordError` / `uq_client_id` in a fixture; rerun. Not fixed yet (the user hasn't asked).
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
-  Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `alembic check` → no drift.
-  `.env` points at the user's `dev_db`: run alembic with `DATABASE_URL` set to the same URL ending in `/plan_check`.
-  Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes.
-- **Scheduled job (user's machine):** Task Scheduler `\postgres-migration-poc\PlanExtendJob`, daily 00:05, runs
-  `scripts/extend_plans.py` in the repo root (so `.env` → dev DB) as the user (interactive logon, runs on next logon if
-  missed), output appended to `extend_plans.log` (git-ignored). First run 2026-10-28: exit 0, 7 templates, 1 extended.
-  Second task `\postgres-migration-poc\OrderReleaseJob` (every 15 min, `scripts/release_orders.py` →
-  `release_orders.log`), registered by the user 2026-10-30 (my attempt was refused by the permission check); first
-  run 11:04 exit 0, 0 orders (all their businesses are MANUAL_APPROVAL).
-- **Browser check:** the user clicked through the 年間計画シート and 休日カレンダー screens (2026-10-28): no issues found.
-  Not yet clicked through: 日次ダッシュボード (`/daily`), the 「次の予定」 column on the template settings page, and the
-  職員 screen (`/settings/staff`) + nav picker 「操作する職員」.
+  Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic check` → no
+  drift. `.env` points at the user's `dev_db`: run alembic with `DATABASE_URL` = the same URL ending in `/plan_check`
+  (`export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed 's#/dev_db$#/plan_check#')`).
+  Frontend: `cd frontend && npm run build` (= `tsc --noEmit` + Vite build) passes. After backend schema changes:
+  `python scripts/export_openapi.py` then `npm run gen:api` (frontend types).
+- **Scheduled jobs (user's machine):** Task Scheduler `\postgres-migration-poc\PlanExtendJob` (daily 00:05,
+  `scripts/extend_plans.py` → `extend_plans.log`) and `\postgres-migration-poc\OrderReleaseJob` (every 15 min,
+  `scripts/release_orders.py` → `release_orders.log`), both registered by the user. Any new script that changes plan
+  must call `order_sync.register()`.
+- **Browser check:** the user clicked through 年間計画シート and 休日カレンダー (2026-10-28): no issues. **Not yet
+  clicked through:** 日次ダッシュボード incl. the order drawer (status actions, ステップ, 依存関係, 受領 / 遅れ), the
+  dashboard tags (3/5 progress, 待ち, 遅れ) and the 照合できなかった信号 panel, 予定テンプレート設定 (「次の予定」,
+  the 業務の設定 panel), 業務の依存関係 (`/settings/dependencies`), 職員 + nav picker 「操作する職員」.
 
-### Recent commits (newest first)
-| Commit | Content |
+### Commits by phase (newest first; full detail per step in §2)
+| Phase | Commits |
 |---|---|
-| `91cde48` | `.gitignore`: `frontend/.vite/` (Vite dep cache; two committed cache files untracked) |
-| `d65af44` | Phase 4.1: biz release settings, migration `f9bbe9648f15`, `tests/test_biz.py` |
-| `0d4ff4c` | MEMORY.md: Phase 4 decisions (first commit on `feature/ope-orders`) |
-| `23767b8` | `main`: merge of `feature/plan-holiday-calendar` (Phases 1–3) |
-| `b13fe73` / `7d01bff` / `8ec4b8d` | MEMORY.md: release 03:00, client-limited role, roles decisions, Phase 3 done |
-| `702ebbb` | Phase 3 frontend: 職員 screen `/settings/staff`, nav picker 「操作する職員」 (X-Staff-Id middleware) |
-| `bfe3deb` | Phase 3 backend: staff domain, migration `568c3287c359`, `require_roles`, `/staff` API, `scripts/create_staff.py` |
-| `fcff659` | Phase 2: `extend_all_templates` + `scripts/extend_plans.py`, next-occurrence guarantee, `next_occurrence_at`, 「次の予定」 column |
-| `eb4e6b5` | Phase 1 frontend: 日次ダッシュボード page `/daily` (committed by the user as "dashboard") |
-| `17f9bcc` | Phase 1 service: `GET /ops/daily` implementation + `tests/test_ops.py` (committed by the user as "fix") |
-| `9306e23` | Phase 1: coordination package, dashboard schemas + router skeleton |
-| `165866d` / `b410e5c` | MEMORY.md rewrite around the operations design |
-| `ae9ac2e` | MEMORY.md update |
-| `fa52e42` | Past holidays read-only in the backend; 「日本の祝日を取り込む」 (calculated, 2022–2099) |
-| `1fc8606` | MEMORY.md update |
-| `10d7ec0` | 休日カレンダー screen (`/settings/holidays`): list / add (rows or pasted lines) / rename / delete |
-| `354f613` | 生成をやめる: choose 「日付を残す」 or 「今日以降の日付も取り消す」 (`cancel_future_dates`) |
-| `6920a49` | MEMORY.md update (user) |
-| `833190e` | Per-date editing UI on 年間計画シート (move / delete / revert / add, past read-only) |
-| `42746b3` | Backend: audit trail of sheet dates, past read-only, `revertable` flag, migration `5c1f7d2a9e04` |
-| `ad1dd99` | 年間計画シート screen + rule-generated markers (create / edit / stop generating) + duplicate warning |
-| `0738f78` | Sticky top nav + sticky weekday row on the calendar |
-| `7de97e6` | Template delete + template categories (定例 / 不定期 / スペシャル) with calendar filter |
-| `679ff6c` | Template edit + nav keeps each page's query string (committed together) |
-| `905f299` | Template create |
-| `9c7976b` | Business dropdown on the settings page (`GET /biz/`) |
-| `86efa29` | `/settings/templates` page, routing, read-only template list |
+| 7 client events / signals (`feature/ope-signals`) | `22fec2a` 7.5 screens · `a7e1e03` 7.4 late + signal list · `0b5e762` 7.3 receive / match · `a9f8fc3` 7.2 ope_signal + role · `0ff76dd` 7.1 biz settings · `c1aade1` plan |
+| 6 dependencies (`feature/ope-dependencies`) | `3669528` 6.5 screens · `916ebee` 6.4 start check + override · `1a364ca` 6.3 link resolution · `3eaede4` 6.2 ope_dependency · `8ab5f92` 6.1 biz_dependency |
+| 5 steps (`feature/ope-orders`) | `6a37fee` docs · `75cc109` 5.5 (user) · `074840f` 5.4 · `abe6281` 5.3 · `11cd510` docs · `fc58dd0` 5.2 · `05850c1` / `5dbbe0f` 5.1 (user) |
+| 4 orders (`feature/ope-orders`) | `d151fbf` 4.7 · `4790ac1` 4.6 · `09f7455` 4.5 · `0389de2` 4.4 · `7d94be7` 4.3 · `0552e9f` 4.2 · `d65af44` 4.1 |
+| 1–3 (merged `23767b8`) | `702ebbb` / `bfe3deb` staff · `fcff659` generation job · `eb4e6b5` / `17f9bcc` / `9306e23` dashboard |
 
 ## 2. Target architecture — "Operations Orchestration Design" (draft for team review)
 
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 68 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 68}` to see only newer edits, and
+**Last rev written by me: 69 (2026-11-04)** — read with `{"kind": "view", "sinceRev": 69}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
-The delivery-phase list in the doc carries the build status (phases 1–7 built, rev 68).
+The delivery-phase list in the doc carries the build status (phases 1–7 built and merged, rev 69).
 
 ### Domains (decided: plan and ope stay separate, no merge)
 | Domain | Owns | Status |
 |---|---|---|
-| **biz** | What the work is: businesses, SOP versions (`effective_at` / `expired_at`), step templates, execution settings, dependency definitions | Exists (definitions only, no execution) |
-| **plan** | When it is due: templates, sheets, holidays, occurrences. Recomputable; regenerated freely, future only; knows nothing about ope | Exists (this branch) |
-| **ope** | What happened: orders, steps, append-only status events, signals. Facts, never recomputed | Planned |
-| **staff** | Who: users and roles (operator, checker, releaser, admin) | Planned |
-| **Coordination layer** | Cross-domain use cases (reschedule, release) in one DB transaction + read models (daily dashboard) | Daily dashboard built (`src/coordination/`); use cases planned |
+| **biz** | What the work is: businesses (release + client-event settings), SOP versions (`effective_at` / `expired_at`), step templates (condition, is_blocking), dependency definitions | Built (`src/domain_biz/`) |
+| **plan** | When it is due: templates, sheets, holidays, occurrences. Recomputable; regenerated freely, future only; knows nothing about ope | Built (`src/domain_plan/`) |
+| **ope** | What happened: orders, steps, append-only events, dependency links, signals. Facts, never recomputed | Built (`src/domain_ope/`: services, steps, links, signals) |
+| **staff** | Who: users and roles (operator, checker, releaser, admin, viewer, auditor, system_admin, signal_sender) | Built (`src/domain_staff/`) |
+| **Coordination layer** | Cross-domain glue in one DB transaction (plan → order sync, biz definition listener) + read models (daily dashboard) | Built (`src/coordination/`) |
 
 Dependency direction: ope → plan (reads slots), ope → biz (pins SOP version), ope → staff (actor), plan → biz
 (template's business). plan never imports ope.
@@ -675,12 +652,23 @@ from ready** (受領 = mark received; no start, so no day / dependency check for
   `frontend/src/styles.css`**; restored from HEAD with `git checkout` (no uncommitted CSS changes existed) and
   re-applied the 2 new lines. Lesson: build the full text first, then write.
 
+### UX shortcuts (branch `feature/ux-shortcuts`, 2026-11-05; not in the design doc — UI only)
+User's ideas; all choices as I recommended.
+| # | Step | Status |
+|---|---|---|
+| U.1 | Calendar day: double-click → `/daily?date=`; 「日次ダッシュボードで開く」 link in the selected-day panel | **done** (`9b7cb38`) |
+| U.2 | Dashboard rows: ⚙ link (all users, also rows without an order; not voided rows) → `/settings/templates?biz=&template=` (row highlighted + scrolled into view); 「← 戻る」 links via router state (`shared/lib/returnTo.ts`, `shared/ui/ReturnLink.tsx`): dashboard → calendar (same client / month, day re-selected via `state.selectDate`), template page → dashboard day; state kept across day / business changes, chains (calendar → dashboard → template) | **done** |
+| U.3 | Template page edits need `admin` (業務管理者; not system_admin): `@require_roles([ADMIN])` on plan template writes (create / patch / delete / restore / dates / cache rebuild) and `PATCH /biz/{id}`; UI hides 新規作成 / 編集 / 削除 and the 業務の設定 編集 for non-admins (panel stays visible). The user's staff 1 has no admin role → must grant it | **done** |
+| U.4 | Candidate (not approved): same guard for sheets / markers / sheet dates, holidays / calendars, remaining biz writes (create / delete / SOP versions / step templates) | — |
+
 ### Open questions (in the doc)
-Client event scope (per business or per client) · reset later steps on rejection (proposed no) · "latest before due"
-matching · cross-client dependencies (proposed no) · signal transport and matching key · client-limited role details
-(name, one or several client codes per user, read-only or also its own client events).
-Decided 2026-10-28 (ticked in the doc, rev 26): early start only with a releaser's approval; releaser + admin
-release / pin / force-start / resolve conflicts; automatic release default 03:00 JST on the scheduled day.
+**Still open:** "latest before due" matching for dependencies with different cadences · client-limited role details
+(name, one or several client codes per user, read-only or also its own client events) · signal transports beyond HTTP
+(file arrival, another database) — the matching key is decided (type + client + rule date).
+**Decided** (ticked in the doc): early start only with a releaser's approval; releaser + admin release / pin /
+force-start (now: approve a dependency override) / resolve conflicts; automatic release default 03:00 JST; rejecting
+a step resets only that step (2026-10-30); dependencies same client only (2026-11-04); client event = per business
+(2026-11-04).
 
 ### Planned: client-limited role (decided direction 2026-10-28, not built)
 A future role that sees only its own client code(s). Needs a per-user client scope (e.g. `staff_client(staff_user_id,
@@ -730,7 +718,19 @@ home PC. Their office `.env` (dev DB) is not available there.
   (`--define:import.meta.env='{"VITE_API_BASE_URL":"http://localhost:5174/api","VITE_TIMEZONE":"Asia/Tokyo"}'`) and run
   them in node against the throwaway backend. Say plainly what was *not* checked (I can't click through the browser; the
   user does that).
-- **Design work** (cross-domain, for the team) goes into a Claude Docs document, not chat.
+- **Design work** (cross-domain, for the team) goes into a Claude Docs document, not chat. Record each step's
+  decisions in the doc (a short "Decided …, built in X.Y" paragraph or a data-model row) and in §2 here.
+- **"go" from the user** (also typed "GO" or "ご" with the Japanese IME) after a finished step = commit it; after a
+  commit = start the next step (questions first). "commit and merge" = commit, then merge the feature branch into
+  `main` locally with `--no-ff` (check `main` hasn't diverged first); they push.
+- **Shell / editing lessons (2026-11-04):** write edit scripts to the scratchpad with the Write tool and run them
+  with `python <file> < /dev/null` — never `python - <<'EOF' < /dev/null` (the redirect replaces the heredoc →
+  interactive REPL that hangs), never `sed … $f` with a possibly empty `$f` (reads stdin, hangs). Build the whole new
+  text before `open(path, "w")` (a failing call after opening empties the file — happened to `styles.css`, restored
+  from git). Anchors in edit scripts must be unique (`# --- System Audit Trail ---` repeats in biz models). The shell
+  cwd drifts between calls: use absolute paths (`/c/p/postgres-migration-poc/...`). Backgrounded uvicorn:
+  `--app-dir /c/p/postgres-migration-poc --port 8001`, stop it with TaskStop when done. Harnesses can call uvicorn
+  8001 directly (`VITE_API_BASE_URL=http://127.0.0.1:8001`; the Vite proxy only strips `/api`).
 - Code comments in the repo are Japanese; UI text is Japanese; replies to the user in English.
 - Line endings: the ope / dashboard frontend files and `styles.css` are LF in the working tree (checked 2026-11-04;
   older notes said CRLF); backend Python files, migrations and MEMORY.md are LF. Match the file you edit. Japanese in shell arguments gets mangled (cp932): pass JSON via files and run Python with
@@ -840,7 +840,8 @@ failure). `PlanTemplateResponse.next_occurrence_at` (computed per response by `_
 ### Biz domain (`src/domain_biz/`) as built
 `biz_master` (client_code, business_seq → business_code, name, …) → `sop_version` (version_number, version_tag,
 status, `effective_at`, `expired_at`; clone / approve / cancel endpoints) → `sop_step_template` (step_num, title,
-content). Definitions only — no execution, no conditions, no `is_blocking` yet (§2 adds them).
+content, `condition` JSONB, `is_blocking` — 5.1). Also `biz_dependency` (6.1) and the client-event settings
+`execution_type` / `completion_mode` / `signal_type` (7.1); execution itself lives in ope.
 **Release settings (4.1):** `release_mode` (`ReleaseMode`: MANUAL_APPROVAL default | AUTOMATIC; stored as member
 names), `release_time` (Time, default 03:00 JST), `release_days_before` (0–30, default 0, CHECK
 `chk_biz_release_days_before`). New businesses get the defaults (the shared `CRUDBase.create` runs
@@ -861,6 +862,12 @@ downgrade); autogenerate never emits CHECK constraints.
 | Sheet dates | `POST …/markers/{marker}/events`, `PATCH` / `DELETE /plans/sheets/events/{id}`, `POST …/events/{id}/revert` |
 | Holidays | `GET /plans/calendars/{id}/holidays` (all years; the page filters by year), `POST …/holidays` (re-posting a date only renames it, no regeneration), `DELETE …/holidays/{date}`; past dates → 400 |
 | Lookups | `GET /clients/`, `GET /biz/` (limit 1000 requested), `GET /plans/calendars` |
+| Business settings | `PATCH /biz/{id}` (release + client-event settings; unguarded like the rest of biz) |
+| Dashboard | `GET /ops/daily?date=&timezone=` (rows carry order `{id, status, conflict, steps_total, steps_approved, blocked, late}`) |
+| Orders | `GET /ope/orders/{id}` (detail: steps, dependencies, dependents, events, late, execution_type, completion_mode); `POST /ope/orders/{id}/release · approve-early-start · approve-dependency-override · start · hold · resume · finish · cancel · resolve-conflict · pin · unpin` |
+| Steps | `POST /ope/steps/{id}/submit` (operator) · `/approve` · `/reject` (checker, four-eyes) |
+| Dependencies | `GET /biz/clients/{code}/dependencies`, `GET /biz/{id}/dependencies`, `POST /biz/{id}/dependencies` + `DELETE /biz/dependencies/{id}` (admin) |
+| Signals | `POST /ope/signals` (signal_sender), `GET /ope/signals?scope=open\|all&client_code=&since=`, `POST /ope/signals/{id}/handle` (operator / releaser / admin) |
 
 Unused Plan endpoints, kept on purpose: sheet import UI + `POST /plans/sheets` (sheet creation) — still open, waiting
 on the Excel-vs-JSON question; template audit history `GET /plans/templates/{id}/instances`; calendar create / weekend
@@ -886,8 +893,11 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
   - `shared/` — http client, `useApiQuery`, `datetime.ts`, `useNow`, `ui/color.ts`, `config.ts` (`TIMEZONE`).
   - `features/calendar`, `features/schedule-actions`, `features/plan-settings`.
     Pure logic lives in `templateForm.ts` / `markerForm.ts` / `holidayForm.ts` (testable in node); modals are UI only.
-- **Routes / nav:** `/` calendar (`?client=&month=&holidays=`) · `/daily?date=` 日次ダッシュボード · `/settings/staff` 職員 ·
-  `/settings/templates?biz=` · `/settings/sheets?client=` · `/settings/holidays?calendar=<id>&year=`.
+- **Routes / nav:** `/` calendar (`?client=&month=&holidays=`) · `/daily?date=` 日次ダッシュボード (order drawer,
+  signals panel) · `/settings/templates?biz=` (+ 業務の設定 panel) · `/settings/sheets?client=` ·
+  `/settings/holidays?calendar=<id>&year=` · `/settings/dependencies?client=` 業務の依存関係 · `/settings/staff` 職員.
+  Domain modules for Phases 4–7: `domain/ope/{types,api (orderApi, signalApi),hooks,lib (orderActions, stepActions,
+  signals)}`, `domain/biz/{api (bizApi, dependencyApi),lib (dependencies, settings)}`.
 - **日次ダッシュボード** (`features/daily-dashboard`, data via `domain/ops/{types,api,hooks}`): prev / next day, date
   picker, 今日; calendar tags (営業日 / 休日（name） / 休業日（週末）); one card per client (code links to its calendar
   month), sheet-date tags with provenance labels, occurrences per business (time, chipStyle swatch + Icon, 人が変更 /

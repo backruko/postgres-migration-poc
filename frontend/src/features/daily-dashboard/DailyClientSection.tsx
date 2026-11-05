@@ -1,9 +1,11 @@
+import { SettingOutlined } from "@ant-design/icons";
 import { Tag } from "antd";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { ORDER_STATUS_COLOR, ORDER_STATUS_LABEL } from "../../domain/ope/lib/orderActions";
 import { stepProgress } from "../../domain/ope/lib/stepActions";
 import type { DailyClient } from "../../domain/ops/types";
 import { timeIn } from "../../shared/lib/datetime";
+import { returnState, returnToHere } from "../../shared/lib/returnTo";
 import { Icon } from "../calendar/components/Icon";
 import { chipStyle } from "../calendar/lib/chipStyle";
 import { milestoneSource, shortDate, VOID_REASON_LABEL } from "./dailyDashboard";
@@ -20,6 +22,9 @@ interface Props {
 export function DailyClientSection({ client, date, timezone, onOpenOrder }: Props) {
   const count = client.businesses.reduce((n, b) => n + b.occurrences.length, 0);
   const span = (start: string, end: string) => `${timeIn(start, timezone)}–${timeIn(end, timezone)}`;
+  // 予定テンプレートの画面に「この日の日次ダッシュボードに戻る」リンクを出す（ダッシュボード自身の戻り先も引き継ぐ）
+  const location = useLocation();
+  const backHere = returnState(returnToHere(location, `${shortDate(date)} の日次ダッシュボードに戻る`));
 
   return (
     <section className="daily-client" aria-label={`${client.client_code} ${client.client_name}`}>
@@ -84,6 +89,18 @@ export function DailyClientSection({ client, date, timezone, onOpenOrder }: Prop
                   {order?.late && <Tag color="red" title="予定の終了時刻を過ぎても完了していません">遅れ</Tag>}
                   {order?.blocked && <Tag color="orange" title="上流のオーダーが完了するまで開始できません">待ち</Tag>}
                   {order?.conflict && <Tag color="warning" title={order.conflict_reason ?? undefined}>矛盾</Tag>}
+                  {/* 行のクリック（オーダーの詳細）とは別に、予定テンプレートの設定画面へ */}
+                  <Link
+                    to={{ pathname: "/settings/templates", search: `?biz=${b.biz_master_id}&template=${o.template_id}` }}
+                    state={backHere}
+                    className="daily-template-link"
+                    title="予定テンプレートを開く"
+                    aria-label={`「${o.title}」の予定テンプレートを開く`}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <SettingOutlined />
+                  </Link>
                 </li>
               );
             })}

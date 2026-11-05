@@ -1,4 +1,13 @@
+import type { Staff } from "../../staff/types";
 import type { CompletionMode, ExecutionType, ReleaseMode } from "../types";
+
+/**
+ * 予定テンプレートと業務の設定を変更できるか（業務管理者のみ。参照は誰でも。最終判定はバックエンドの require_roles）
+ */
+export const canEditPlanSettings = (s: Staff | null | undefined) => s?.status === "active" && s.roles.includes("admin");
+
+/** 変更できない職員に見せる案内 */
+export const PLAN_SETTINGS_ADMIN_ONLY = "変更は業務管理者だけができます";
 
 export const RELEASE_MODE_LABEL: Record<ReleaseMode, string> = {
   manual_approval: "手動（リリース担当が承認）",

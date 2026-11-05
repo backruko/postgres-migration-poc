@@ -1,6 +1,7 @@
 import { HistoryOutlined } from "@ant-design/icons";
 import { Alert, App, Badge, Button, Empty, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useClients } from "../../domain/client/hooks/useClients";
 import { instanceApi } from "../../domain/plan/api";
 import { useCancelledInstances } from "../../domain/plan/hooks/useCancelledInstances";
@@ -11,6 +12,7 @@ import { ApiError } from "../../shared/api/http";
 import { DEFAULT_CLIENT, DEFAULT_HOLIDAY_CALENDAR, TIMEZONE } from "../../shared/config";
 import { useNow } from "../../shared/hooks/useNow";
 import { addMonths, monthLabel, monthOf, todayIn } from "../../shared/lib/datetime";
+import { returnState, returnToHere } from "../../shared/lib/returnTo";
 import { CancelModal } from "../schedule-actions/CancelModal";
 import { CancelledDrawer } from "../schedule-actions/CancelledDrawer";
 import { OneOffModal } from "../schedule-actions/OneOffModal";
@@ -55,10 +57,20 @@ export function CalendarPage() {
   const { hidden, toggle, showAll } = useHiddenTemplates();
   const hiddenCategories = useHiddenCategories();
 
-  const [selected, setSelected] = useState<string | null>(null);
+  // 日次ダッシュボードの「戻る」で来たときは、開いたときの日を選択し直す（state.selectDate）
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [selected, setSelected] = useState<string | null>(
+    () => (location.state as { selectDate?: string } | null)?.selectDate ?? null,
+  );
   useEffect(() => {
     if (data) setSelected((prev) => (prev && monthOf(prev) === data.month ? prev : defaultSelection(data, today)));
   }, [data, today]);
+  const openDaily = (date: string) =>
+    navigate(
+      { pathname: "/daily", search: `?date=${date}` },
+      { state: returnState(returnToHere(location, `${query.client} のカレンダーに戻る`, { selectDate: date })) },
+    );
 
   // ---- 手動操作（変更・取消・臨時追加・元に戻す） ----
   const [editing, setEditing] = useState<ClientOccurrence | null>(null);
@@ -178,6 +190,7 @@ export function CalendarPage() {
               now={now}
               timezone={TIMEZONE}
               onSelect={setSelected}
+              onOpenDaily={openDaily}
             />
             <DayDetail
               day={data.days.find((d) => d.date === selected)}
@@ -188,6 +201,7 @@ export function CalendarPage() {
               today={today}
               actions={actions}
               onAddOneOff={setAddingOn}
+              onOpenDaily={openDaily}
             />
           </div>
           <AgendaList
