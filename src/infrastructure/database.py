@@ -7,8 +7,8 @@ from src.infrastructure.config import settings
 from src.core.mixin import SoftDeleteMixin
 
 
-# データベースエンジンの作成
-engine = create_engine(settings.database_url, echo=True)
+# データベースエンジンの作成（SQL のログは SQL_ECHO で切り替える。既定はオフ）
+engine = create_engine(settings.database_url, echo=settings.sql_echo)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # 全てのモデルの親となる基本クラス
