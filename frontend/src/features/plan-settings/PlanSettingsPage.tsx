@@ -5,7 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import { BizSettingsPanel } from "./BizSettingsPanel";
+import { canEditPlanSettings, PLAN_SETTINGS_ADMIN_ONLY } from "../../domain/biz/lib/settings";
 import type { BizMaster } from "../../domain/biz/types";
+import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { templateApi } from "../../domain/plan/api";
 import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
 import { CATEGORY_LABEL, categoryOf, type TemplateCategory } from "../../domain/plan/lib/category";
@@ -101,6 +103,10 @@ export function PlanSettingsPage() {
   const parsedTemplate = Number(params.get("template"));
   const focusTemplateId = Number.isInteger(parsedTemplate) && parsedTemplate > 0 ? parsedTemplate : null;
 
+  // 作成・編集・削除と業務の設定の編集は業務管理者だけ（見るのは誰でも）
+  const me = useCurrentStaff();
+  const canEdit = canEditPlanSettings(me.data);
+
   const bizes = useBizMasters();
   const options = useMemo(() => bizOptions(bizes.data ?? []), [bizes.data]);
   const selectedBiz = bizes.data?.find((b) => b.id === bizId);
@@ -138,7 +144,7 @@ export function PlanSettingsPage() {
       },
     });
 
-  const tableColumns: ColumnsType<PlanTemplate> = [
+  const tableColumns: ColumnsType<PlanTemplate> = !canEdit ? columns : [
     ...columns,
     {
       title: "操作",
@@ -228,16 +234,19 @@ export function PlanSettingsPage() {
           {withoutUpcoming > 0 && (
             <Alert type="warning" showIcon message={`今後の予定が無いテンプレートが ${withoutUpcoming} 件あります。`} description={NO_UPCOMING_HINT} />
           )}
-          {selectedBiz && <BizSettingsPanel biz={selectedBiz} onSaved={bizes.reload} />}
+          {selectedBiz && <BizSettingsPanel biz={selectedBiz} canEdit={canEdit} onSaved={bizes.reload} />}
           <div className="table-head">
             <Typography.Text type="secondary">
               {selectedBiz ? `${selectedBiz.business_code} ${selectedBiz.name}` : `業務ID ${bizId}`} のテンプレート
               {data ? ` ${data.length} 件` : ""}
+              {!canEdit && ` ・ ${PLAN_SETTINGS_ADMIN_ONLY}`}
             </Typography.Text>
             {/* 作成先は選択中の業務（一覧に無い業務IDの場合は作成・編集できない） */}
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(null)} disabled={!selectedBiz}>
-              新規作成
-            </Button>
+            {canEdit && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(null)} disabled={!selectedBiz}>
+                新規作成
+              </Button>
+            )}
           </div>
           <Table<PlanTemplate>
             rowKey="id"
@@ -252,7 +261,7 @@ export function PlanSettingsPage() {
           />
         </>
       )}
-      {selectedBiz && (
+      {selectedBiz && canEdit && (
         <TemplateFormModal
           open={editor.open}
           biz={selectedBiz}

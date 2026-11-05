@@ -1,9 +1,9 @@
 import { EditOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Radio, Space, TimePicker } from "antd";
+import { Alert, App, Button, Descriptions, Form, Input, InputNumber, Modal, Radio, Space, TimePicker, Typography } from "antd";
 import { useState } from "react";
 import { bizApi } from "../../domain/biz/api/bizApi";
 import {
-  clientEventBody, clientEventError, COMPLETION_MODE_LABEL, EXECUTION_TYPE_LABEL, RELEASE_MODE_LABEL,
+  clientEventBody, clientEventError, COMPLETION_MODE_LABEL, EXECUTION_TYPE_LABEL, PLAN_SETTINGS_ADMIN_ONLY, RELEASE_MODE_LABEL,
 } from "../../domain/biz/lib/settings";
 import type { BizMaster, CompletionMode, ExecutionType, ReleaseMode } from "../../domain/biz/types";
 import { ApiError } from "../../shared/api/http";
@@ -20,6 +20,8 @@ interface Values {
 
 interface Props {
   biz: BizMaster;
+  /** 編集できるか（業務管理者のみ。できない場合も設定は表示する） */
+  canEdit: boolean;
   onSaved: () => void;
 }
 
@@ -27,7 +29,7 @@ interface Props {
  * 業務の設定（リリースの方法・顧客側の出来事）。テンプレート設定画面の上に表示し、編集はモーダルで行う。
  * 信号での完了は「顧客側の出来事」（LIGHTWEIGHT）の業務だけ・信号の種類が必須（顧客ごとに一意。バックエンドが判定する）。
  */
-export function BizSettingsPanel({ biz, onSaved }: Props) {
+export function BizSettingsPanel({ biz, canEdit, onSaved }: Props) {
   const { message } = App.useApp();
   const [form] = Form.useForm<Values>();
   const [open, setOpen] = useState(false);
@@ -86,7 +88,11 @@ export function BizSettingsPanel({ biz, onSaved }: Props) {
         bordered
         column={1}
         title="業務の設定"
-        extra={<Button size="small" icon={<EditOutlined />} onClick={openForm}>編集</Button>}
+        extra={
+          canEdit
+            ? <Button size="small" icon={<EditOutlined />} onClick={openForm}>編集</Button>
+            : <Typography.Text type="secondary" style={{ fontSize: 12 }}>{PLAN_SETTINGS_ADMIN_ONLY}</Typography.Text>
+        }
       >
         <Descriptions.Item label="リリース">{release}</Descriptions.Item>
         <Descriptions.Item label="実行のしかた">{EXECUTION_TYPE_LABEL[biz.execution_type]}</Descriptions.Item>

@@ -16,7 +16,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   pushed), `feature/ope-signals` (Phase 7, never pushed). **The user pushes; I never do.** The user sometimes commits
   a step themselves (e.g. 5.5 as `75cc109 phase5`) — check `git log` before committing.
 - **Current work (2026-11-05): `feature/ux-shortcuts`** (from `main` `bf22125`), frontend shortcuts + an admin guard
-  on the template page — see §2 "UX shortcuts". U.1 `9b7cb38`, U.2 committed; U.3 in progress; U.4 = candidate.
+  on the template page — see §2 "UX shortcuts". U.1 `9b7cb38`, U.2 `f002f9f`, U.3 committed; U.4 = candidate. Open: `test_order_links.py::test_sheet_rule_…` fails when a mock 本締 upstream (09:00, +0) is past but its +1 downstream is future (waiting row, KeyError in the test) — test fragility, seen 2026-11-05.
 - **Earlier "next" list (still valid):** Ask the user what to do next. Candidates: (a) the user's browser check of Phases 5–7
   screens (below) and fixes from it; (b) open questions in the doc: "latest before due" dependency matching, the
   client-limited role, other signal transports (file arrival / DB watcher scripts posting to `POST /ope/signals`);
@@ -656,7 +656,7 @@ User's ideas; all choices as I recommended.
 |---|---|---|
 | U.1 | Calendar day: double-click → `/daily?date=`; 「日次ダッシュボードで開く」 link in the selected-day panel | **done** (`9b7cb38`) |
 | U.2 | Dashboard rows: ⚙ link (all users, also rows without an order; not voided rows) → `/settings/templates?biz=&template=` (row highlighted + scrolled into view); 「← 戻る」 links via router state (`shared/lib/returnTo.ts`, `shared/ui/ReturnLink.tsx`): dashboard → calendar (same client / month, day re-selected via `state.selectDate`), template page → dashboard day; state kept across day / business changes, chains (calendar → dashboard → template) | **done** |
-| U.3 | Template page edits need `admin` (業務管理者; not system_admin): `@require_roles([ADMIN])` on plan template writes (create / patch / delete / restore / dates / cache rebuild) and `PATCH /biz/{id}`; UI hides 新規作成 / 編集 / 削除 and the 業務の設定 編集 for non-admins (panel stays visible). The user's staff 1 has no admin role → must grant it | in progress |
+| U.3 | Template page edits need `admin` (業務管理者; not system_admin): `@require_roles([ADMIN])` on plan template writes (create / patch / delete / restore / dates / cache rebuild) and `PATCH /biz/{id}`; UI hides 新規作成 / 編集 / 削除 and the 業務の設定 編集 for non-admins (panel stays visible). The user's staff 1 has no admin role → must grant it | **done** |
 | U.4 | Candidate (not approved): same guard for sheets / markers / sheet dates, holidays / calendars, remaining biz writes (create / delete / SOP versions / step templates) | — |
 
 ### Open questions (in the doc)

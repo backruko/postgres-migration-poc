@@ -5,8 +5,8 @@ from fastapi import APIRouter, Body, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
-from src.domain_staff.auth import get_current_staff, require_active
-from src.domain_staff.models import StaffUser
+from src.domain_staff.auth import get_current_staff, require_active, require_roles
+from src.domain_staff.models import RoleCode, StaffUser
 from src.infrastructure.database import get_db
 from src.domain_plan.schemas import (
     BusinessCalendarCreate,
@@ -162,9 +162,11 @@ def delete_sheet_event_endpoint(event_id: int, db: Session = Depends(get_db)):
 
 # ==========================================
 # PlanTemplate エンドポイント
+# 参照は誰でも。作成・変更・削除は業務管理者（admin）だけ
 # ==========================================
 
-@router.post("/templates", response_model=PlanTemplateResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS})
+@router.post("/templates", response_model=PlanTemplateResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def create_template_endpoint(
     
     # template_in: Annotated[PlanTemplateCreate, Body(openapi_examples=PLAN_TEMPLATE_CREATE_EXAMPLES)],
@@ -185,27 +187,32 @@ def get_templates_endpoint(biz_id: int, db: Session = Depends(get_db)):
 def get_template_endpoint(template_id: int, db: Session = Depends(get_db)):
     return get_template(db=db, template_id=template_id)
 
-@router.patch("/templates/{template_id}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS})
+@router.patch("/templates/{template_id}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def update_template_endpoint(template_id: int, template_in: PlanTemplateUpdate, db: Session = Depends(get_db)):
     """
     生成に影響する項目を変更するとリビジョンが上がり、未来のインスタンスが再照合されます（過去分は不変）。
     """
     return update_template(db=db, template_id=template_id, template_in=template_in)
 
-@router.delete("/templates/{template_id}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS})
+@router.delete("/templates/{template_id}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def delete_template_endpoint(template_id: int, db: Session = Depends(get_db)):
     return delete_template(db=db, template_id=template_id)
 
-@router.post("/templates/{template_id}/restore", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS})
+@router.post("/templates/{template_id}/restore", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def restore_template_endpoint(template_id: int, db: Session = Depends(get_db)):
     return restore_template(db=db, template_id=template_id)
 
-@router.post("/templates/{template_id}/dates", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS})
+@router.post("/templates/{template_id}/dates", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def add_explicit_dates_endpoint(template_id: int, dates_in: ExplicitDatesAdd, db: Session = Depends(get_db)):
     """顧客指定日を追加します(登録済みの日付は無視)。"""
     return add_explicit_dates(db=db, template_id=template_id, dates=dates_in.dates)
 
-@router.delete("/templates/{template_id}/dates/{local_date}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS})
+@router.delete("/templates/{template_id}/dates/{local_date}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def remove_explicit_date_endpoint(template_id: int, local_date: date, db: Session = Depends(get_db)):
     return remove_explicit_date(db=db, template_id=template_id, local_date=local_date)
 
@@ -214,7 +221,8 @@ def get_instances_endpoint(template_id: int, skip: int = 0, limit: int = 100, db
     """無効化済みを含む全インスタンス(監査用)。"""
     return get_instances(db=db, template_id=template_id, skip=skip, limit=limit)
 
-@router.post("/templates/{template_id}/cache/rebuild", response_model=CacheRebuildResponse, responses={**COMMON_ERRORS})
+@router.post("/templates/{template_id}/cache/rebuild", response_model=CacheRebuildResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
 def rebuild_cache_endpoint(template_id: int, db: Session = Depends(get_db)):
     return CacheRebuildResponse(template_id=template_id, occurrences=rebuild_cache(db=db, template_id=template_id))
 
