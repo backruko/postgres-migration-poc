@@ -7,6 +7,7 @@ domain_plan のテスト。
 ※ Service層は内部で commit するため、テストごとに一意な顧客コードを使ってデータを分離しています。
 """
 import json
+import random
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -63,9 +64,18 @@ def db():
         session.close()
 
 
+# 顧客コードは CHAR(4) 固定なので "T" + 16進3桁（4096通り）しかない。このファイルは1回の実行で30件以上使うため、
+# 乱数で選ぶと同じコードが出て uq_client_id で失敗することがあった（約1/5）。シャッフルした候補から重複なしで取り出す
+_CLIENT_CODES = iter(random.sample([f"T{n:03X}" for n in range(16**3)], 16**3))
+
+
+def new_client_code() -> str:
+    return next(_CLIENT_CODES)
+
+
 @pytest.fixture
 def biz_id(db):
-    code = "T" + uuid.uuid4().hex[:3].upper()
+    code = new_client_code()
     client_repo.create(db, obj_in=ClientCreate(code=code, name="test client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="test biz", business_seq=1, manager_email=None, description=None))
     return biz.id
@@ -916,7 +926,7 @@ def test_client_calendar_includes_all_businesses_of_the_client(db, biz_id):
     daily_template(db, other_biz.id, name="Daily B", rrule="FREQ=WEEKLY;BYDAY=FR", start_time=time(15, 0))
 
     # 別の顧客の予定は含まれない
-    foreign_code = "T" + uuid.uuid4().hex[:3].upper()
+    foreign_code = new_client_code()
     client_repo.create(db, obj_in=ClientCreate(code=foreign_code, name="other client"))
     foreign_biz = biz_master_repo.create(
         db, obj_in=BizMasterCreate(client_code=foreign_code, name="x", business_seq=1, manager_email=None, description=None)
@@ -1052,7 +1062,7 @@ def test_cancelled_list_and_restore(db, biz_id, monkeypatch):
     one_off = services.add_one_off_instance(db, t.id, PlanOneOffCreate(scheduled_start=gens[10].scheduled_start + timedelta(hours=3)))
     services.cancel_instance(db, one_off.id, PlanInstanceCancel())
     # 別の顧客の取消は含まれない
-    foreign_code = "T" + uuid.uuid4().hex[:3].upper()
+    foreign_code = new_client_code()
     client_repo.create(db, obj_in=ClientCreate(code=foreign_code, name="other"))
     foreign_biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=foreign_code, name="x", business_seq=1, manager_email=None, description=None))
     ft = daily_template(db, foreign_biz.id)

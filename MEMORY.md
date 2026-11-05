@@ -15,14 +15,15 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   `feature/ope-orders` (Phases 4–5; 1 commit ahead of origin: `6a37fee`), `feature/ope-dependencies` (Phase 6, never
   pushed), `feature/ope-signals` (Phase 7, never pushed). **The user pushes; I never do.** The user sometimes commits
   a step themselves (e.g. 5.5 as `75cc109 phase5`) — check `git log` before committing.
-- **Current work (2026-11-05): `feature/ux-shortcuts`** (from `main` `bf22125`), frontend shortcuts + an admin guard
-  on the template page — see §2 "UX shortcuts". U.1 `9b7cb38`, U.2 `f002f9f`, U.3 `34914a8`; U.4 = candidate. Test fix (2026-11-05):
+- **Done 2026-11-05: `feature/ux-shortcuts`** (from `main` `bf22125`), frontend shortcuts + an admin guard
+  on the template page — see §2 "UX shortcuts". **Merged into `main` locally (`700350e`, --no-ff, not pushed; `main`
+  42 ahead of origin); U.1–U.3 clicked through in the browser by the user: OK.** No migration. U.1 `9b7cb38`, U.2 `f002f9f`, U.3 `34914a8`; U.4 = candidate. Test fix (2026-11-05):
   `test_order_links.py::test_sheet_rule_…` failed when a mock 本締 upstream (+0, 09:00) was already past but its +1
   downstream was future (correct waiting row, KeyError in the test) → now accepts a waiting row for those.
 - **Earlier "next" list (still valid):** Ask the user what to do next. Candidates: (a) the user's browser check of Phases 5–7
   screens (below) and fixes from it; (b) open questions in the doc: "latest before due" dependency matching, the
   client-limited role, other signal transports (file arrival / DB watcher scripts posting to `POST /ope/signals`);
-  (c) small debts: `test_plan.py` client-code flake, pin / unpin UI (API only), staff names instead of 職員 #id in
+  (c) small debts: pin / unpin UI (API only), staff names instead of 職員 #id in
   timelines, SOP "impact before approval" list, a real login replacing the `X-Staff-Id` header. Plan a new phase the
   same way as 5–7: questions first, a step plan approved by the user, one step at a time.
 - **DB:** latest Alembic head **`3242f180527a`** (ope_signal + role signal_sender). Chain: `ceee1634d6a7` (squashed
@@ -46,8 +47,10 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   ~95–225 s (run times vary a lot). Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the
   order-sync listener — and with it the biz dependency listener — is registered there, so every plan test also syncs
   orders). Each test file uses its own client-code prefix letter: T D B O S A R V P K M G L N Q E H J (pick an unused
-  one for a new file). Known flake: `test_plan.py:69` client codes `"T"` + 3 hex digits collide ~1 run in 4–5 →
-  `DuplicatedRecordError` / `uq_client_id` in a fixture; rerun. Not fixed yet (the user hasn't asked).
+  one for a new file). Client codes are `CHAR(4)` → only 4096 per prefix; `test_db` is dropped after each run, so
+  collisions happen within one run. **Fixed 2026-11-05** for `test_plan.py` (~34 codes per run, collided ~1 run in
+  4–5): `new_client_code()` draws from a shuffled pool without replacement. Other files still use random codes (few
+  per run, unlikely to collide); switch them to the same pattern if one ever flakes.
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
   Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic check` → no
   drift. `.env` points at the user's `dev_db`: run alembic with `DATABASE_URL` = the same URL ending in `/plan_check`
@@ -657,8 +660,8 @@ User's ideas; all choices as I recommended.
 | # | Step | Status |
 |---|---|---|
 | U.1 | Calendar day: double-click → `/daily?date=`; 「日次ダッシュボードで開く」 link in the selected-day panel | **done** (`9b7cb38`) |
-| U.2 | Dashboard rows: ⚙ link (all users, also rows without an order; not voided rows) → `/settings/templates?biz=&template=` (row highlighted + scrolled into view); 「← 戻る」 links via router state (`shared/lib/returnTo.ts`, `shared/ui/ReturnLink.tsx`): dashboard → calendar (same client / month, day re-selected via `state.selectDate`), template page → dashboard day; state kept across day / business changes, chains (calendar → dashboard → template) | **done** |
-| U.3 | Template page edits need `admin` (業務管理者; not system_admin): `@require_roles([ADMIN])` on plan template writes (create / patch / delete / restore / dates / cache rebuild) and `PATCH /biz/{id}`; UI hides 新規作成 / 編集 / 削除 and the 業務の設定 編集 for non-admins (panel stays visible). The user's staff 1 has no admin role → must grant it | **done** |
+| U.2 | Dashboard rows: ⚙ link (all users, also rows without an order; not voided rows) → `/settings/templates?biz=&template=` (row highlighted + scrolled into view); 「← 戻る」 links via router state (`shared/lib/returnTo.ts`, `shared/ui/ReturnLink.tsx`): dashboard → calendar (same client / month, day re-selected via `state.selectDate`), template page → dashboard day; state kept across day / business changes, chains (calendar → dashboard → template) | **done** (`f002f9f`) |
+| U.3 | Template page edits need `admin` (業務管理者; not system_admin): `@require_roles([ADMIN])` on plan template writes (create / patch / delete / restore / dates / cache rebuild) and `PATCH /biz/{id}`; UI hides 新規作成 / 編集 / 削除 and the 業務の設定 編集 for non-admins (panel stays visible). The user's staff 1 has no admin role → must grant it | **done** (`34914a8`) |
 | U.4 | Candidate (not approved): same guard for sheets / markers / sheet dates, holidays / calendars, remaining biz writes (create / delete / SOP versions / step templates) | — |
 
 ### Open questions (in the doc)
