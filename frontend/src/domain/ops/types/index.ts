@@ -19,3 +19,7 @@ export type DailyMilestone = Schemas["DailyMilestone"];
 // ---- 締切が近い・遅れのオーダー（日付によらず。N.3 / N.4） ----
 export type Attention = Schemas["AttentionResponse"];
 export type AttentionItem = Schemas["AttentionItem"];
+
+// ---- SLA の集計（顧客 × 締切の月。S.1 / S.2） ----
+export type SlaReport = Schemas["SlaResponse"];
+export type SlaRow = Schemas["SlaRow"];

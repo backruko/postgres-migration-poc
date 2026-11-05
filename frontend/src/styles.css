@@ -264,6 +264,8 @@ h1 .client { color: var(--accent); }
 .order-deps { list-style: none; margin: 4px 0 10px; padding: 0; display: grid; gap: 4px; }
 .biz-settings { margin-bottom: 16px; max-width: 720px; }
 .attention-panel, .signals-panel { display: grid; gap: 8px; }
+.sla-total-row > td { background: var(--sheet) !important; font-weight: 600; }
+.sla-open-late { color: #cf1322; font-weight: 600; }
 .order-dep { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
 .order-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .order-step { border: 1px solid var(--rule); background: var(--sheet); border-radius: 6px; padding: 8px 10px; display: grid; gap: 4px; }
