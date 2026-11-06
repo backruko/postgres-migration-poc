@@ -57,9 +57,9 @@ def business_with_orders(db):
 def versions(db, biz_id, switch_day: date):
     """v1（〜switch_day の前日まで有効）、v2（switch_day 0:00 から有効）、草稿 v3"""
     switch = datetime.combine(switch_day, time(0), tzinfo=JST)
-    v1 = SOPVersion(biz_master_id=biz_id, version_number=1, version_tag="v1.0.0", status=SOPStatus.ACTIVE,
+    v1 = SOPVersion(biz_master_id=biz_id, version_number=1, version_tag="v1.0.0", status=SOPStatus.APPROVED,
                     effective_at=switch - timedelta(days=400), expired_at=switch - timedelta(seconds=1))
-    v2 = SOPVersion(biz_master_id=biz_id, version_number=2, version_tag="v2.0.0", status=SOPStatus.FUTURE,
+    v2 = SOPVersion(biz_master_id=biz_id, version_number=2, version_tag="v2.0.0", status=SOPStatus.APPROVED,
                     effective_at=switch, expired_at=None)
     v3 = SOPVersion(biz_master_id=biz_id, version_number=3, version_tag="v3.0.0-draft", status=SOPStatus.DRAFT)
     db.add_all([v1, v2, v3])

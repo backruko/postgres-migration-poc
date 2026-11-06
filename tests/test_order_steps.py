@@ -83,7 +83,7 @@ def setup(db):
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="step biz", business_seq=1, manager_email=None, description=None))
     tuesday = base_tuesday()
     later = next_month_tuesday(tuesday)
-    version = SOPVersion(biz_master_id=biz.id, version_number=1, version_tag="v1.0.0", status=SOPStatus.ACTIVE,
+    version = SOPVersion(biz_master_id=biz.id, version_number=1, version_tag="v1.0.0", status=SOPStatus.APPROVED,
                          effective_at=datetime(2026, 1, 1, tzinfo=JST))
     db.add(version)
     db.flush()

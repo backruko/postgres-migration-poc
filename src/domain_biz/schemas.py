@@ -1,10 +1,10 @@
 import re
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.domain_biz.models import CompletionMode, DependencyKind, DependencyMatchRule, ExecutionType, ReleaseMode, SOPStatus
+from src.domain_biz.models import CompletionMode, DependencyKind, DependencyMatchRule, ExecutionType, ReleaseMode, SOPStatus, SopState
 
 RELEASE_FIELDS = ("release_mode", "release_time", "release_days_before")
 # 明示的な null を受け付けない項目（signal_type は null で解除できる）
@@ -94,20 +94,20 @@ class SOPVersionUpdate(BaseModel):
     pass
 
 class SOPVersionScheduleIn(BaseModel):
-    """【権限者承認用】未来実装(FUTURE)へ昇格させる際の発効日指定スキーマ"""
-    effective_at: datetime = Field(..., description="予約発効日時(UTCまたはタイムゾーン付き)")
+    """草稿の承認（M2.1）: この日の 0:00（日本時間）から有効にする。明日以降"""
+    effective_date: date = Field(..., description="first day (JST) the version applies to; tomorrow or later")
 
 class SOPVersionResponse(BaseModel):
     id: int
     biz_master_id: int
     version_number: int
     version_tag: str
-    status: SOPStatus
+    status: SOPStatus = Field(description="stored: draft or approved")
+    state: SopState = Field(description="draft / scheduled (approved, not yet in effect) / current / past, from the dates")
     effective_at: datetime | None
-    expired_at: datetime | None
+    expired_at: datetime | None = Field(description="end (exclusive): the next version's effective_at")
 
-    class Config:
-        from_attributes = True  # SQLAlchemyモデルから自動変換できるようにする設定 (Pydantic v2)
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==========================================

@@ -118,7 +118,7 @@ def test_db_backs_up_the_rules(db):
 
 def test_lightweight_orders_get_no_steps(db):
     _, (biz_id,) = client_with_businesses(db, 1)
-    version = SOPVersion(biz_master_id=biz_id, version_number=1, version_tag="v1.0.0", status=SOPStatus.ACTIVE,
+    version = SOPVersion(biz_master_id=biz_id, version_number=1, version_tag="v1.0.0", status=SOPStatus.APPROVED,
                          effective_at=datetime(2026, 1, 1, tzinfo=JST))
     db.add(version)
     db.flush()

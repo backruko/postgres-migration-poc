@@ -25,12 +25,11 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   | SLA report | `feature/sla-report` → `706f166` | `GET /ops/sla` + nav 「SLA」 page `/reports/sla` (client × deadline month: 完了 / 遅れ / 期限内率 / 平均遅れ / 未完了の遅れ, CSV export) |
 - **Next: the MVP roadmap (decided by the user 2026-11-05 evening).** Goal: a small MVP online on the **internal
   network, own team only**. Order: **M1 → M2 → login → deployment**; the pool below waits until after go-live.
-  - **M1 client + business screens** (branch `feature/master-screens`): **M1.1 backend done (`2729ea7`)**, M1.2a 設定 menu done (`5a619b6`), M1.2b 顧客 page done (`2cfb5fa`), M1.2c 業務 page
-    built (uncommitted); details and the M1.2 step plan below in "M1"; M1.2 frontend — pages 「顧客」 `/settings/clients` and 「業務」
-    `/settings/businesses?client=` (list, 登録, edit, 無効 / 有効 or 削除 / 元に戻す, link to 予定テンプレート), admin-only
-    buttons. User's decisions: clients deactivate only (no hard delete); business code automatic and fixed;
-    (2026-11-06) business delete refused while in use; inactive client hidden + no new data; `GET /biz/` query params.
-  - **M2 SOP**: backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
+  - **M1 client + business screens: done, merged into `main` (`44c1737`, 2026-11-06, not pushed)** — commits
+    `2729ea7` M1.1 backend · `5a619b6` M1.2a 設定 menu · `2cfb5fa` M1.2b 顧客 page · `13a7238` M1.2c 業務 page (detail in
+    §2 "M1").
+  - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; **M2.1 built,
+    uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
     delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
     is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
     copy of the current version into a draft.
@@ -56,14 +55,14 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   screens from Phases 5–7 were never clicked through either. A "slow drawer spinner" report on 2026-11-05 could not be
   reproduced: server ~25 ms, Vite proxy ~25 ms — most likely the uvicorn console paused by a text selection
   (Windows QuickEdit); advised turning QuickEdit off.
-- **DB:** latest Alembic head **`51d8d829a2d2`**. Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
+- **DB:** latest Alembic head **`7a3c5e9b1d24`** (M2.1, SOP states; **the user must run `alembic upgrade head`**). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
   `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) → `f9bbe9648f15` (biz
   release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657` (step template condition /
   is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at) → `2904467fd7b9`
   (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec`
   (biz client-event settings) → `3242f180527a` (ope_signal, role signal_sender) → `2f7614f1cb02` (latest_before +
   lookback_days, L.1) → `d17d631f5ad2` (plan_template deadline fields, N.1) → `c5bb40015e61` (ope_order deadline
-  snapshot + deadline_at / warn_at / finished_at, N.2) → `51d8d829a2d2` (attention partial indexes, N.3).
+  snapshot + deadline_at / warn_at / finished_at, N.2) → `51d8d829a2d2` (attention partial indexes, N.3) → `7a3c5e9b1d24` (SOP version states from dates, M2.1).
   **The user's dev DB:** on 2026-11-05 at 16:39 their uvicorn (8000) was already reading the N.2 columns and serving
   `/ops/attention`, so it was upgraded at least to `c5bb40015e61`; **the user confirmed it is at head `51d8d829a2d2`
   (2026-11-05, late session)** — never
@@ -72,7 +71,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   Dev DB facts: staff 1 login `system` has system_admin + operator / checker / releaser but **not admin** (needs
   業務管理者 to edit settings since U.3 / U.4); 1 client MOCK; biz 13 / 14 in use; `app.log.1` (1.35 GB, pre-rotation)
   can be deleted by the user.
-  **`plan_check`** (throwaway, mine) is at `51d8d829a2d2`. Seeded: client `MOCK`, biz 1 `MOCK0001` (one approved SOP
+  **`plan_check`** (throwaway, mine) is at `7a3c5e9b1d24`. Seeded: client `MOCK`, biz 1 `MOCK0001` (one approved SOP
   version `v9.26817.0`; SOP version 1 with 3 step templates), biz 2 `MOCK0002` (LIGHTWEIGHT + AUTOMATIC
   `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff: 1 `check-admin` (system_admin),
   2 suspended, 3 viewer+auditor, **4 operator, 5 releaser**, 6 / 7 checkers, **8 admin**, 9 / 10 signal_sender. 14
@@ -81,7 +80,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   ~2.5–6 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
   and with it the biz dependency and template listeners — is registered there). **Every new test file uses
   `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M G L N Q E
-  H J W F Y U C. Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
+  H J W F Y U C X. Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
   errors. Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic
   check` → no drift; run alembic with `export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed
   's#/dev_db$#/plan_check#')` (`.env` points at the user's `dev_db`). Frontend: `cd frontend && npm run build` passes.
@@ -113,7 +112,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 79 (2026-11-06, M1 master-data paragraph before the MVP deployment paragraph)** — read with `{"kind": "view", "sinceRev": 79}` to see only newer edits, and
+**Last rev written by me: 80 (2026-11-06, "Version states" bullet at the end of the SOP version list)** — read with `{"kind": "view", "sinceRev": 80}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -763,6 +762,42 @@ preview** in the 登録 modal (no number field; API still accepts one for a load
 | M1.2a | `AppLayout`: カレンダー / 日次ダッシュボード / SLA flat; antd `Dropdown` 「設定」 (hover + click) with the 5 settings pages (`SETTINGS_PAGES`), button shows 「設定：<page>」 + active style when one is open (`currentSettingsPage`); links keep each page's last query string; CSS `.nav-menu*`. 顧客 / 業務 entries are added in M1.2b / c | **done** (`5a619b6`) |
 | M1.2b | 顧客 page `/settings/clients` (`features/client-settings`: `ClientSettingsPage` + `ClientFormModal`; `clientApi` create / update / deactivate / activate, `list(signal, includeInactive)`; `useAllClients`; `domain/client/lib/clients.ts` `canManageClients` (active admin), `normalizeClientCode`, `clientCodeError` (4 alnum, not used — inactive included), `deactivateBlockedReason`). Table コード / 顧客名 / 状態 / 業務 (count of live businesses; becomes a link in M1.2c) / 登録日 / 操作 (admin: 名前を変更, 無効にする — disabled with the reason while businesses remain — / 有効にする, confirm; backend message shown on refusal); inactive rows greyed (`is-past-row`); first entry of the 設定 menu. Harness 15/15 on plan_check (client `YA64` id 3 left active, its business deleted) | **done** (`2cfb5fa`) |
 | M1.2c | 業務 page `/settings/businesses?client=` (`features/business-settings`: `BusinessSettingsPage` + `BizFormModal`; `bizApi.listForClient(code, includeDeleted)` / `create` / `remove` / `restore`; `domain/biz/lib/businesses.ts` `canManageBusinesses` (active admin), `nextBusinessCode` (max seq incl. deleted + 1, null past 9999), `bizBasics` (blank → null), `bizUpdateBody` (changed fields only)). Client field like 業務の依存関係 (active clients; warning when `?client=` is inactive / unknown → no 登録 / 元に戻す). Table 業務コード / 業務名 (+ description) / 管理者メール / 状態 有効 / 削除済み / 操作: 「予定テンプレート・業務の設定」 (all users, live rows; navigate to `/settings/templates?biz=`), admin: 編集, 削除 (confirm; backend's in-use reasons shown 10 s), 元に戻す. 登録 modal shows the code it will get. 顧客 page 業務 column = link to this page; 業務 = 2nd entry of the 設定 menu; CSS `.biz-description`. Harness 16/16 on plan_check (YA64 now has YA640002 live, YA640001 deleted) | **built, uncommitted** |
+
+### M2 — SOP screens (branch `feature/sop-screens` from `main` `44c1737`, 2026-11-06; doc rev 80)
+Found first: the stored SOP status never moved FUTURE → ACTIVE (nothing promoted it), so a second approval was always
+refused ("既に別の予約…") and 予約の取消 could turn an in-use version back into an editable draft. User's decisions (all
+as I recommended): **states from dates**; **新しい版 copies the newest approved version** (scheduled one if any, else
+current; empty draft for the first SOP); **effective = a date, from 00:00 JST**. My calls (user didn't object):
+approving a draft with **no steps is refused**; **no four-eyes** on SOP approval (editors aren't recorded).
+| # | Step | Status |
+|---|---|---|
+| M2.1 | Version states from dates + approve / cancel rules; migration `7a3c5e9b1d24` | **built, uncommitted** |
+| M2.2 | Draft editing API: list all versions incl. drafts, one version + steps, 新しい版 (copy newest approved / empty), add (auto number) / edit / delete / reorder steps, delete a draft — drafts only, admin | todo |
+| M2.3 | `GET /ope/sop-impact?biz_id=&effective_date=`: unreleased unpinned orders from that day (will run it), pinned (keep pin), released (keep frozen) | todo |
+| M2.4 | Page `/settings/sop?biz=` (「SOP」 link on 業務 rows): version list with state tags, read-only steps, 新しい版 (suggested tag), 草稿を削除 | todo |
+| M2.5 | Draft step editor (add / edit / delete / move; condition 毎回 / 指定した月 / 週の最初; 承認で次へ) | todo |
+| M2.6 | Approve dialog (date + impact list) and 予定を取り消す | todo |
+
+**M2.1 as built** (migration `7a3c5e9b1d24`: rebuilds `sop_status_enum` as DRAFT / APPROVED — FUTURE / ACTIVE / ARCHIVED →
+APPROVED; data fix-up first: drafts lose their dates, approved without `effective_at` get now, open-ended approved
+versions are chained to the next one's `effective_at` (LEAD by effective_at); CHECKs `ck_sop_version_effective_iff_approved`
+(draft ⇔ no effective_at), `ck_sop_version_expired_after`; downgrade maps back by dates).
+- `SOPStatus` DRAFT | APPROVED; `SopState` draft | scheduled | current | past via `SOPVersion.state_at(now)` / `.state`;
+  `SOPVersionResponse` + `state` (and `model_config`); `SOPVersionScheduleIn.effective_date` (was `effective_at`).
+- `approve_and_schedule_version(db, biz_id, draft_id, effective_date)`: locks the biz row; date must be > today JST;
+  draft of this biz with ≥ 1 step; refused while another version is scheduled; every approved version with
+  `expired_at` NULL gets `expired_at = effective_at` (exact, no −1 s); draft → APPROVED. `cancel_future_version`: approved
+  + scheduled only, else 400 "already taken effect"; `version_checks.reasons_not_to_cancel` (new hook
+  `src/domain_biz/version_checks.py`, registered by `master_guards.version_used_by_orders` →
+  `ope_order_repo.count_using_sop_version`: pinned or frozen, not canceled); versions ending at its start reopen; → DRAFT.
+  Removed dead `create_sop_version` / `get_latest_active_version`. `LOCAL_TIMEZONE` in biz services.
+- **Fixed a latent bug:** git stored `src/infrastructure/repositories/client.py` while `__init__` imports `.Client`; it
+  only worked because the working-tree file was `Client.py`. A branch switch rewrote it lowercase →
+  `ModuleNotFoundError`. Renamed in git to `Client.py` (a fresh clone / Linux would have failed).
+- Tests: `tests/test_sop_versions.py` (4; client prefix **`X`**); six test files switched `SOPStatus.ACTIVE` /
+  `FUTURE` → `APPROVED`. Round trip on plan_check (also with synthetic old-style rows: chain + draft cleanup OK, rows
+  removed). HTTP 10/10 on plan_check: v9 = current; draft id 6 (`v9.1793927904.0`, 1 step) left on biz 1 after
+  approve → cancel.
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

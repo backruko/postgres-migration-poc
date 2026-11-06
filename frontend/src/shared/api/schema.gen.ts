@@ -239,8 +239,8 @@ export interface paths {
         put?: never;
         /**
          * Approve And Schedule Version Endpoint
-         * @description 【権限者専用】選ばれた特定の草稿(DRAFT)を承認し、未来の発効日に向けた予約枠(FUTURE)へ昇格させます。
-         *     (自動的に現行版の終了期限がこの発効日の前日に連結されます)
+         * @description 【業務管理者】草稿を承認し、effective_date（明日以降）の 0:00（日本時間）から有効にします（状態は「予定」）。
+         *     予定の版は業務ごとに 1 つまで。ステップの無い草稿は承認できません。今有効な版は、この発効日時で終わります。
          */
         post: operations["approve_and_schedule_version_endpoint_biz__biz_id__versions__draft_version_id__approve_post"];
         delete?: never;
@@ -260,7 +260,8 @@ export interface paths {
         put?: never;
         /**
          * Cancel Future Version Endpoint
-         * @description 【権限者専用】予約(FUTURE)を取り消し、現行版の期限を無期限(None)に自動復元した上で、データを再編集可能なDRAFTへと安全に引き戻します。
+         * @description 【業務管理者】まだ発効していない（予定の）版の承認を取り消し、草稿に戻します。今有効な版の終了日時は外れます。
+         *     発効した版・オーダーが指定（pin）している版・リリースで固定した版は取り消せません（400）。
          */
         post: operations["cancel_future_version_endpoint_biz__biz_id__versions__future_version_id__cancel_post"];
         delete?: never;
@@ -3449,10 +3450,11 @@ export interface components {
         };
         /**
          * SOPStatus
-         * @description SOPバージョンのライフサイクルステータス
+         * @description SOPバージョンの保存される状態（M2.1）。草稿か承認済みかだけを持つ。
+         *     承認済みの「予定 / 現行 / 過去」は effective_at / expired_at と現在日時から決まる（SopState・SOPVersion.state）。
          * @enum {string}
          */
-        SOPStatus: "draft" | "future" | "active" | "archived";
+        SOPStatus: "draft" | "approved";
         /** SOPStepTemplateCreate */
         SOPStepTemplateCreate: {
             /**
@@ -3519,23 +3521,29 @@ export interface components {
             version_number: number;
             /** Version Tag */
             version_tag: string;
+            /** @description stored: draft or approved */
             status: components["schemas"]["SOPStatus"];
+            /** @description draft / scheduled (approved, not yet in effect) / current / past, from the dates */
+            state: components["schemas"]["SopState"];
             /** Effective At */
             effective_at: string | null;
-            /** Expired At */
+            /**
+             * Expired At
+             * @description end (exclusive): the next version's effective_at
+             */
             expired_at: string | null;
         };
         /**
          * SOPVersionScheduleIn
-         * @description 【権限者承認用】未来実装(FUTURE)へ昇格させる際の発効日指定スキーマ
+         * @description 草稿の承認（M2.1）: この日の 0:00（日本時間）から有効にする。明日以降
          */
         SOPVersionScheduleIn: {
             /**
-             * Effective At
-             * Format: date-time
-             * @description 予約発効日時(UTCまたはタイムゾーン付き)
+             * Effective Date
+             * Format: date
+             * @description first day (JST) the version applies to; tomorrow or later
              */
-            effective_at: string;
+            effective_date: string;
         };
         /**
          * SignalHandleIn
@@ -3682,6 +3690,12 @@ export interface components {
              */
             open_late: number;
         };
+        /**
+         * SopState
+         * @description 画面に出すバージョンの状態（保存しない。日付から決まる）
+         * @enum {string}
+         */
+        SopState: "draft" | "scheduled" | "current" | "past";
         /** StaffCreate */
         StaffCreate: {
             /**

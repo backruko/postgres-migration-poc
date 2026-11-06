@@ -93,21 +93,22 @@ def get_current_active_version_endpoint(biz_id: int, db: Session = Depends(get_d
 @require_roles([RoleCode.ADMIN])
 def approve_and_schedule_version_endpoint(biz_id: int, draft_version_id: int, schedule_in: SOPVersionScheduleIn, db: Session = Depends(get_db)):
     """
-    【権限者専用】選ばれた特定の草稿(DRAFT)を承認し、未来の発効日に向けた予約枠(FUTURE)へ昇格させます。
-    (自動的に現行版の終了期限がこの発効日の前日に連結されます)
+    【業務管理者】草稿を承認し、effective_date（明日以降）の 0:00（日本時間）から有効にします（状態は「予定」）。
+    予定の版は業務ごとに 1 つまで。ステップの無い草稿は承認できません。今有効な版は、この発効日時で終わります。
     """
     return approve_and_schedule_version(
-        db=db, 
-        biz_id=biz_id, 
-        draft_version_id=draft_version_id, 
-        effective_at=schedule_in.effective_at
+        db=db,
+        biz_id=biz_id,
+        draft_version_id=draft_version_id,
+        effective_date=schedule_in.effective_date
     )
 
 @router.post("/{biz_id}/versions/{future_version_id}/cancel", response_model=SOPVersionResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
 @require_roles([RoleCode.ADMIN])
 def cancel_future_version_endpoint(biz_id: int, future_version_id: int, db: Session = Depends(get_db)):
     """
-    【権限者専用】予約(FUTURE)を取り消し、現行版の期限を無期限(None)に自動復元した上で、データを再編集可能なDRAFTへと安全に引き戻します。
+    【業務管理者】まだ発効していない（予定の）版の承認を取り消し、草稿に戻します。今有効な版の終了日時は外れます。
+    発効した版・オーダーが指定（pin）している版・リリースで固定した版は取り消せません（400）。
     """
     return cancel_future_version(db=db, biz_id=biz_id, future_version_id=future_version_id)
 
