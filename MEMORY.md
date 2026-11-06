@@ -7,8 +7,12 @@ setup was merged and handed to the user for a test on the VM.
 
 ## 1. Current status
 
-- **`main` = `895cbe5` (local, NOT pushed; `origin/main` is still `706f166`).** The user pushes; I never do. The user
-  sometimes commits a step themselves — check `git log` before committing. Working tree: clean after the handoff commit.
+- **`main` = `origin/main` = `6390c87` (pushed by the user, 2026-11-06).** After `895cbe5` the user committed `a00b2b1`
+  "mvp" / `242dda6` "staging" (MEMORY.md + a `deploy_package.zip`) and `6390c87` "git" (zip removed again; it held no
+  secrets). **The VM reaches only the office network (no GitHub): code goes as a zip on a USB
+  drive** (user, 2026-11-06); whether it reaches Docker Hub / PyPI / npm is **unknown — the user checks** (see §2
+  "Go-live" G.3). The user pushes; I never do. The user
+  sometimes commits a step themselves — check `git log` before committing.
 - **Built and merged into `main`:** all design-doc phases (1 daily dashboard · 2 generation job · 3 staff · 4 ope
   orders · 5 steps / maker-checker · 6 dependencies (+ L latest-before) · 7 client events / signals · 8 deadlines / due
   soon · 9 SLA report), the 2026-11-05 extras (UX shortcuts, admin guards, dashboard tabs, logging) and **the whole MVP
@@ -20,13 +24,22 @@ setup was merged and handed to the user for a test on the VM.
   | Login LG.1–LG.3 | `895cbe5` (with deployment) | passwords / sessions / API keys (migration `b4e8d2a6c913`), login for every API, X-Staff-Id removed, /login page, forced password change, 職員 page temp passwords + API keys |
   | Deployment | `895cbe5` | `deploy/` Docker Compose (db, app, worker, web, backup), `scripts/worker.py`, nightly pg_dump |
 - **Now: waiting for the user's test report from the VM.** The Docker setup has **never been built or started**
-  (no Docker on the office PC). Expect fixes in: image builds (python:3.14-slim + `psycopg-binary`, `npm ci` in
+  (no Docker on the office PC). **2026-11-06: the VM isn't set up yet**; the office PC has no Docker **and no WSL**
+  either — offered WSL2 + Docker Engine (or Docker Desktop, license limits) for a local first run, **user chose to wait
+  for the VM** (install nothing on the office PC). Static read-through of `deploy/` the same day found nothing (settings
+  read env without a `.env` file, SQLAlchemy 2.1 `postgresql://` = psycopg 3, `GET /` open for the healthcheck, lockfile
+  has the linux-musl rollup / esbuild packages, `.sh` files LF). Expect fixes in: image builds (python:3.14-slim + `psycopg-binary`, `npm ci` in
   node:24-alpine), nginx config, compose start-up order / healthchecks, the backup service in the postgres image.
   Ask for `docker compose ps` / `docker compose logs <service>` output. The login frontend (LG.3) and the 顧客 / 業務
   pages were **not** clicked through in a browser by me; the user tested M1 + M2 screens only.
 - **After the VM test: go-live checklist** (not planned in detail yet): real master data (clients, businesses,
   templates, sheets, holidays, SOP versions, dependencies) on the server, staff accounts + temporary passwords,
   `scripts/create_orders.py` if orders are missing, browser checks, the user's NAS sync of `deploy/backups/`.
+  **Go-live decisions (2026-11-06, all as I recommended):** master data **typed in the screens** on the server (dev DB
+  not copied); the API-only gap (a fresh DB has **no business calendar**; calendar / sheet creation have no screen) is
+  filled by a **one-time setup script**; **no reference sheets at go-live** (Excel-vs-JSON stays open); **pilot one
+  client first**, the rest after a few days. Python stays **3.14** (dev venv 3.14.2; change only if a wheel is missing).
+  Step plan approved 2026-11-06, branch **`feature/go-live`** from `main` `6390c87`; detail in §2 "Go-live".
 - **Pool (after go-live)**, smallest first: (1) notifications (mail / Teams / Slack) for まもなく / 遅れ — needs the
   user's tool + webhook; the worker loop is the natural place; (2) SFTP watcher "B" (§2 "Todo pool") — posts
   `POST /ope/signals` with an **API key** (built in LG.2); (3) client-limited role (§2 "Planned"); (4) SSO instead of
@@ -34,8 +47,8 @@ setup was merged and handed to the user for a test on the VM.
   recommended option), a step plan the user approves, one step at a time, each left uncommitted until "go".
 - **User's dev setup after login (important):** their uvicorn on 8000 + Vite now need a real login. They must have run
   `alembic upgrade head` (head `b4e8d2a6c913`) and `python scripts/set_password.py system` (staff 1, login `system`,
-  has system_admin + operator / checker / releaser but **not admin** — grant 業務管理者 to edit settings). Not yet
-  confirmed by the user. The two Task Scheduler jobs on their PC stay for the dev DB; the server uses `worker`.
+  has system_admin + operator / checker / releaser but **not admin** — grant 業務管理者 to edit settings). **Both
+  confirmed by the user 2026-11-06.** The two Task Scheduler jobs on their PC stay for the dev DB; the server uses `worker`.
 - **DB:** latest Alembic head **`b4e8d2a6c913`**. Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
   `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) → `f9bbe9648f15` (biz
   release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657` (step template condition /
@@ -53,7 +66,7 @@ setup was merged and handed to the user for a test on the VM.
   N has password **`check-pass-N`**): 1 `check-admin` (system_admin), 2 suspended, 3 viewer+auditor, 4 operator
   `http-operator-1793324910`, 5 releaser `http-releaser-1793324911`, 6 / 7 checkers, 8 admin `http-admin-6eb1ee`, 9 / 10
   signal_sender. Many open orders past their deadline (good for 遅れ / attention / SLA checks).
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **202 passed**,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **204 passed**,
   ~3–8 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
   and with it the biz dependency / template listeners and the master guards — is registered there). **Every new test
   file uses `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M
@@ -981,6 +994,19 @@ moment, cap 60 s", much simpler).
 - **Not verified (no Docker here):** image builds (python:3.14-slim + `psycopg-binary` wheel, `npm ci` in node:24),
   nginx config, compose start-up order / healthchecks, the backup service inside the postgres image. First real run =
   on the VM; check `docker compose ps` / `logs`.
+
+### Go-live (branch `feature/go-live` from `main` `6390c87`, 2026-11-06)
+User's decisions: see §1 "Go-live decisions". Then (2026-11-06): **the VM can't reach GitHub → code by zip on a USB
+drive**; **VM layout = a fresh folder per zip, data outside** (`.env`, backups, logs in one fixed folder such as
+`/srv/ops`, so a file removed in a new version — e.g. a renamed migration — can't linger and break alembic). **Open:
+does the VM reach Docker Hub / PyPI / npm** (directly or via a proxy)? The user runs `docker pull hello-world`, `curl
+-sI https://pypi.org/simple/`, `curl -sI https://registry.npmjs.org/` on the VM. If not: images must be built on a
+machine with Docker + internet and carried as `docker save` tars (the office PC has no Docker / WSL).
+| # | Step | Status |
+|---|---|---|
+| G.1 | `scripts/setup_calendar.py [--code JP_BANK] [--name 銀行営業日] [--weekend 6 7]`: creates the business calendar via `create_calendar`; existing code → prints it, changes nothing, exit 0 (note on stderr when `--weekend` differs); bad input exit 1. `tests/test_setup_calendar.py` (2, no client) | **built, uncommitted** |
+| G.2 | `deploy/GO-LIVE.md` (Japanese checklist A pre-check + restore drill into a scratch DB, B setup, C pilot client, D staff, E orders, F browser checks, G first days, H other clients) + README link + doc paragraph | planned |
+| G.3 | USB / zip transport: package command (`git archive`), compose + runbook for "fresh folder, data outside", and — depending on the internet check — proxy settings or `docker save` / `load` | planned, waits for the user's check |
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic
