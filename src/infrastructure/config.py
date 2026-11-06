@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # 調査のときだけオンにする）。.env にも書ける
     sql_echo: bool = False
 
+    # ログインの Cookie に Secure を付けるか（COOKIE_SECURE=1。HTTPS で配信するときだけ。社内の http なら付けない: 付けると送られない）
+    cookie_secure: bool = False
+
     # .env ファイルを自動的に読み込む設定
     model_config = SettingsConfigDict(
         env_file=env_file_to_load, 

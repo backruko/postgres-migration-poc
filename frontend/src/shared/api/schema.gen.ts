@@ -21,6 +21,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login Endpoint
+         * @description ログイン ID とパスワードでログインし、セッションの Cookie を設定します。
+         *     違う: 401 INVALID_CREDENTIALS（5 回続くと 15 分ロック: 403 ACCOUNT_LOCKED）、停止中など: 403 STAFF_NOT_ACTIVE。
+         *     must_change_password が true なら、POST /auth/password で変えるまでほかの操作はできません。
+         */
+        post: operations["login_endpoint_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout Endpoint
+         * @description セッションを終え、Cookie を消します（ログインしていなくても 204）。
+         */
+        post: operations["logout_endpoint_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Password Endpoint
+         * @description 本人のパスワードを変えます（仮パスワードのままでも使えます）。このセッションは続き、ほかのセッションは終わります。
+         */
+        post: operations["change_password_endpoint_auth_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/": {
         parameters: {
             query?: never;
@@ -1044,7 +1106,7 @@ export interface paths {
         };
         /**
          * Get Me Endpoint
-         * @description X-Staff-Id で指定した職員（利用開始前・利用停止中でも返します。画面で状態を表示するため）
+         * @description ログインしている職員（仮パスワードのままでも返します。画面で「パスワードを変更」を出すため）
          */
         get: operations["get_me_endpoint_staff_me_get"];
         put?: never;
@@ -1141,10 +1203,74 @@ export interface paths {
         get?: never;
         /**
          * Set Staff Status Endpoint
-         * @description 有効化・利用停止・再開（ロールはそのまま残ります。自分の状態は変えられません）。
+         * @description 有効化・利用停止・再開（ロールはそのまま残ります。自分の状態は変えられません）。停止するとセッションも終わります。
          */
         put: operations["set_staff_status_endpoint_staff__staff_id__status_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/{staff_id}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Temporary Password Endpoint
+         * @description 仮パスワードを設定します（新しい職員・忘れたとき）。本人は次のログインで変えます。ロックが解け、セッションは終わります。
+         */
+        put: operations["set_temporary_password_endpoint_staff__staff_id__password_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/{staff_id}/api-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Api Keys Endpoint
+         * @description 職員の API キー（取り消したものも。新しい順。キーそのものは返しません）
+         */
+        get: operations["list_api_keys_endpoint_staff__staff_id__api_keys_get"];
+        put?: never;
+        /**
+         * Issue Api Key Endpoint
+         * @description 信号の送信（signal_sender）の職員に API キーを発行します。キーはこの応答でだけ見せます（保存されるのはハッシュ）。
+         */
+        post: operations["issue_api_key_endpoint_staff__staff_id__api_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/api-keys/{key_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Api Key Endpoint
+         * @description API キーを取り消します（すぐに使えなくなります）。
+         */
+        post: operations["revoke_api_key_endpoint_staff_api_keys__key_id__revoke_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1550,6 +1676,69 @@ export interface components {
              * @enum {string}
              */
             type: "always";
+        };
+        /** ApiKeyCreate */
+        ApiKeyCreate: {
+            /**
+             * Label
+             * @description what the key is for, e.g. SFTP watcher
+             */
+            label: string;
+        };
+        /** ApiKeyIssuedResponse */
+        ApiKeyIssuedResponse: {
+            /** Id */
+            id: number;
+            /** Staff User Id */
+            staff_user_id: number;
+            /** Label */
+            label: string;
+            /**
+             * Key Prefix
+             * @description first characters of the key, to tell keys apart
+             */
+            key_prefix: string;
+            /** Created By Id */
+            created_by_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Revoked At */
+            revoked_at: string | null;
+            /**
+             * Key
+             * @description the full key: shown only in this response, never again
+             */
+            key: string;
+        };
+        /** ApiKeyResponse */
+        ApiKeyResponse: {
+            /** Id */
+            id: number;
+            /** Staff User Id */
+            staff_user_id: number;
+            /** Label */
+            label: string;
+            /**
+             * Key Prefix
+             * @description first characters of the key, to tell keys apart
+             */
+            key_prefix: string;
+            /** Created By Id */
+            created_by_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Revoked At */
+            revoked_at: string | null;
         };
         /**
          * AttentionItem
@@ -2409,7 +2598,7 @@ export interface components {
          *     意味が直感的にわかるように、すべて大文字の文字列（スネークケース）で定義します。
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "FOUR_EYES" | "STAFF_NOT_ACTIVE" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "ORDER_IN_PROGRESS" | "DELETE_FAILED_RECORD_IN_USE" | "INTERNAL_SERVER_ERROR";
+        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "FOUR_EYES" | "STAFF_NOT_ACTIVE" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "PASSWORD_CHANGE_REQUIRED" | "ACCOUNT_LOCKED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "ORDER_IN_PROGRESS" | "DELETE_FAILED_RECORD_IN_USE" | "INTERNAL_SERVER_ERROR";
         /** ErrorResponse */
         ErrorResponse: {
             /**
@@ -2567,6 +2756,13 @@ export interface components {
          * @enum {string}
          */
         InstanceOrigin: "generated" | "override" | "one_off";
+        /** LoginIn */
+        LoginIn: {
+            /** Login Id */
+            login_id: string;
+            /** Password */
+            password: string;
+        };
         /**
          * MarkerRule
          * @description 生成マーカーのルール。例: 毎月27日、休日なら翌営業日
@@ -2872,6 +3068,16 @@ export interface components {
              * @description the step's events, oldest first (empty in a preview)
              */
             events: components["schemas"]["StepEventResponse"][];
+        };
+        /**
+         * PasswordChangeIn
+         * @description 本人のパスワードの変更（仮パスワードからの変更も）
+         */
+        PasswordChangeIn: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
         };
         /** PinSopVersionIn */
         PinSopVersionIn: {
@@ -3940,6 +4146,21 @@ export interface components {
             /** Roles */
             roles: components["schemas"]["RoleCode"][];
             /**
+             * Has Password
+             * @description false: the person cannot log in until a system admin sets a temporary password
+             */
+            has_password: boolean;
+            /**
+             * Must Change Password
+             * @description temporary password: only /staff/me, /auth/password and /auth/logout work until changed
+             */
+            must_change_password: boolean;
+            /**
+             * Locked Until
+             * @description too many failed logins: no login until then
+             */
+            locked_until: string | null;
+            /**
              * Created At
              * Format: date-time
              */
@@ -4024,6 +4245,14 @@ export interface components {
          */
         TemplateType: "rrule" | "explicit_dates" | "reference_sheet_based";
         /**
+         * TemporaryPasswordIn
+         * @description システム管理者が設定する仮パスワード（本人は次のログインで変える）
+         */
+        TemporaryPasswordIn: {
+            /** Password */
+            password: string;
+        };
+        /**
          * UIMetadata
          * @description 既知のキーは型・形式を検証します。それ以外のキーも（UI側の拡張用に）そのまま保存します。
          *     例: {"bg_color": "#FF0000", "text_color": "#FFFFFF", "icon": "money-bag", "is_bold": true}
@@ -4092,6 +4321,252 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    login_endpoint_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    logout_endpoint_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    change_password_endpoint_auth_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -4166,10 +4641,7 @@ export interface operations {
     create_client_endpoint_clients__post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -4197,7 +4669,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4256,10 +4728,7 @@ export interface operations {
     update_client_endpoint_clients__client_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 client_id: number;
             };
@@ -4289,7 +4758,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4348,10 +4817,7 @@ export interface operations {
     deactivate_client_endpoint_clients__client_id__deactivate_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 client_id: number;
             };
@@ -4377,7 +4843,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4436,10 +4902,7 @@ export interface operations {
     activate_client_endpoint_clients__client_id__activate_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 client_id: number;
             };
@@ -4465,7 +4928,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4594,10 +5057,7 @@ export interface operations {
     create_biz_endpoint_biz__post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -4625,7 +5085,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4751,10 +5211,7 @@ export interface operations {
     delete_biz_endpoint_biz__biz_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 biz_id: number;
             };
@@ -4780,7 +5237,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4839,10 +5296,7 @@ export interface operations {
     update_biz_endpoint_biz__biz_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 biz_id: number;
             };
@@ -4872,7 +5326,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4931,10 +5385,7 @@ export interface operations {
     restore_biz_endpoint_biz__biz_id__restore_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 biz_id: number;
             };
@@ -4960,7 +5411,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5019,10 +5470,7 @@ export interface operations {
     clone_active_to_draft_endpoint_biz__biz_id__versions_clone_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 biz_id: number;
             };
@@ -5052,7 +5500,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5180,10 +5628,7 @@ export interface operations {
     create_new_sop_version_endpoint_biz__biz_id__versions_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 biz_id: number;
             };
@@ -5213,7 +5658,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5339,10 +5784,7 @@ export interface operations {
     delete_draft_endpoint_biz_versions__version_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 version_id: number;
             };
@@ -5368,7 +5810,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5427,10 +5869,7 @@ export interface operations {
     rename_draft_endpoint_biz_versions__version_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 version_id: number;
             };
@@ -5460,7 +5899,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5586,10 +6025,7 @@ export interface operations {
     approve_and_schedule_version_endpoint_biz__biz_id__versions__draft_version_id__approve_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 biz_id: number;
                 draft_version_id: number;
@@ -5620,7 +6056,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5679,10 +6115,7 @@ export interface operations {
     cancel_future_version_endpoint_biz__biz_id__versions__future_version_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 biz_id: number;
                 future_version_id: number;
@@ -5709,7 +6142,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5768,10 +6201,7 @@ export interface operations {
     create_step_template_endpoint_biz_versions__version_id__steps_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 version_id: number;
             };
@@ -5801,7 +6231,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5860,10 +6290,7 @@ export interface operations {
     reorder_steps_endpoint_biz_versions__version_id__steps_order_put: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 version_id: number;
             };
@@ -5893,7 +6320,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5952,10 +6379,7 @@ export interface operations {
     delete_step_template_endpoint_biz_steps__step_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 step_id: number;
             };
@@ -5981,7 +6405,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6040,10 +6464,7 @@ export interface operations {
     update_step_template_endpoint_biz_steps__step_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 step_id: number;
             };
@@ -6073,7 +6494,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6266,10 +6687,7 @@ export interface operations {
     create_dependency_endpoint_biz__biz_id__dependencies_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 biz_id: number;
             };
@@ -6299,7 +6717,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6358,10 +6776,7 @@ export interface operations {
     delete_dependency_endpoint_biz_dependencies__dependency_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 dependency_id: number;
             };
@@ -6387,7 +6802,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6502,10 +6917,7 @@ export interface operations {
     create_calendar_endpoint_plans_calendars_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -6533,7 +6945,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6659,10 +7071,7 @@ export interface operations {
     update_calendar_endpoint_plans_calendars__calendar_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 calendar_id: number;
             };
@@ -6692,7 +7101,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6820,10 +7229,7 @@ export interface operations {
     add_holidays_endpoint_plans_calendars__calendar_id__holidays_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 calendar_id: number;
             };
@@ -6853,7 +7259,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6912,10 +7318,7 @@ export interface operations {
     delete_holiday_endpoint_plans_calendars__calendar_id__holidays__holiday_date__delete: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 calendar_id: number;
                 holiday_date: string;
@@ -6942,7 +7345,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7068,10 +7471,7 @@ export interface operations {
     create_sheet_endpoint_plans_sheets_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -7099,7 +7499,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7161,10 +7561,7 @@ export interface operations {
                 /** @description true: delete dates not in the file so the sheet matches it exactly */
                 replace_events?: boolean;
             };
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -7192,7 +7589,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7318,10 +7715,7 @@ export interface operations {
     add_marker_endpoint_plans_sheets__sheet_id__markers_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 sheet_id: number;
             };
@@ -7351,7 +7745,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7410,10 +7804,7 @@ export interface operations {
     update_marker_endpoint_plans_sheets__sheet_id__markers__marker__patch: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 sheet_id: number;
                 marker: string;
@@ -7444,7 +7835,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7503,10 +7894,7 @@ export interface operations {
     add_sheet_events_endpoint_plans_sheets__sheet_id__markers__marker__events_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 sheet_id: number;
                 marker: string;
@@ -7537,7 +7925,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7596,10 +7984,7 @@ export interface operations {
     delete_sheet_event_endpoint_plans_sheets_events__event_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 event_id: number;
             };
@@ -7625,7 +8010,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7684,10 +8069,7 @@ export interface operations {
     update_sheet_event_endpoint_plans_sheets_events__event_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 event_id: number;
             };
@@ -7717,7 +8099,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7776,10 +8158,7 @@ export interface operations {
     revert_sheet_event_endpoint_plans_sheets_events__event_id__revert_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 event_id: number;
             };
@@ -7805,7 +8184,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7931,10 +8310,7 @@ export interface operations {
     create_template_endpoint_plans_templates_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -7962,7 +8338,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8088,10 +8464,7 @@ export interface operations {
     delete_template_endpoint_plans_templates__template_id__delete: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 template_id: number;
             };
@@ -8117,7 +8490,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8176,10 +8549,7 @@ export interface operations {
     update_template_endpoint_plans_templates__template_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 template_id: number;
             };
@@ -8209,7 +8579,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8268,10 +8638,7 @@ export interface operations {
     restore_template_endpoint_plans_templates__template_id__restore_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 template_id: number;
             };
@@ -8297,7 +8664,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8356,10 +8723,7 @@ export interface operations {
     add_explicit_dates_endpoint_plans_templates__template_id__dates_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 template_id: number;
             };
@@ -8389,7 +8753,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8448,10 +8812,7 @@ export interface operations {
     remove_explicit_date_endpoint_plans_templates__template_id__dates__local_date__delete: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 template_id: number;
                 local_date: string;
@@ -8478,7 +8839,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8607,10 +8968,7 @@ export interface operations {
     add_one_off_instance_endpoint_plans_templates__template_id__instances_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 template_id: number;
             };
@@ -8640,7 +8998,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8699,10 +9057,7 @@ export interface operations {
     rebuild_cache_endpoint_plans_templates__template_id__cache_rebuild_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 template_id: number;
             };
@@ -8728,7 +9083,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8787,10 +9142,7 @@ export interface operations {
     override_instance_endpoint_plans_instances__instance_id__override_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 instance_id: number;
             };
@@ -8820,7 +9172,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8879,10 +9231,7 @@ export interface operations {
     cancel_instance_endpoint_plans_instances__instance_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 instance_id: number;
             };
@@ -8912,7 +9261,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8971,10 +9320,7 @@ export interface operations {
     restore_cancelled_instance_endpoint_plans_instances__instance_id__restore_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 instance_id: number;
             };
@@ -9000,7 +9346,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9059,10 +9405,7 @@ export interface operations {
     revert_instance_endpoint_plans_instances__instance_id__revert_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 instance_id: number;
             };
@@ -9092,7 +9435,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9585,10 +9928,7 @@ export interface operations {
                 /** @description 顧客コードで絞り込む（省略時は全顧客） */
                 client_code?: string | null;
             };
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -9612,7 +9952,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9671,10 +10011,7 @@ export interface operations {
     get_me_endpoint_staff_me_get: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -9698,7 +10035,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9734,15 +10071,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
             /** @description Internal Server Error(サーバーエラー) */
             500: {
                 headers: {
@@ -9757,10 +10085,7 @@ export interface operations {
     get_roles_endpoint_staff_roles_get: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -9784,7 +10109,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9820,15 +10145,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
             /** @description Internal Server Error(サーバーエラー) */
             500: {
                 headers: {
@@ -9843,10 +10159,7 @@ export interface operations {
     get_staff_list_endpoint_staff__get: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -9870,7 +10183,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9906,15 +10219,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
             /** @description Internal Server Error(サーバーエラー) */
             500: {
                 headers: {
@@ -9929,10 +10233,7 @@ export interface operations {
     create_staff_endpoint_staff__post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -9960,7 +10261,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10019,10 +10320,7 @@ export interface operations {
     get_staff_endpoint_staff__staff_id__get: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 staff_id: number;
             };
@@ -10048,7 +10346,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10107,10 +10405,7 @@ export interface operations {
     update_staff_endpoint_staff__staff_id__patch: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 staff_id: number;
             };
@@ -10140,7 +10435,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10199,10 +10494,7 @@ export interface operations {
     set_staff_roles_endpoint_staff__staff_id__roles_put: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 staff_id: number;
             };
@@ -10232,7 +10524,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10291,10 +10583,7 @@ export interface operations {
     set_staff_status_endpoint_staff__staff_id__status_put: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 staff_id: number;
             };
@@ -10324,7 +10613,355 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    set_temporary_password_endpoint_staff__staff_id__password_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemporaryPasswordIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_api_keys_endpoint_staff__staff_id__api_keys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    issue_api_key_endpoint_staff__staff_id__api_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyIssuedResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revoke_api_key_endpoint_staff_api_keys__key_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10383,10 +11020,7 @@ export interface operations {
     get_order_endpoint_ope_orders__order_id__get: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -10412,7 +11046,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10471,10 +11105,7 @@ export interface operations {
     release_order_endpoint_ope_orders__order_id__release_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -10504,7 +11135,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10563,10 +11194,7 @@ export interface operations {
     pin_sop_version_endpoint_ope_orders__order_id__pin_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -10596,7 +11224,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10655,10 +11283,7 @@ export interface operations {
     unpin_sop_version_endpoint_ope_orders__order_id__unpin_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -10688,7 +11313,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10747,10 +11372,7 @@ export interface operations {
     approve_early_start_endpoint_ope_orders__order_id__approve_early_start_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -10780,7 +11402,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10839,10 +11461,7 @@ export interface operations {
     approve_dependency_override_endpoint_ope_orders__order_id__approve_dependency_override_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -10872,7 +11491,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10931,10 +11550,7 @@ export interface operations {
     start_order_endpoint_ope_orders__order_id__start_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -10964,7 +11580,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11023,10 +11639,7 @@ export interface operations {
     hold_order_endpoint_ope_orders__order_id__hold_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -11056,7 +11669,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11115,10 +11728,7 @@ export interface operations {
     resume_order_endpoint_ope_orders__order_id__resume_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -11148,7 +11758,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11207,10 +11817,7 @@ export interface operations {
     finish_order_endpoint_ope_orders__order_id__finish_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -11240,7 +11847,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11299,10 +11906,7 @@ export interface operations {
     cancel_order_endpoint_ope_orders__order_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -11332,7 +11936,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11391,10 +11995,7 @@ export interface operations {
     resolve_conflict_endpoint_ope_orders__order_id__resolve_conflict_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 order_id: number;
             };
@@ -11424,7 +12025,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11483,10 +12084,7 @@ export interface operations {
     submit_step_endpoint_ope_steps__step_id__submit_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 step_id: number;
             };
@@ -11516,7 +12114,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11575,10 +12173,7 @@ export interface operations {
     approve_step_endpoint_ope_steps__step_id__approve_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 step_id: number;
             };
@@ -11608,7 +12203,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11667,10 +12262,7 @@ export interface operations {
     reject_step_endpoint_ope_steps__step_id__reject_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 step_id: number;
             };
@@ -11700,7 +12292,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11765,10 +12357,7 @@ export interface operations {
                 /** @description orders listed per group (totals are exact) */
                 limit?: number;
             };
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -11792,7 +12381,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11858,10 +12447,7 @@ export interface operations {
                 since?: string | null;
                 limit?: number;
             };
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -11885,7 +12471,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11944,10 +12530,7 @@ export interface operations {
     receive_signal_endpoint_ope_signals_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -11975,7 +12558,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -12034,10 +12617,7 @@ export interface operations {
     handle_signal_endpoint_ope_signals__signal_id__handle_post: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description acting staff user id (development only, until login exists) */
-                "x-staff-id"?: number | null;
-            };
+            header?: never;
             path: {
                 signal_id: number;
             };
@@ -12067,7 +12647,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;

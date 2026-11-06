@@ -62,7 +62,50 @@ class StaffResponse(BaseModel):
     email: str | None
     status: StaffStatus
     roles: list[RoleCode] = Field(validation_alias="role_codes")
+    has_password: bool = Field(description="false: the person cannot log in until a system admin sets a temporary password")
+    must_change_password: bool = Field(description="temporary password: only /staff/me, /auth/password and /auth/logout work until changed")
+    locked_until: datetime | None = Field(description="too many failed logins: no login until then")
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# ログイン（LG.2）
+# ==========================================
+class LoginIn(BaseModel):
+    login_id: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+class PasswordChangeIn(BaseModel):
+    """本人のパスワードの変更（仮パスワードからの変更も）"""
+    current_password: str = Field(..., min_length=1, max_length=200)
+    new_password: str = Field(..., min_length=1, max_length=200)
+
+
+class TemporaryPasswordIn(BaseModel):
+    """システム管理者が設定する仮パスワード（本人は次のログインで変える）"""
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+class ApiKeyCreate(BaseModel):
+    label: str = Field(..., min_length=1, max_length=100, description="what the key is for, e.g. SFTP watcher")
+
+
+class ApiKeyResponse(BaseModel):
+    id: int
+    staff_user_id: int
+    label: str
+    key_prefix: str = Field(description="first characters of the key, to tell keys apart")
+    created_by_id: int | None
+    created_at: datetime
+    last_used_at: datetime | None
+    revoked_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ApiKeyIssuedResponse(ApiKeyResponse):
+    key: str = Field(description="the full key: shown only in this response, never again")

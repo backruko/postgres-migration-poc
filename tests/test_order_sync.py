@@ -5,6 +5,7 @@ plan → オーダーの追従（4.3: coordination.order_sync）のテスト。
 
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
+from tests.openapi_auth import needs_login
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -302,7 +303,6 @@ def test_plan_manual_endpoints_require_an_acting_staff():
     for path in ("/plans/instances/{instance_id}/override", "/plans/instances/{instance_id}/cancel",
                  "/plans/instances/{instance_id}/revert", "/plans/instances/{instance_id}/restore",
                  "/plans/templates/{template_id}/instances"):
-        params = {p["name"] for p in paths[path]["post"].get("parameters", [])}
-        assert "x-staff-id" in params, path
-    # 参照・テンプレートの設定は対象外（変更なし）
-    assert "x-staff-id" not in {p["name"] for p in paths["/plans/clients/{client_code}/calendar"]["get"].get("parameters", [])}
+        assert needs_login(paths[path]["post"]), path
+    # 参照もログインが必要（LG.2）
+    assert needs_login(paths["/plans/clients/{client_code}/calendar"]["get"])

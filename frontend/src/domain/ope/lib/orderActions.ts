@@ -97,7 +97,7 @@ export const scheduledDay = (order: Pick<OrderDetail, "scheduled_start">, toLoca
   toLocalDate(order.scheduled_start);
 
 /**
- * 今の状態で表示する操作（状態と、操作する職員のロールで決める）。
+ * 今の状態で表示する操作（状態と、ログインしている職員のロールで決める）。
  * today / day は日本時間の YYYY-MM-DD。予定日前の開始は承認済みのときだけ「開始」を出す。
  */
 export function availableActions(order: OrderDetail, staff: Staff | null | undefined, today: string, day: string): OrderAction[] {

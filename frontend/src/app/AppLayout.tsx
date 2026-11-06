@@ -1,9 +1,12 @@
 import { useRef } from "react";
-import { Dropdown } from "antd";
+import { Alert, Button, Dropdown, Spin, Typography } from "antd";
 import type { MenuProps } from "antd";
 import { DownOutlined } from "@ant-design/icons";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { ActingStaffPicker } from "./ActingStaffPicker";
+import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
+import { useCurrentStaff } from "../domain/staff/hooks/useStaff";
+import { PasswordChangeForm } from "../features/auth/PasswordChangeForm";
+import { useSession } from "../shared/hooks/useSession";
+import { UserMenu } from "./UserMenu";
 
 type Page = { path: string; label: string; end: boolean };
 
@@ -31,8 +34,13 @@ export function currentSettingsPage(pathname: string): Page | undefined {
   return SETTINGS_PAGES.find((p) => pathname === p.path || pathname.startsWith(p.path + "/"));
 }
 
-/** 全画面共通のレイアウト（上部のナビゲーション + 各画面） */
+/**
+ * 全画面共通のレイアウト（上部のナビゲーション + 各画面）。ログインしていなければログイン画面へ移す（LG.3）。
+ * 仮パスワードのままなら、パスワードを変えるまでほかの画面は出さない（バックエンドも 403 にする）。
+ */
 export function AppLayout() {
+  const session = useSession();
+  const me = useCurrentStaff();
   const linkClass = ({ isActive }: { isActive: boolean }) => (isActive ? "nav-link active" : "nav-link");
 
   // 各画面の選択状態（顧客・月・業務など）は URL のクエリにある。
@@ -48,6 +56,31 @@ export function AppLayout() {
     selectable: true,
     selectedKeys: activeSetting ? [activeSetting.path] : [],
   };
+
+  if (session.signedOut || me.error?.status === 401) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (!me.data) {
+    return me.error ? (
+      <div className="wrap">
+        <Alert type="error" showIcon message={`ログインしている職員を確認できませんでした: ${me.error.message}`} action={<Button size="small" onClick={me.reload}>再読み込み</Button>} />
+      </div>
+    ) : (
+      <div className="login-wrap"><Spin /></div>
+    );
+  }
+  if (me.data.must_change_password) {
+    return (
+      <div className="login-wrap">
+        <div className="login-card">
+          <div className="eyebrow">{me.data.name}（{me.data.login_id}）</div>
+          <Typography.Title level={3} style={{ marginTop: 4 }}>パスワードを変更してください</Typography.Title>
+          <Typography.Paragraph type="secondary">
+            システム管理者が設定した仮パスワードでログインしています。自分のパスワードに変えると使えるようになります。
+          </Typography.Paragraph>
+          <PasswordChangeForm me={me.data} onChanged={me.reload} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -65,7 +98,7 @@ export function AppLayout() {
             </button>
           </Dropdown>
           <span className="nav-spacer" />
-          <ActingStaffPicker />
+          <UserMenu me={me.data} onChanged={me.reload} />
         </div>
       </nav>
       <Outlet />

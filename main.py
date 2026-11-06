@@ -36,6 +36,9 @@ from src.domain_biz.router import router as biz_router
 from src.domain_plan.router import router as plan_router
 from src.coordination.router import router as ops_router
 from src.domain_staff.router import router as staff_router
+from src.domain_staff.auth_router import router as auth_router
+from src.domain_staff.auth import require_login
+from fastapi import Depends
 from src.domain_ope.router import router as ope_router
 from src.coordination import order_sync
 
@@ -76,12 +79,15 @@ async def test_error():
     )
 
 # クライアントのAPIを本体に登録！
-app.include_router(client_router)
-app.include_router(biz_router) 
-app.include_router(plan_router)
-app.include_router(ops_router)
-app.include_router(staff_router)
-app.include_router(ope_router)
+# すべての API はログインが必要（LG.2）。ログイン・ログアウト・パスワードの変更は auth_router が自分で扱う
+LOGIN = [Depends(require_login)]
+app.include_router(auth_router)
+app.include_router(client_router, dependencies=LOGIN)
+app.include_router(biz_router, dependencies=LOGIN)
+app.include_router(plan_router, dependencies=LOGIN)
+app.include_router(ops_router, dependencies=LOGIN)
+app.include_router(staff_router, dependencies=LOGIN)
+app.include_router(ope_router, dependencies=LOGIN)
 
 @app.get("/")
 def read_root():

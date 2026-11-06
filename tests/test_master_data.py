@@ -7,6 +7,7 @@
 
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
+from tests.openapi_auth import needs_login
 import uuid
 from datetime import date, time
 
@@ -215,4 +216,4 @@ def test_client_writes_need_admin_and_the_list_stays_open():
 
     get_op = app.openapi()["paths"]["/clients/"]["get"]
     names = {p["name"] for p in get_op.get("parameters", [])}
-    assert "include_inactive" in names and "x-staff-id" not in names
+    assert "include_inactive" in names and needs_login(get_op)  # 一覧はロールを問わない（ログインは必要。LG.2）

@@ -28,12 +28,13 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   - **M1 client + business screens: done, merged into `main` (`44c1737`, 2026-11-06, not pushed)** — commits
     `2729ea7` M1.1 backend · `5a619b6` M1.2a 設定 menu · `2cfb5fa` M1.2b 顧客 page · `13a7238` M1.2c 業務 page (detail in
     §2 "M1").
-  - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; M2.1 `5b054ea`, M2.2 `ce85e39`,
-    M2.3 `2582eaa`, M2.4 `f549312`, M2.5 `800061c`, **M2.6 built, uncommitted** — then merge, next: login): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
-    delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
-    is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
-    copy of the current version into a draft.
-  - **Login**: a simple password per staff + session cookie, replacing `X-Staff-Id` in `get_current_staff` (SSO later).
+  - **M2 SOP screens: done, merged into `main` (`28b94b6`, 2026-11-06, not pushed; user browser-tested OK)** —
+    commits `5b054ea` M2.1 … `17aa788` M2.6 (detail in §2 "M2").
+  - **Login** (branch `feature/login` from `main` `28b94b6`; plan approved 2026-11-06, see §2 "Login"):
+    LG.1 `3a93ffd` (migration `b4e8d2a6c913`), LG.2 `c644b4d` (backend switch), LG.3 `311c38e` (frontend).
+    **Not merged into `main` yet** (the user hasn't said "merge"); `feature/deployment` branches from it.
+  - **Deployment files built 2026-11-06, uncommitted** on `feature/deployment` (from `feature/login` `311c38e`);
+    see §2 "Deployment". Not run anywhere yet: **no Docker on the office PC**.
   - **Deployment** (user's decisions 2026-11-05, doc rev 78): **Linux VM + Docker Compose**, services `db`
     (PostgreSQL 16, volume, daily `pg_dump`), `app` (uvicorn + production frontend build same-origin with SPA
     fallback), **`worker`** = a loop replacing Task Scheduler: release due orders, sleep until the next release
@@ -55,14 +56,15 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   screens from Phases 5–7 were never clicked through either. A "slow drawer spinner" report on 2026-11-05 could not be
   reproduced: server ~25 ms, Vite proxy ~25 ms — most likely the uvicorn console paused by a text selection
   (Windows QuickEdit); advised turning QuickEdit off.
-- **DB:** latest Alembic head **`7a3c5e9b1d24`** (M2.1, SOP states; **the user's dev DB is upgraded — confirmed 2026-11-06**). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
+- **DB:** latest Alembic head **`b4e8d2a6c913`** (LG.1, login tables; **the user must run `alembic upgrade head`** —
+  their dev DB was at `7a3c5e9b1d24`, confirmed 2026-11-06). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
   `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) → `f9bbe9648f15` (biz
   release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657` (step template condition /
   is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at) → `2904467fd7b9`
   (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec`
   (biz client-event settings) → `3242f180527a` (ope_signal, role signal_sender) → `2f7614f1cb02` (latest_before +
   lookback_days, L.1) → `d17d631f5ad2` (plan_template deadline fields, N.1) → `c5bb40015e61` (ope_order deadline
-  snapshot + deadline_at / warn_at / finished_at, N.2) → `51d8d829a2d2` (attention partial indexes, N.3) → `7a3c5e9b1d24` (SOP version states from dates, M2.1).
+  snapshot + deadline_at / warn_at / finished_at, N.2) → `51d8d829a2d2` (attention partial indexes, N.3) → `7a3c5e9b1d24` (SOP version states from dates, M2.1) → `b4e8d2a6c913` (staff login: passwords, sessions, API keys, LG.1).
   **The user's dev DB:** on 2026-11-05 at 16:39 their uvicorn (8000) was already reading the N.2 columns and serving
   `/ops/attention`, so it was upgraded at least to `c5bb40015e61`; **the user confirmed it is at head `51d8d829a2d2`
   (2026-11-05, late session)** — never
@@ -71,7 +73,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   Dev DB facts: staff 1 login `system` has system_admin + operator / checker / releaser but **not admin** (needs
   業務管理者 to edit settings since U.3 / U.4); 1 client MOCK; biz 13 / 14 in use; `app.log.1` (1.35 GB, pre-rotation)
   can be deleted by the user.
-  **`plan_check`** (throwaway, mine) is at `7a3c5e9b1d24`. Seeded: client `MOCK`, biz 1 `MOCK0001` (one approved SOP
+  **`plan_check`** (throwaway, mine) is at `b4e8d2a6c913`. Seeded: client `MOCK`, biz 1 `MOCK0001` (one approved SOP
   version `v9.26817.0`; SOP version 1 with 3 step templates), biz 2 `MOCK0002` (LIGHTWEIGHT + AUTOMATIC
   `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff: 1 `check-admin` (system_admin),
   2 suspended, 3 viewer+auditor, **4 operator, 5 releaser**, 6 / 7 checkers, **8 admin**, 9 / 10 signal_sender. 14
@@ -80,7 +82,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   ~2.5–6 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
   and with it the biz dependency and template listeners — is registered there). **Every new test file uses
   `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M G L N Q E
-  H J W F Y U C X Z. Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
+  H J W F Y U C X Z (test_credentials / test_login use no client). Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
   errors. Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic
   check` → no drift; run alembic with `export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed
   's#/dev_db$#/plan_check#')` (`.env` points at the user's `dev_db`). Frontend: `cd frontend && npm run build` passes.
@@ -112,7 +114,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 81 (2026-11-06, "Built … (M2)" sentence added to the "Version states" bullet)** — read with `{"kind": "view", "sinceRev": 81}` to see only newer edits, and
+**Last rev written by me: 89 (2026-11-06, "MVP deployment" paragraph: what was built — HTTP intranet, nginx web, migrations at start, nightly backup)** — read with `{"kind": "view", "sinceRev": 89}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -861,6 +863,140 @@ pinned orders shown 8 s) → `sopApi.cancelApproval`. CSS `.sop-impact*`. Harnes
 for tomorrow, impact read, second approval 400, cancel → draft again; current v9 open-ended again). **Not checked in a
 browser.**
 
+### Login (branch `feature/login`, 2026-11-06; doc rev 82)
+User's decisions (all as I recommended): **server-side DB sessions in an HttpOnly cookie, 12 h idle, max 7 days**
+(logout / suspend / password change end them); **a system_admin sets a temporary password, the person must change it
+at the next login**, everyone can change their own, 5 wrong tries → 15 min lock; **API key per signal_sender** for
+`POST /ope/signals` (shown once, hashed, revocable); **X-Staff-Id removed entirely** (harnesses log in). My calls:
+stdlib `hashlib.scrypt` (no new dependency), cookie `Secure` from a setting (off on plain-HTTP intranet), SameSite=Lax
+as CSRF protection (same-origin app). Step names **LG.x** (L.x is the latest-before phase).
+| # | Step | Status |
+|---|---|---|
+| LG.1 | Model + building blocks (no endpoint uses them yet); migration `b4e8d2a6c913` | **done** (`3a93ffd`) |
+| LG.2 | Backend switch: `/auth/login` / `logout` / `password`, cookie in `get_current_staff`, X-Staff-Id removed, Bearer key on `POST /ope/signals`, must_change_password → 403 elsewhere, temporary password + API key endpoints (system_admin), suspend / password ends sessions, `create_staff.py` password prompt + `scripts/set_password.py`, guard tests; update the doc's X-Staff-Id paragraph | **done** (`c644b4d`) |
+| LG.3 | Frontend (as built below) | **done** (`311c38e`) |
+
+**LG.1 as built** (migration `b4e8d2a6c913`). `staff_user` + `password_hash` (String 255, null = cannot log in),
+`must_change_password`, `failed_logins`, `locked_until`, `password_changed_at`. New `staff_session` (`token_hash`
+unique SHA-256 hex, `last_seen_at`, `expires_at` = created + 7 d, `revoked_at`) and `staff_api_key` (`label`,
+`key_prefix` = first 10 chars, `key_hash` unique, `created_by_id` / `revoked_by_id`, `last_used_at`, `revoked_at`); FKs to
+staff RESTRICT (staff are never deleted). `src/domain_staff/credentials.py` (no commits; callers commit):
+`hash_password` / `verify_password_hash` (format `scrypt$n$r$p$salt$hash`, n=2^14 r=8 p=1, `hmac.compare_digest`),
+`password_problem` (8–128 chars, no edge spaces, ≠ login ID), `set_password(temporary, keep_session_id)` (clears lock,
+ends the staff's other sessions), `authenticate` (row locked; unknown login still hashes once; 401
+`INVALID_CREDENTIALS` "Login ID or password is wrong."; 5th failure → `locked_until` = now + 15 min, 403
+`ACCOUNT_LOCKED` "…after HH:MM JST"; non-active → 403 `STAFF_NOT_ACTIVE` only after a correct password),
+`create_session` (token `secrets.token_urlsafe(32)`), `resolve_session` (revoked / idle 12 h / max age → None; touches
+`last_seen_at` at most once a minute), `revoke_session`, `revoke_all_sessions(except_session_id)`, `issue_api_key`
+(signal_sender only, label required, key `ops_` + 32 random bytes), `resolve_api_key` (records `last_used_at`),
+`revoke_api_key`. New `ErrorCode`s `PASSWORD_CHANGE_REQUIRED`, `ACCOUNT_LOCKED` (`INVALID_CREDENTIALS` existed).
+Messages are English like the rest of the API; the login page maps codes to Japanese (LG.3). Tests
+`tests/test_credentials.py` (6, no client). Round trip + `alembic check` on plan_check OK.
+
+**LG.2 as built** (no migration). User decision 2026-11-06 (as I recommended): **login for everything** — every API
+call needs a session (or the signal API key); open: `/auth/login`, `/auth/logout`, `/openapi.json` + `/docs`, `/`
+(and the old `/test-error` in main.py).
+- `src/domain_staff/auth.py`: `SESSION_COOKIE = "ops_session"`; `get_current_staff(request, db, session_token =
+  APIKeyCookie, bearer = HTTPBearer)` (OpenAPI shows `security: APIKeyCookie / HTTPBearer`): session → staff and
+  `request.state.session_id`; Bearer key only on **`API_KEY_ROUTES = {("POST", "/ope/signals")}`** (route path from
+  `request.scope["route"]`); commits the touch; cached on `request.state.staff`; else 401 "Login required.".
+  `require_login` (added to every router in `main.py`: `include_router(..., dependencies=[Depends(require_login)])`):
+  non-active → 403 `STAFF_NOT_ACTIVE` except `GET /staff/me`; `must_change_password` → 403 `PASSWORD_CHANGE_REQUIRED`
+  except **`PASSWORD_CHANGE_ROUTES`** (`GET /staff/me`, `POST /auth/password`, `POST /auth/logout`).
+  `current_session_id(request)`. `require_roles` / `require_active` unchanged. **X-Staff-Id is gone.**
+- `src/domain_staff/auth_router.py` (`/auth`, no global dependency): `POST /login` (`LoginIn`) → `StaffResponse` +
+  cookie (HttpOnly, SameSite=Lax, Path=/, max-age 7 d, `Secure` if **`COOKIE_SECURE=1`** — new `settings.cookie_secure`,
+  default false); `POST /logout` → 204, revokes + deletes the cookie (works without a session); `POST /password`
+  (`PasswordChangeIn`; `Depends(require_login)`; wrong current → 401, same as current → 400; keeps this session).
+- Staff router (system_admin): `PUT /staff/{id}/password` (`TemporaryPasswordIn`; not yourself → 400) · `GET /staff/{id}/api-keys`
+  · `POST /staff/{id}/api-keys` (`ApiKeyCreate {label}` → 201 `ApiKeyIssuedResponse` with `key` once) ·
+  `POST /staff/api-keys/{key_id}/revoke`. `set_staff_status` to non-active revokes the staff's sessions.
+  `StaffResponse` + `has_password`, `must_change_password`, `locked_until` (model property `has_password`).
+- Services `login` (commits failure counts even when it raises), `logout`, `change_own_password`,
+  `set_temporary_password`, `list_api_keys`, `issue_api_key`, `revoke_api_key`.
+- Scripts: `create_staff.py` asks for the password twice (getpass) and sets it (not temporary);
+  **new `scripts/set_password.py <login_id> [--temporary]`** (getpass twice; clears lock, ends sessions).
+- Tests: new `tests/openapi_auth.py` `needs_login(op)`; nine files' x-staff-id checks → `needs_login`; "reads stay
+  open" → `test_reads_need_a_login_but_no_role`; `test_staff.py` `test_get_current_staff_reads_the_session_or_an_api_key`
+  (fake starlette `Request` with `route`); new `tests/test_login.py` (4).
+- **plan_check passwords** (set by my scratchpad `seed_passwords.py`, plan_check only): every staff id N has
+  **`check-pass-N`** (e.g. 8 admin `http-admin-6eb1ee` / `check-pass-8`, 1 `check-admin` system_admin, 4 operator
+  `http-operator-1793324910`, 5 releaser `http-releaser-1793324911`, 9 signal_sender `signal-bot-cc9a19`). HTTP 26/26
+  (cookie flags, logout, temporary password flow, lock 5 → unlock via temporary, suspend ends session, API key issue /
+  list / signal 201 / refused elsewhere / revoked). Left: one more unmatched signal `http_check`, a revoked key on staff 9.
+- **Harness pattern from now on:** log in first (`POST /auth/login`, keep the cookie: Python `http.cookiejar`; node:
+  read `set-cookie` and send `Cookie`).
+
+**LG.3 as built** (frontend; backend only the 401 description text in `src/core/schemas/error.py`).
+- **Removed:** `app/ActingStaffPicker.tsx`, `shared/api/actingStaff.ts`, `shared/hooks/useActingStaffId.ts`,
+  `DEFAULT_STAFF_ID` / `VITE_DEFAULT_STAFF_ID` (config, vite-env.d.ts, .env.example); http.ts no longer sets a header.
+- `shared/api/session.ts` (store `{version, signedOut}`; `markSignedIn` / `markSignedOut`) + `shared/hooks/useSession.ts`;
+  http.ts `onResponse`: any 401 except `/auth/login` → `markSignedOut()`. `useCurrentStaff` / `useStaffList` /
+  `useRoles` / `useSlaReport` re-fetch on `version` (no more `enabled: actingId !== null`).
+- `AppLayout` = the login gate: `signedOut` or me 401 → `<Navigate to="/login" state={{from: location}} />`; loading
+  spinner; other error → alert + reload; **`must_change_password` → full-page 「パスワードを変更してください」 card
+  (`PasswordChangeForm`)** instead of nav + pages; else nav with **`UserMenu`** (name pill reusing `.acting-staff`
+  CSS; menu: ログインID, パスワードを変更 (modal), ログアウト → `authApi.logout` + `markSignedOut` + `/login`).
+- Route **`/login`** outside the layout (`features/auth/LoginPage.tsx`: ログインID / パスワード, error text by code via
+  `domain/staff/lib/login.ts` `loginErrorText` (INVALID_CREDENTIALS / ACCOUNT_LOCKED with the HH:MM / STAFF_NOT_ACTIVE),
+  success → `markSignedIn` + back to `state.from`; already logged in → redirect). `PasswordChangeForm` (current / new /
+  confirm; `newPasswordProblem` mirrors the backend rules; `passwordChangeErrorText`).
+- `domain/staff/api/authApi.ts` (login, logout, changePassword); `staffApi` + setTemporaryPassword, listApiKeys,
+  issueApiKey, revokeApiKey; types `LoginInput`, `PasswordChangeInput`, `ApiKey`, `ApiKeyIssued`.
+- 職員 page: 「この職員として操作」 and the acting-staff alerts removed; 状態 column adds tags パスワード未設定 (gold) /
+  仮パスワード (blue) / ロック中 (red, until HH:mm); system_admin actions **仮パスワード** (`TemporaryPasswordModal`, not
+  yourself) and, for signal_sender staff, **API キー** (`ApiKeysModal`: list with prefix / issued / last used / 取消済み,
+  発行 with a label → green alert with the full key + copy button, shown only until the modal closes; 取り消す confirm).
+- Texts "ナビの「操作する職員」で…" in OrderDrawer / SignalsPanel / SLA → "このアカウントでは…（利用開始前・停止中）".
+- CSS `.login-wrap`, `.login-card`, `.api-key-value`; removed the picker-only `.acting-staff-panel` / `-note` /
+  `.is-warning` / `.ant-tag` rules.
+- Checked: build; node harness 18/18 against 8001 with a cookie-keeping `fetch` (scratchpad `cookie_fetch.ts`, imported
+  first): 401 → signedOut, login failure doesn't sign out, cookie set / cleared, temporary password → 403
+  PASSWORD_CHANGE_REQUIRED → change → unblocked, API key issue / list / revoke / non-sender 400; **curl through Vite 5174**:
+  401 → login Set-Cookie passes the proxy → 200 → logout 204 → 401; `/login` served. plan_check staff 6 password is
+  `check-pass-6` again; API key on staff 10 revoked. **Not checked: the browser.**
+
+### Deployment (branch `feature/deployment`, 2026-11-06; doc rev 89)
+User's decisions: **intranet, plain HTTP, no domain, no HTTPS**; **daily `pg_dump` to a local folder** (`./backups`),
+the user syncs it to the NAS at OS level; (asked, as I recommended) **01:00 JST, keep 14 days**; **migrations run
+automatically at app start**. Earlier: Linux VM + Docker Compose, worker loop. My calls: a separate **`web` (nginx)**
+service serves the built frontend and proxies `/api/` → `app:8000/` (same origin, like the Vite proxy) instead of
+FastAPI serving static files; compose files live in **`deploy/`** (so the dev `.env` at the root is never read by
+Compose; build context `..`); **uvicorn 1 process** (one writer for the rotating `app.log`); worker checks releases at
+**second 1 of every minute** (release times are minute-granular ⇒ ≤ 1 min late, same outcome as "sleep until the next
+moment, cap 60 s", much simpler).
+- `scripts/worker.py`: `order_sync.register()`, loop: plan extension once a day after `WORKER_EXTEND_AT` (00:05 JST;
+  also right after start if that day's run hasn't happened), then `release_due_orders`, then
+  `stop.wait(seconds_until_next_run)`; errors logged, loop continues; SIGTERM/SIGINT stop after the current pass;
+  logs to stdout (releases logged only when something was released). Pure helpers `seconds_until_next_run`,
+  `extension_due`, `parse_time` → `tests/test_worker.py` (2, no DB). Ran 75 s against plan_check OK.
+- `deploy/app.Dockerfile` (python:3.14-slim + tzdata, TZ=Asia/Tokyo, requirements, copies alembic / main.py / src /
+  scripts; `deploy/app-entrypoint.sh`: mkdir logs, `alembic upgrade head`, `exec uvicorn main:app --host 0.0.0.0
+  --port 8000 --workers 1 --proxy-headers`), CRLF stripped in the image. `deploy/web.Dockerfile` (node:24-alpine
+  `npm ci` + `npm run build` → nginx:1.27-alpine) + `deploy/nginx.conf` (SPA fallback `try_files $uri /index.html`,
+  `/assets/` cached 1 y immutable, index no-cache).
+- `deploy/docker-compose.yml` (project `ops`): `db` postgres:16 (volume `pgdata`, pg_isready healthcheck), `app`
+  (image `ops-app`, `./logs:/app/logs`, `LOG_FILE=/app/logs/app.log`, healthcheck GET `/`), `worker` (same image,
+  `python scripts/worker.py`, waits for app healthy = migrations done), `web` (image `ops-web`, port
+  `${HTTP_PORT:-80}:80`), `backup` (postgres:16 running `deploy/backup.sh` mounted read-only, `${BACKUP_DIR:-./backups}`);
+  shared env `DATABASE_URL` built from `POSTGRES_*`, `ENVIRONMENT=production`, `COOKIE_SECURE=false`, `TZ`; json-file
+  logs 10 MB × 5. DB port not published. `deploy/.env.example` (POSTGRES_DB / USER / PASSWORD — letters + digits only,
+  HTTP_PORT, BACKUP_DIR / TIME / KEEP_DAYS).
+- `deploy/backup.sh`: daily loop (GNU `date -d "today/tomorrow HH:MM"`), `pg_dump --format=custom --compress=6` to
+  `<db>_YYYYMMDD_HHMMSS.dump` via a `.partial` name, then `find -mtime +(KEEP-1) -delete` (KEEP 0 = keep all); `once`
+  argument for an immediate dump; `BACKUP_DEST` overrides `/backups` (for testing). Tested on the office PC with the local
+  PostgreSQL 16 `pg_dump` against plan_check: dump 212 KB, `pg_restore --list` OK, 20-day file removed / 5-day kept, the
+  loop fired at the set minute.
+- `deploy/README.md` (Japanese runbook): first start, first admin via `docker compose exec app python
+  scripts/create_staff.py admin "…" --roles system_admin admin`, update (`git pull` + `docker compose up -d --build`),
+  logs, backup now / restore (`pg_restore --clean --if-exists --no-owner` with app + worker stopped), common commands,
+  notes (COOKIE_SECURE, `/api/openapi.json`, no Task Scheduler on the server).
+- Repo: `.dockerignore` (root), `.gitattributes` `*.sh text eol=lf`, `.gitignore` + `deploy/backups/`, `deploy/logs/`
+  (`deploy/.env` already ignored by `.env`).
+- **Not verified (no Docker here):** image builds (python:3.14-slim + `psycopg-binary` wheel, `npm ci` in node:24),
+  nginx config, compose start-up order / healthchecks, the backup service inside the postgres image. First real run =
+  on the VM; check `docker compose ps` / `logs`.
+
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic
 release, a template at the expected arrival time (its end = the 遅れ deadline); a person checks the client's SFTP in
@@ -1119,11 +1255,11 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
   month), sheet-date tags with provenance labels, occurrences per business (time, chipStyle swatch + Icon, 人が変更 /
   臨時 tags, 元の日付 when the slot date differs); past days add struck-through voided rows with the reason
   (`VOID_REASON_LABEL`) and note. Pure logic in `dailyDashboard.ts`.
-- **Acting staff (until login):** `shared/api/actingStaff.ts` keeps the id (localStorage, else `VITE_DEFAULT_STAFF_ID`);
-  an openapi-fetch middleware in `http.ts` sends it as `X-Staff-Id` on every request; `useActingStaffId`
-  (useSyncExternalStore). Nav picker `app/ActingStaffPicker.tsx` (enter id, shows name / status / roles).
+- **Login (LG.3, replaced the acting-staff picker):** `/login` page; session in the HttpOnly `ops_session` cookie;
+  `shared/api/session.ts` + `useSession`; http.ts marks signed out on 401; `AppLayout` redirects to `/login` and forces
+  a password change for temporary passwords; nav `UserMenu` (パスワードを変更, ログアウト). Detail in §2 "Login".
 - **職員** (`/settings/staff`, `features/staff-settings`): list, 職員を登録, 編集 (name, email, role checkboxes; own
-  system_admin locked), 有効化 / 利用停止 / 再開 (confirm; own row disabled), 「この職員として操作」. UI permissions in
+  system_admin locked), 有効化 / 利用停止 / 再開 (confirm; own row disabled), 仮パスワード / API キー (system_admin, LG.3). UI permissions in
   `domain/staff/lib/permissions.ts` mirror the backend (display only).
 - **Template settings page:** 「次の予定」 column (template timezone) and a warning tag + banner for templates with no
   upcoming occurrence. The layout remembers each page's last query string, so switching pages keeps

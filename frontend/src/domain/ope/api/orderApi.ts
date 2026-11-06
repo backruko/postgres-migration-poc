@@ -2,7 +2,7 @@ import { http, unwrap } from "../../../shared/api/http";
 import type { ConflictAction, OrderDetail } from "../types";
 
 /**
- * オーダーの参照と状態の操作。どのリクエストにも、操作している職員（X-Staff-Id）が http.ts で付く。
+ * オーダーの参照と状態の操作。ログインのセッション（Cookie）で、ログインしている職員として呼ぶ。
  * 誰が何をできるかはバックエンドが判定する（画面の出し分けは domain/ope/lib/orderActions.ts）。
  */
 const path = (orderId: number) => ({ params: { path: { order_id: orderId } } });

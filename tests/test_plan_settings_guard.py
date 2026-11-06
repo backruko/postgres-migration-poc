@@ -6,6 +6,8 @@
 開始する抜け道も塞ぐ。U.4）。参照は誰でも。
 （ガードの動作そのもの = 401 / 403 は test_staff.py のデコレーターのテストで確認済み。ここでは付け忘れを防ぐ）
 """
+from tests.openapi_auth import needs_login
+
 
 WRITE_METHODS = ("post", "patch", "put", "delete")
 
@@ -30,12 +32,12 @@ def _operations(prefixes: tuple[str, ...]):
                 yield path, method, op
 
 
-def test_every_plan_and_biz_write_needs_the_staff_header():
+def test_every_plan_and_biz_write_needs_a_login():
     writes = [(p, m, op) for p, m, op in _operations(("/plans", "/biz")) if m in WRITE_METHODS]
     assert len(writes) >= 30  # 一覧が空になってテストが素通りしないように（2026-11-05 時点で 35）
     for path, method, op in writes:
         params = {p["name"] for p in op.get("parameters", [])}
-        assert "x-staff-id" in params, (path, method)
+        assert needs_login(op), (path, method)
         assert "_require_roles_current_staff" not in params, (path, method)
         assert {"401", "403"} <= set(op["responses"]), (path, method)
 
@@ -67,7 +69,16 @@ def test_settings_writes_need_admin_and_occurrence_changes_any_active_staff():
     assert checked >= 30
 
 
-def test_reads_stay_open():
+def test_reads_need_a_login_but_no_role():
+    """参照はロールを問わない（ログインは必要。LG.2）"""
     for path, method, op in _operations(("/plans", "/biz")):
         if method == "get":
-            assert "x-staff-id" not in {p["name"] for p in op.get("parameters", [])}, (path, method)
+            assert needs_login(op), (path, method)
+    from fastapi.routing import APIRoute
+
+    from src.domain_biz.router import router as biz_router
+    from src.domain_plan.router import router as plan_router
+
+    for route in [*plan_router.routes, *biz_router.routes]:
+        if isinstance(route, APIRoute) and "GET" in (route.methods or ()):
+            assert getattr(route.endpoint, "__required_roles__", None) is None, route.path

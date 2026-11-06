@@ -60,7 +60,7 @@ type PendingAction = { kind: "order"; action: OrderAction } | { kind: "step"; ac
 const actionLabel = (a: OrderAction, order: OrderDetail | null) => (a === "finish" && order ? finishLabel(order) : ORDER_ACTION_LABEL[a]);
 
 /**
- * オーダーの詳細（右から開くドロワー）。状態・SOP バージョン・ステップ・記録と、操作する職員のロールで使える操作を表示する。
+ * オーダーの詳細（右から開くドロワー）。状態・SOP バージョン・ステップ・記録と、ログインしている職員のロールで使える操作を表示する。
  * ステップはリリース前はプレビュー（リリース時に確定）。操作の可否の最終判定はバックエンド（ここではボタンの出し分けのみ）。
  */
 export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
@@ -194,7 +194,7 @@ export function OrderDrawer({ orderId, title, onClose, onChanged }: Props) {
 
           <div>
             {me.data?.status !== "active" ? (
-              <Typography.Text type="secondary">操作するには、ナビの「操作する職員」で有効な職員を選んでください。</Typography.Text>
+              <Typography.Text type="secondary">このアカウントでは操作できません（利用開始前・停止中）。</Typography.Text>
             ) : actions.length ? (
               <Space wrap>
                 {actions.map((a) => (

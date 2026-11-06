@@ -6,6 +6,7 @@
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
 
+from tests.openapi_auth import needs_login
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -138,7 +139,7 @@ def test_only_admins_change_definitions():
     from main import app
 
     paths = app.openapi()["paths"]
-    # 変更（作成・削除）は職員の指定が必要（@require_roles(admin)）、一覧は不要
-    assert "x-staff-id" in {p["name"] for p in paths["/biz/{biz_id}/dependencies"]["post"].get("parameters", [])}
-    assert "x-staff-id" in {p["name"] for p in paths["/biz/dependencies/{dependency_id}"]["delete"].get("parameters", [])}
-    assert "x-staff-id" not in {p["name"] for p in paths["/biz/{biz_id}/dependencies"]["get"].get("parameters", [])}
+    # すべてログインが必要（LG.2）。変更（作成・削除）は業務管理者（ロールは test_plan_settings_guard.py で確認）
+    assert needs_login(paths["/biz/{biz_id}/dependencies"]["post"])
+    assert needs_login(paths["/biz/dependencies/{dependency_id}"]["delete"])
+    assert needs_login(paths["/biz/{biz_id}/dependencies"]["get"])
