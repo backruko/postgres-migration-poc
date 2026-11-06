@@ -18,6 +18,8 @@ class ErrorCode(str, Enum):
     STAFF_NOT_ACTIVE = "STAFF_NOT_ACTIVE"  # 職員アカウントが利用開始前・利用停止中
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
     PASSWORD_EXPIRED = "PASSWORD_EXPIRED"
+    PASSWORD_CHANGE_REQUIRED = "PASSWORD_CHANGE_REQUIRED"  # 仮パスワードのまま: 本人が変えるまでほかの操作はできない
+    ACCOUNT_LOCKED = "ACCOUNT_LOCKED"  # ログインの失敗が続いたため、しばらくログインできない
     
     # リソース系 (404)
     NOT_FOUND = "NOT_FOUND"

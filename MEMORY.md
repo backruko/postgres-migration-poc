@@ -28,12 +28,10 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   - **M1 client + business screens: done, merged into `main` (`44c1737`, 2026-11-06, not pushed)** — commits
     `2729ea7` M1.1 backend · `5a619b6` M1.2a 設定 menu · `2cfb5fa` M1.2b 顧客 page · `13a7238` M1.2c 業務 page (detail in
     §2 "M1").
-  - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; M2.1 `5b054ea`, M2.2 `ce85e39`,
-    M2.3 `2582eaa`, M2.4 `f549312`, M2.5 `800061c`, **M2.6 built, uncommitted** — then merge, next: login): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
-    delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
-    is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
-    copy of the current version into a draft.
-  - **Login**: a simple password per staff + session cookie, replacing `X-Staff-Id` in `get_current_staff` (SSO later).
+  - **M2 SOP screens: done, merged into `main` (`28b94b6`, 2026-11-06, not pushed; user browser-tested OK)** —
+    commits `5b054ea` M2.1 … `17aa788` M2.6 (detail in §2 "M2").
+  - **Login** (branch `feature/login` from `main` `28b94b6`; plan approved 2026-11-06, see §2 "Login"):
+    **LG.1 built, uncommitted** (migration `b4e8d2a6c913`); LG.2 backend switch, LG.3 frontend to do.
   - **Deployment** (user's decisions 2026-11-05, doc rev 78): **Linux VM + Docker Compose**, services `db`
     (PostgreSQL 16, volume, daily `pg_dump`), `app` (uvicorn + production frontend build same-origin with SPA
     fallback), **`worker`** = a loop replacing Task Scheduler: release due orders, sleep until the next release
@@ -55,14 +53,15 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   screens from Phases 5–7 were never clicked through either. A "slow drawer spinner" report on 2026-11-05 could not be
   reproduced: server ~25 ms, Vite proxy ~25 ms — most likely the uvicorn console paused by a text selection
   (Windows QuickEdit); advised turning QuickEdit off.
-- **DB:** latest Alembic head **`7a3c5e9b1d24`** (M2.1, SOP states; **the user's dev DB is upgraded — confirmed 2026-11-06**). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
+- **DB:** latest Alembic head **`b4e8d2a6c913`** (LG.1, login tables; **the user must run `alembic upgrade head`** —
+  their dev DB was at `7a3c5e9b1d24`, confirmed 2026-11-06). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
   `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) → `f9bbe9648f15` (biz
   release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657` (step template condition /
   is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at) → `2904467fd7b9`
   (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec`
   (biz client-event settings) → `3242f180527a` (ope_signal, role signal_sender) → `2f7614f1cb02` (latest_before +
   lookback_days, L.1) → `d17d631f5ad2` (plan_template deadline fields, N.1) → `c5bb40015e61` (ope_order deadline
-  snapshot + deadline_at / warn_at / finished_at, N.2) → `51d8d829a2d2` (attention partial indexes, N.3) → `7a3c5e9b1d24` (SOP version states from dates, M2.1).
+  snapshot + deadline_at / warn_at / finished_at, N.2) → `51d8d829a2d2` (attention partial indexes, N.3) → `7a3c5e9b1d24` (SOP version states from dates, M2.1) → `b4e8d2a6c913` (staff login: passwords, sessions, API keys, LG.1).
   **The user's dev DB:** on 2026-11-05 at 16:39 their uvicorn (8000) was already reading the N.2 columns and serving
   `/ops/attention`, so it was upgraded at least to `c5bb40015e61`; **the user confirmed it is at head `51d8d829a2d2`
   (2026-11-05, late session)** — never
@@ -71,7 +70,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   Dev DB facts: staff 1 login `system` has system_admin + operator / checker / releaser but **not admin** (needs
   業務管理者 to edit settings since U.3 / U.4); 1 client MOCK; biz 13 / 14 in use; `app.log.1` (1.35 GB, pre-rotation)
   can be deleted by the user.
-  **`plan_check`** (throwaway, mine) is at `7a3c5e9b1d24`. Seeded: client `MOCK`, biz 1 `MOCK0001` (one approved SOP
+  **`plan_check`** (throwaway, mine) is at `b4e8d2a6c913`. Seeded: client `MOCK`, biz 1 `MOCK0001` (one approved SOP
   version `v9.26817.0`; SOP version 1 with 3 step templates), biz 2 `MOCK0002` (LIGHTWEIGHT + AUTOMATIC
   `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff: 1 `check-admin` (system_admin),
   2 suspended, 3 viewer+auditor, **4 operator, 5 releaser**, 6 / 7 checkers, **8 admin**, 9 / 10 signal_sender. 14
@@ -112,7 +111,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 81 (2026-11-06, "Built … (M2)" sentence added to the "Version states" bullet)** — read with `{"kind": "view", "sinceRev": 81}` to see only newer edits, and
+**Last rev written by me: 82 (2026-11-06, "MVP login" paragraph after the master-data paragraph; the older "Who changed it … X-Staff-Id" paragraph in Propagating plan changes must be updated in LG.2)** — read with `{"kind": "view", "sinceRev": 82}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -860,6 +859,36 @@ approve → `sopApi.approve(bizId, id, date)`. Scheduled version (admin): 「予
 pinned orders shown 8 s) → `sopApi.cancelApproval`. CSS `.sop-impact*`. Harness 12/12 on plan_check (draft id 6 approved
 for tomorrow, impact read, second approval 400, cancel → draft again; current v9 open-ended again). **Not checked in a
 browser.**
+
+### Login (branch `feature/login`, 2026-11-06; doc rev 82)
+User's decisions (all as I recommended): **server-side DB sessions in an HttpOnly cookie, 12 h idle, max 7 days**
+(logout / suspend / password change end them); **a system_admin sets a temporary password, the person must change it
+at the next login**, everyone can change their own, 5 wrong tries → 15 min lock; **API key per signal_sender** for
+`POST /ope/signals` (shown once, hashed, revocable); **X-Staff-Id removed entirely** (harnesses log in). My calls:
+stdlib `hashlib.scrypt` (no new dependency), cookie `Secure` from a setting (off on plain-HTTP intranet), SameSite=Lax
+as CSRF protection (same-origin app). Step names **LG.x** (L.x is the latest-before phase).
+| # | Step | Status |
+|---|---|---|
+| LG.1 | Model + building blocks (no endpoint uses them yet); migration `b4e8d2a6c913` | **built, uncommitted** |
+| LG.2 | Backend switch: `/auth/login` / `logout` / `password`, cookie in `get_current_staff`, X-Staff-Id removed, Bearer key on `POST /ope/signals`, must_change_password → 403 elsewhere, temporary password + API key endpoints (system_admin), suspend / password ends sessions, `create_staff.py` password prompt + `scripts/set_password.py`, guard tests; update the doc's X-Staff-Id paragraph | todo |
+| LG.3 | Frontend: `/login`, 401 → login, forced password change, nav name + パスワード変更 + ログアウト (replaces 操作する職員), 職員 page 仮パスワード + API キー | todo |
+
+**LG.1 as built** (migration `b4e8d2a6c913`). `staff_user` + `password_hash` (String 255, null = cannot log in),
+`must_change_password`, `failed_logins`, `locked_until`, `password_changed_at`. New `staff_session` (`token_hash`
+unique SHA-256 hex, `last_seen_at`, `expires_at` = created + 7 d, `revoked_at`) and `staff_api_key` (`label`,
+`key_prefix` = first 10 chars, `key_hash` unique, `created_by_id` / `revoked_by_id`, `last_used_at`, `revoked_at`); FKs to
+staff RESTRICT (staff are never deleted). `src/domain_staff/credentials.py` (no commits; callers commit):
+`hash_password` / `verify_password_hash` (format `scrypt$n$r$p$salt$hash`, n=2^14 r=8 p=1, `hmac.compare_digest`),
+`password_problem` (8–128 chars, no edge spaces, ≠ login ID), `set_password(temporary, keep_session_id)` (clears lock,
+ends the staff's other sessions), `authenticate` (row locked; unknown login still hashes once; 401
+`INVALID_CREDENTIALS` "Login ID or password is wrong."; 5th failure → `locked_until` = now + 15 min, 403
+`ACCOUNT_LOCKED` "…after HH:MM JST"; non-active → 403 `STAFF_NOT_ACTIVE` only after a correct password),
+`create_session` (token `secrets.token_urlsafe(32)`), `resolve_session` (revoked / idle 12 h / max age → None; touches
+`last_seen_at` at most once a minute), `revoke_session`, `revoke_all_sessions(except_session_id)`, `issue_api_key`
+(signal_sender only, label required, key `ops_` + 32 random bytes), `resolve_api_key` (records `last_used_at`),
+`revoke_api_key`. New `ErrorCode`s `PASSWORD_CHANGE_REQUIRED`, `ACCOUNT_LOCKED` (`INVALID_CREDENTIALS` existed).
+Messages are English like the rest of the API; the login page maps codes to Japanese (LG.3). Tests
+`tests/test_credentials.py` (6, no client). Round trip + `alembic check` on plan_check OK.
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic
