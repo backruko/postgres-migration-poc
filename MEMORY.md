@@ -28,8 +28,8 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   - **M1 client + business screens: done, merged into `main` (`44c1737`, 2026-11-06, not pushed)** — commits
     `2729ea7` M1.1 backend · `5a619b6` M1.2a 設定 menu · `2cfb5fa` M1.2b 顧客 page · `13a7238` M1.2c 業務 page (detail in
     §2 "M1").
-  - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; **M2.1 built,
-    uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
+  - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; M2.1 done `5b054ea`,
+    **M2.2 built, uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
     delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
     is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
     copy of the current version into a draft.
@@ -771,8 +771,8 @@ current; empty draft for the first SOP); **effective = a date, from 00:00 JST**.
 approving a draft with **no steps is refused**; **no four-eyes** on SOP approval (editors aren't recorded).
 | # | Step | Status |
 |---|---|---|
-| M2.1 | Version states from dates + approve / cancel rules; migration `7a3c5e9b1d24` | **built, uncommitted** |
-| M2.2 | Draft editing API: list all versions incl. drafts, one version + steps, 新しい版 (copy newest approved / empty), add (auto number) / edit / delete / reorder steps, delete a draft — drafts only, admin | todo |
+| M2.1 | Version states from dates + approve / cancel rules; migration `7a3c5e9b1d24` | **done** (`5b054ea`) |
+| M2.2 | Draft editing API (as built below) | **built, uncommitted** |
 | M2.3 | `GET /ope/sop-impact?biz_id=&effective_date=`: unreleased unpinned orders from that day (will run it), pinned (keep pin), released (keep frozen) | todo |
 | M2.4 | Page `/settings/sop?biz=` (「SOP」 link on 業務 rows): version list with state tags, read-only steps, 新しい版 (suggested tag), 草稿を削除 | todo |
 | M2.5 | Draft step editor (add / edit / delete / move; condition 毎回 / 指定した月 / 週の最初; 承認で次へ) | todo |
@@ -798,6 +798,21 @@ versions are chained to the next one's `effective_at` (LEAD by effective_at); CH
   `FUTURE` → `APPROVED`. Round trip on plan_check (also with synthetic old-style rows: chain + draft cleanup OK, rows
   removed). HTTP 10/10 on plan_check: v9 = current; draft id 6 (`v9.1793927904.0`, 1 step) left on biz 1 after
   approve → cancel.
+
+**M2.2 as built** (no migration). Endpoints (writes `@require_roles([ADMIN])`, reads open):
+`GET /biz/{id}/versions?include_drafts=` (default approved only = pin choices; newest first by version_number) ·
+`GET /biz/versions/{id}` → `SOPVersionDetailResponse` (version + `steps` by number) · `POST /biz/{id}/versions/clone`
+= **新しい版**: copies the newest approved version by `effective_at` (scheduled one if any), empty when none ·
+`POST /biz/{id}/versions` (empty draft, kept) · `PATCH /biz/versions/{id}` (`SOPVersionUpdate` = tag, subclass of
+`SOPVersionCreate`) · `DELETE /biz/versions/{id}` (draft + steps, hard) · `POST /biz/versions/{id}/steps`
+(`step_num` optional → max + 1; title stripped, 1–100) · `PUT /biz/versions/{id}/steps/order` (`SOPStepOrderIn.step_ids`
+= every step once → 1..n, two-phase via a high offset because of `uq_sop_version_step_num`) · `PATCH /biz/steps/{id}`
+(`SOPStepTemplateUpdate`: title / content (null clears) / condition / is_blocking; explicit null refused for the
+others) · `DELETE /biz/steps/{id}` (numbers kept; reorder to close gaps). All edits: approved version → 400
+"…is approved and can no longer be changed"; the version row is locked `FOR UPDATE`. Services `list_versions`,
+`get_version`, `_get_draft`, `rename_draft`, `delete_draft`, `update_step_template`, `delete_step_template`,
+`reorder_steps`; `create_new_sop_version` now rolls back on a duplicate tag. Tests +3 in `tests/test_sop_versions.py`.
+HTTP 14/14 on plan_check: draft id 6 renamed **`v9.1793927904.0-http`** (1 step) left on biz 1.
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

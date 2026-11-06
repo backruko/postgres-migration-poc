@@ -1,7 +1,7 @@
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_, or_
+from sqlalchemy import func, select, and_, or_
 from sqlalchemy.exc import IntegrityError
 
 from src.infrastructure.repositories import biz_dependency_repo, biz_master_repo, client_repo, sop_version_repo, sop_step_repo
@@ -10,7 +10,7 @@ from src.domain_biz.models import (
 )
 from src.domain_biz.schemas import (
     BizDependencyCreate, BizDependencyResponse, BizMasterCreate, BizMasterUpdate, BizRef, SOPVersionCreate,
-    SOPStepTemplateCreate,
+    SOPStepOrderIn, SOPStepTemplateCreate, SOPStepTemplateUpdate, SOPVersionUpdate,
 )
 from src.core.exceptions import BadRequestError, NotFoundError, DuplicatedRecordError
 from src.domain_biz import delete_checks, dependency_events, version_checks
@@ -168,7 +168,8 @@ def create_new_sop_version(db: Session, biz_id: int, version_in: SOPVersionCreat
         db.refresh(new_draft)
         return new_draft
     except IntegrityError:
-        raise DuplicatedRecordError(f"指定されたバージョンタグ '{version_in.version_tag}' は既に存在します。")
+        db.rollback()
+        raise DuplicatedRecordError(f"Version tag '{version_in.version_tag}' already exists for this business.")
 
 
 # ==========================================
@@ -220,66 +221,166 @@ def get_current_active_version(db: Session, biz_id: int) -> SOPVersion:
 
 
 # ==========================================
-# 1. 【複数並行OK】現行マニュアルをコピーして「新しい草稿(DRAFT)」を作る
+# 1. 新しい版: 最新の承認済みの版（予定があればそれ、なければ現行）を写した草稿。承認済みが無ければ空（M2.2）
 # ==========================================
+def _next_version_number(db: Session, biz_id: int) -> int:
+    max_num = db.scalar(select(func.max(SOPVersion.version_number)).where(SOPVersion.biz_master_id == biz_id))
+    return (max_num or 0) + 1
+
+
+def _newest_approved(db: Session, biz_id: int) -> SOPVersion | None:
+    """発効日時の最も新しい承認済みの版（予定の版があればそれ。過去の版になっていても、それより新しい版が無ければそれ）"""
+    return db.scalars(
+        select(SOPVersion)
+        .where(SOPVersion.biz_master_id == biz_id, SOPVersion.status == SOPStatus.APPROVED)
+        .order_by(SOPVersion.effective_at.desc(), SOPVersion.version_number.desc())
+        .limit(1)
+    ).first()
+
+
 def clone_active_to_draft(db: Session, biz_id: int, version_in: SOPVersionCreate) -> SOPVersion:
     """
-    現行をベースに、ユーザーが指定した自由なタグ名(version_in.version_tag)で草稿を生成します。
+    新しい草稿を作ります（業務管理者）。最新の承認済みの版のステップ（条件・承認で次へも）を写す。
+    承認済みの版がまだ無い業務（最初の SOP）は、空の草稿になる。草稿は複数並べて作れる。
     """
-    current_active = get_current_active_version(db, biz_id=biz_id)
-    
-    # 1. 【システム用】DBの一意制約のため、裏側の整数連番は自動で「最大値 + 1」
-    stmt_max = select(SOPVersion.version_number).where(SOPVersion.biz_master_id == biz_id).order_by(SOPVersion.version_number.desc()).limit(1)
-    max_num = db.scalars(stmt_max).first() or current_active.version_number
-    new_version_number = max_num + 1
-
-    # 2. 【人間用】Pydanticでバリデーション済みの、人間が入力したタグをそのまま採用！
-    new_draft = SOPVersion(
-        biz_master_id=biz_id,
-        version_number=new_version_number,  # 機械用（自動）
-        version_tag=version_in.version_tag,   # 人間用（自由：v1.1.0-teamA など）
-        status=SOPStatus.DRAFT,
-        effective_at=None,
-        expired_at=None
+    get_biz(db, biz_id)
+    source = _newest_approved(db, biz_id)
+    draft = SOPVersion(
+        biz_master_id=biz_id, version_number=_next_version_number(db, biz_id), version_tag=version_in.version_tag,
+        status=SOPStatus.DRAFT, effective_at=None, expired_at=None,
     )
-    db.add(new_draft)
-    db.flush()
-
-    # 現行のステップ手順を丸ごとコピー
-    for step in current_active.step_templates:
-        copied_step = SOPStepTemplate(
-            sop_version_id=new_draft.id,
-            step_num=step.step_num,
-            title=step.title,
-            content=step.content,
-            condition=step.condition,
-            is_blocking=step.is_blocking
-        )
-        db.add(copied_step)
-        
-    db.commit()
-    db.refresh(new_draft)
-    return new_draft
-
-
-
-# ==========================================
-# 2. 【現行・未来ロック】ステップの手順を編集する
-# ==========================================
-def create_step_template(db: Session, version_id: int, step_in: SOPStepTemplateCreate) -> SOPStepTemplate:
-    """特定のSOPバージョン内に、作業手順(ステップ)を新規作成します。"""
-    db_version = sop_version_repo.get(db, id=version_id)
-    if not db_version:
-        raise NotFoundError(f"SOPVersion(id={version_id}) not found.")
-        
-    #【仕様ロック】ステータスが DRAFT 以外（ACTIVE や FUTURE）なら手順の追加・変更を絶対禁止
-    if db_version.status != SOPStatus.DRAFT:
-        raise BadRequestError("稼働中(ACTIVE)または予約確定済(FUTURE)のバージョンを書き換えることはできません。草稿(DRAFT)で編集してください。")
-        
+    db.add(draft)
     try:
-        return sop_step_repo.create_with_version(db, obj_in=step_in, sop_version_id=version_id)
+        db.flush()
     except IntegrityError:
-        raise DuplicatedRecordError(f"Step number {step_in.step_num} already exists in this version.")
+        db.rollback()
+        raise DuplicatedRecordError(f"Version tag '{version_in.version_tag}' already exists for this business.")
+    if source is not None:
+        for step in sorted(source.step_templates, key=lambda s: s.step_num):
+            db.add(SOPStepTemplate(
+                sop_version_id=draft.id, step_num=step.step_num, title=step.title, content=step.content,
+                condition=step.condition, is_blocking=step.is_blocking,
+            ))
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+# ==========================================
+# 2. 草稿の編集（タグ・ステップの追加 / 変更 / 削除 / 並べ替え・草稿の削除）。承認済みの版は変えられない（M2.2）
+# ==========================================
+def list_versions(db: Session, biz_id: int, include_drafts: bool = False) -> list[SOPVersion]:
+    """業務の版、新しい順。include_drafts=False なら承認済みだけ（オーダーに指定できる選択肢）"""
+    get_biz(db, biz_id)  # 存在しない・削除済みの業務は 404
+    if not include_drafts:
+        return sop_version_repo.get_approved(db, biz_master_id=biz_id)
+    return list(db.scalars(
+        select(SOPVersion).where(SOPVersion.biz_master_id == biz_id).order_by(SOPVersion.version_number.desc())
+    ).all())
+
+
+def get_version(db: Session, version_id: int) -> SOPVersion:
+    version = sop_version_repo.get(db, id=version_id)
+    if not version:
+        raise NotFoundError(f"SOPVersion(id={version_id}) not found.")
+    return version
+
+
+def _get_draft(db: Session, version_id: int, *, lock: bool = False) -> SOPVersion:
+    stmt = select(SOPVersion).where(SOPVersion.id == version_id)
+    version = db.scalars(stmt.with_for_update() if lock else stmt).first()
+    if not version:
+        raise NotFoundError(f"SOPVersion(id={version_id}) not found.")
+    if version.status != SOPStatus.DRAFT:
+        raise BadRequestError(f"{version.version_tag} is approved and can no longer be changed; edit a new draft instead.")
+    return version
+
+
+def _steps_of(db: Session, version_id: int) -> list[SOPStepTemplate]:
+    return list(db.scalars(
+        select(SOPStepTemplate).where(SOPStepTemplate.sop_version_id == version_id).order_by(SOPStepTemplate.step_num)
+    ).all())
+
+
+def rename_draft(db: Session, version_id: int, version_in: SOPVersionUpdate) -> SOPVersion:
+    draft = _get_draft(db, version_id)
+    draft.version_tag = version_in.version_tag
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise DuplicatedRecordError(f"Version tag '{version_in.version_tag}' already exists for this business.")
+    db.refresh(draft)
+    return draft
+
+
+def delete_draft(db: Session, version_id: int) -> SOPVersion:
+    """草稿を削除します（ステップごと）。草稿はオーダーに使われない"""
+    draft = _get_draft(db, version_id, lock=True)
+    db.delete(draft)
+    db.commit()
+    return draft
+
+
+def create_step_template(db: Session, version_id: int, step_in: SOPStepTemplateCreate) -> SOPStepTemplate:
+    """草稿にステップを追加します。番号を省くと最後（最大 + 1）"""
+    draft = _get_draft(db, version_id, lock=True)  # 同時の追加で同じ番号にならないよう版をロック
+    steps = _steps_of(db, draft.id)
+    step_num = step_in.step_num if step_in.step_num is not None else max((s.step_num for s in steps), default=0) + 1
+    if any(s.step_num == step_num for s in steps):
+        raise DuplicatedRecordError(f"Step number {step_num} already exists in {draft.version_tag}.")
+    step = SOPStepTemplate(
+        sop_version_id=draft.id, step_num=step_num, title=step_in.title, content=step_in.content,
+        condition=step_in.condition.model_dump(), is_blocking=step_in.is_blocking,
+    )
+    db.add(step)
+    db.commit()
+    db.refresh(step)
+    return step
+
+
+def _get_draft_step(db: Session, step_id: int) -> SOPStepTemplate:
+    step = db.get(SOPStepTemplate, step_id)
+    if step is None:
+        raise NotFoundError(f"SOPStepTemplate(id={step_id}) not found.")
+    _get_draft(db, step.sop_version_id, lock=True)
+    return step
+
+
+def update_step_template(db: Session, step_id: int, step_in: SOPStepTemplateUpdate) -> SOPStepTemplate:
+    """草稿のステップの変更（送った項目だけ）"""
+    step = _get_draft_step(db, step_id)
+    data = step_in.model_dump(exclude_unset=True)
+    for field, value in data.items():
+        setattr(step, field, value)
+    db.commit()
+    db.refresh(step)
+    return step
+
+
+def delete_step_template(db: Session, step_id: int) -> SOPStepTemplate:
+    """草稿のステップの削除（残りの番号はそのまま。詰めるときは並べ替え）"""
+    step = _get_draft_step(db, step_id)
+    db.delete(step)
+    db.commit()
+    return step
+
+
+def reorder_steps(db: Session, version_id: int, order_in: SOPStepOrderIn) -> list[SOPStepTemplate]:
+    """草稿のステップを、渡された id の順に 1 から振り直します（すべてのステップの id がちょうど 1 回ずつ必要）"""
+    draft = _get_draft(db, version_id, lock=True)
+    steps = {s.id: s for s in _steps_of(db, draft.id)}
+    if sorted(order_in.step_ids) != sorted(steps):
+        raise BadRequestError(f"step_ids must list every step of {draft.version_tag} exactly once ({sorted(steps)}).")
+    # 一意制約（版 × 番号）にぶつからないよう、いったん大きな番号へ逃がしてから振り直す
+    offset = max(s.step_num for s in steps.values()) + len(steps)
+    for n, step_id in enumerate(order_in.step_ids, start=1):
+        steps[step_id].step_num = offset + n
+    db.flush()
+    for n, step_id in enumerate(order_in.step_ids, start=1):
+        steps[step_id].step_num = n
+    db.commit()
+    return _steps_of(db, draft.id)
 
 
 # ==========================================

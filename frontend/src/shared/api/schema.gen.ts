@@ -174,7 +174,8 @@ export interface paths {
         put?: never;
         /**
          * Clone Active To Draft Endpoint
-         * @description 【複数並行OK】現在有効な現行バージョンをベースに、ユーザーが指定した自由なタグ名で新しい草稿(DRAFT)を生成します。
+         * @description 【新しい版】最新の承認済みの版（予定の版があればそれ、なければ現行）のステップを写した草稿を作ります。
+         *     承認済みの版が無い業務（最初の SOP）は空の草稿になります。草稿は複数並べて作れます。
          */
         post: operations["clone_active_to_draft_endpoint_biz__biz_id__versions_clone_post"];
         delete?: never;
@@ -191,11 +192,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Approved Versions Endpoint
-         * @description 承認済み（草稿以外）のバージョンを新しい順に返します。オーダーに指定（pin）できるバージョンの選択肢です。
-         *     status は保存された値です（有効かどうかは effective_at / expired_at で判断してください）。
+         * List Versions Endpoint
+         * @description 業務の版を新しい順に返します。既定は承認済みだけ（オーダーに指定（pin）できる選択肢）。
+         *     include_drafts=true で草稿も含めます。state は日付から決まる状態（draft / scheduled / current / past）です。
          */
-        get: operations["list_approved_versions_endpoint_biz__biz_id__versions_get"];
+        get: operations["list_versions_endpoint_biz__biz_id__versions_get"];
         put?: never;
         /**
          * Create New Sop Version Endpoint
@@ -206,6 +207,34 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/biz/versions/{version_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Version Endpoint
+         * @description 版と、そのステップ（番号順）
+         */
+        get: operations["get_version_endpoint_biz_versions__version_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Draft Endpoint
+         * @description 草稿をステップごと削除します（承認済みの版は 400）。
+         */
+        delete: operations["delete_draft_endpoint_biz_versions__version_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename Draft Endpoint
+         * @description 草稿のタグを変えます（承認済みの版は 400）。
+         */
+        patch: operations["rename_draft_endpoint_biz_versions__version_id__patch"];
         trace?: never;
     };
     "/biz/{biz_id}/versions/current-active": {
@@ -281,14 +310,57 @@ export interface paths {
         put?: never;
         /**
          * Create Step Template Endpoint
-         * @description 【現行・未来ロック】特定のSOPバージョン内に、作業手順(ステップ)を新規作成します。
-         *     ※対象のバージョンがすでに現行(ACTIVE)または予約済(FUTURE)の場合はエラーになります。
+         * @description 草稿にステップを追加します（step_num を省くと最後）。承認済みの版は変えられません（400）。
          */
         post: operations["create_step_template_endpoint_biz_versions__version_id__steps_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/biz/versions/{version_id}/steps/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reorder Steps Endpoint
+         * @description 草稿のステップを step_ids の順に並べ、番号を 1 から振り直します（すべてのステップを 1 回ずつ）。
+         */
+        put: operations["reorder_steps_endpoint_biz_versions__version_id__steps_order_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/biz/steps/{step_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Step Template Endpoint
+         * @description 草稿のステップを削除します（残りの番号はそのまま）。
+         */
+        delete: operations["delete_step_template_endpoint_biz_steps__step_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Step Template Endpoint
+         * @description 草稿のステップを変えます（送った項目だけ。title / condition / is_blocking は null にできません）。
+         */
+        patch: operations["update_step_template_endpoint_biz_steps__step_id__patch"];
         trace?: never;
     };
     "/biz/clients/{client_code}/dependencies": {
@@ -3455,13 +3527,21 @@ export interface components {
          * @enum {string}
          */
         SOPStatus: "draft" | "approved";
+        /**
+         * SOPStepOrderIn
+         * @description 草稿のステップの並び（すべてのステップの id を新しい順に。番号は 1 から振り直す）
+         */
+        SOPStepOrderIn: {
+            /** Step Ids */
+            step_ids: number[];
+        };
         /** SOPStepTemplateCreate */
         SOPStepTemplateCreate: {
             /**
              * Step Num
-             * @description ステップの実行順序（1以上の整数）
+             * @description ステップの実行順序（1以上の整数）。省略すると最後（最大 + 1）
              */
-            step_num: number;
+            step_num?: number | null;
             /**
              * Title
              * @description ステップタイトル
@@ -3503,6 +3583,23 @@ export interface components {
             /** Is Blocking */
             is_blocking: boolean;
         };
+        /**
+         * SOPStepTemplateUpdate
+         * @description 草稿のステップの変更（送った項目だけ変わる。M2.2）。番号は並べ替え（SOPStepOrderIn）で変える
+         */
+        SOPStepTemplateUpdate: {
+            /** Title */
+            title?: string | null;
+            /**
+             * Content
+             * @description null で消す
+             */
+            content?: string | null;
+            /** Condition */
+            condition?: (components["schemas"]["AlwaysCondition"] | components["schemas"]["MonthInCondition"] | components["schemas"]["FirstInWeekCondition"]) | null;
+            /** Is Blocking */
+            is_blocking?: boolean | null;
+        };
         /** SOPVersionCreate */
         SOPVersionCreate: {
             /**
@@ -3510,6 +3607,33 @@ export interface components {
              * @description セマンティックバージョニング形式(vX.Y.Z[-サフィックス])で入力してください
              */
             version_tag: string;
+        };
+        /**
+         * SOPVersionDetailResponse
+         * @description バージョンとそのステップ（番号順）
+         */
+        SOPVersionDetailResponse: {
+            /** Id */
+            id: number;
+            /** Biz Master Id */
+            biz_master_id: number;
+            /** Version Number */
+            version_number: number;
+            /** Version Tag */
+            version_tag: string;
+            /** @description stored: draft or approved */
+            status: components["schemas"]["SOPStatus"];
+            /** @description draft / scheduled (approved, not yet in effect) / current / past, from the dates */
+            state: components["schemas"]["SopState"];
+            /** Effective At */
+            effective_at: string | null;
+            /**
+             * Expired At
+             * @description end (exclusive): the next version's effective_at
+             */
+            expired_at: string | null;
+            /** Steps */
+            steps: components["schemas"]["SOPStepTemplateResponse"][];
         };
         /** SOPVersionResponse */
         SOPVersionResponse: {
@@ -3544,6 +3668,17 @@ export interface components {
              * @description first day (JST) the version applies to; tomorrow or later
              */
             effective_date: string;
+        };
+        /**
+         * SOPVersionUpdate
+         * @description 草稿のタグの変更（M2.2。承認済みの版は変えられない）。形式の確認は SOPVersionCreate と同じ
+         */
+        SOPVersionUpdate: {
+            /**
+             * Version Tag
+             * @description セマンティックバージョニング形式(vX.Y.Z[-サフィックス])で入力してください
+             */
+            version_tag: string;
         };
         /**
          * SignalHandleIn
@@ -4895,9 +5030,11 @@ export interface operations {
             };
         };
     };
-    list_approved_versions_endpoint_biz__biz_id__versions_get: {
+    list_versions_endpoint_biz__biz_id__versions_get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_drafts?: boolean;
+            };
             header?: never;
             path: {
                 biz_id: number;
@@ -4982,6 +5119,253 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SOPVersionResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_version_endpoint_biz_versions__version_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SOPVersionDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_draft_endpoint_biz_versions__version_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                version_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SOPVersionResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rename_draft_endpoint_biz_versions__version_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                version_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SOPVersionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5323,6 +5707,278 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SOPStepTemplateResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reorder_steps_endpoint_biz_versions__version_id__steps_order_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                version_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SOPStepOrderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SOPStepTemplateResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_step_template_endpoint_biz_steps__step_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                step_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SOPStepTemplateResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_step_template_endpoint_biz_steps__step_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                step_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SOPStepTemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

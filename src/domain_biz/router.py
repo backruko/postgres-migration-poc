@@ -7,13 +7,14 @@ from src.infrastructure.database import get_db
 from src.domain_biz.services import (
     create_biz, get_biz, get_bizes, update_biz, delete_biz, restore_biz, clone_active_to_draft, 
     create_step_template, approve_and_schedule_version, cancel_future_version,
-    get_current_active_version, list_approved_versions, create_new_sop_version, list_dependencies, list_client_dependencies, create_dependency,
-    delete_dependency,
+    get_current_active_version, list_versions, create_new_sop_version, list_dependencies, list_client_dependencies, create_dependency,
+    delete_dependency, get_version, rename_draft, delete_draft, update_step_template, delete_step_template, reorder_steps,
 )
 from src.domain_biz.schemas import (
     BizMasterCreate, BizMasterUpdate, BizMasterResponse, SOPVersionCreate, 
     SOPVersionResponse, SOPVersionScheduleIn, SOPStepTemplateCreate, SOPStepTemplateResponse,
-    BizDependencyCreate, BizDependencyResponse,
+    BizDependencyCreate, BizDependencyResponse, SOPVersionDetailResponse, SOPVersionUpdate, SOPStepTemplateUpdate,
+    SOPStepOrderIn,
 )
 from src.core.schemas.error import AUTH_ERRORS
 from src.domain_staff.auth import require_roles
@@ -70,17 +71,39 @@ def restore_biz_endpoint(biz_id: int, db: Session = Depends(get_db)):
 @require_roles([RoleCode.ADMIN])
 def clone_active_to_draft_endpoint(biz_id: int, version_in: SOPVersionCreate, db: Session = Depends(get_db)):
     """
-    【複数並行OK】現在有効な現行バージョンをベースに、ユーザーが指定した自由なタグ名で新しい草稿(DRAFT)を生成します。
+    【新しい版】最新の承認済みの版（予定の版があればそれ、なければ現行）のステップを写した草稿を作ります。
+    承認済みの版が無い業務（最初の SOP）は空の草稿になります。草稿は複数並べて作れます。
     """
     return clone_active_to_draft(db=db, biz_id=biz_id, version_in=version_in)
 
 @router.get("/{biz_id}/versions", response_model=list[SOPVersionResponse], responses={**COMMON_ERRORS})
-def list_approved_versions_endpoint(biz_id: int, db: Session = Depends(get_db)):
+def list_versions_endpoint(biz_id: int, include_drafts: bool = False, db: Session = Depends(get_db)):
     """
-    承認済み（草稿以外）のバージョンを新しい順に返します。オーダーに指定（pin）できるバージョンの選択肢です。
-    status は保存された値です（有効かどうかは effective_at / expired_at で判断してください）。
+    業務の版を新しい順に返します。既定は承認済みだけ（オーダーに指定（pin）できる選択肢）。
+    include_drafts=true で草稿も含めます。state は日付から決まる状態（draft / scheduled / current / past）です。
     """
-    return list_approved_versions(db=db, biz_id=biz_id)
+    return list_versions(db=db, biz_id=biz_id, include_drafts=include_drafts)
+
+@router.get("/versions/{version_id}", response_model=SOPVersionDetailResponse, responses={**COMMON_ERRORS})
+def get_version_endpoint(version_id: int, db: Session = Depends(get_db)):
+    """版と、そのステップ（番号順）"""
+    version = get_version(db=db, version_id=version_id)
+    return SOPVersionDetailResponse.model_validate(
+        {**SOPVersionResponse.model_validate(version).model_dump(),
+         "steps": sorted(version.step_templates, key=lambda s: s.step_num)}
+    )
+
+@router.patch("/versions/{version_id}", response_model=SOPVersionResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+def rename_draft_endpoint(version_id: int, version_in: SOPVersionUpdate, db: Session = Depends(get_db)):
+    """草稿のタグを変えます（承認済みの版は 400）。"""
+    return rename_draft(db=db, version_id=version_id, version_in=version_in)
+
+@router.delete("/versions/{version_id}", response_model=SOPVersionResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+def delete_draft_endpoint(version_id: int, db: Session = Depends(get_db)):
+    """草稿をステップごと削除します（承認済みの版は 400）。"""
+    return delete_draft(db=db, version_id=version_id)
 
 @router.get("/{biz_id}/versions/current-active", response_model=SOPVersionResponse, responses={**COMMON_ERRORS})
 def get_current_active_version_endpoint(biz_id: int, db: Session = Depends(get_db)):
@@ -128,10 +151,27 @@ def create_new_sop_version_endpoint(biz_id: int, version_in: SOPVersionCreate, d
 @require_roles([RoleCode.ADMIN])
 def create_step_template_endpoint(version_id: int, step_in: SOPStepTemplateCreate, db: Session = Depends(get_db)):
     """
-    【現行・未来ロック】特定のSOPバージョン内に、作業手順(ステップ)を新規作成します。
-    ※対象のバージョンがすでに現行(ACTIVE)または予約済(FUTURE)の場合はエラーになります。
+    草稿にステップを追加します（step_num を省くと最後）。承認済みの版は変えられません（400）。
     """
     return create_step_template(db=db, version_id=version_id, step_in=step_in)
+
+@router.put("/versions/{version_id}/steps/order", response_model=list[SOPStepTemplateResponse], responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+def reorder_steps_endpoint(version_id: int, order_in: SOPStepOrderIn, db: Session = Depends(get_db)):
+    """草稿のステップを step_ids の順に並べ、番号を 1 から振り直します（すべてのステップを 1 回ずつ）。"""
+    return reorder_steps(db=db, version_id=version_id, order_in=order_in)
+
+@router.patch("/steps/{step_id}", response_model=SOPStepTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+def update_step_template_endpoint(step_id: int, step_in: SOPStepTemplateUpdate, db: Session = Depends(get_db)):
+    """草稿のステップを変えます（送った項目だけ。title / condition / is_blocking は null にできません）。"""
+    return update_step_template(db=db, step_id=step_id, step_in=step_in)
+
+@router.delete("/steps/{step_id}", response_model=SOPStepTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+def delete_step_template_endpoint(step_id: int, db: Session = Depends(get_db)):
+    """草稿のステップを削除します（残りの番号はそのまま）。"""
+    return delete_step_template(db=db, step_id=step_id)
 
 
 # ==========================================
