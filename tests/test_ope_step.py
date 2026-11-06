@@ -57,7 +57,7 @@ def setup(db, monkeypatch):
     client_repo.create(db, obj_in=ClientCreate(code=code, name="ope step test client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="ope step biz", business_seq=1, manager_email=None, description=None))
     version = SOPVersion(
-        biz_master_id=biz.id, version_number=1, version_tag="v1.0.0", status=SOPStatus.ACTIVE,
+        biz_master_id=biz.id, version_number=1, version_tag="v1.0.0", status=SOPStatus.APPROVED,
         effective_at=datetime(2026, 1, 1, tzinfo=JST),
     )
     db.add(version)

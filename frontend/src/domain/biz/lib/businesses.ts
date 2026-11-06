@@ -46,3 +46,18 @@ export function bizUpdateBody(biz: BizMaster, v: BizFormValues): BizMasterUpdate
   if (next.description !== (biz.description ?? null)) body.description = next.description;
   return Object.keys(body).length ? body : null;
 }
+
+/** 業務の選択肢（顧客コードごとにグループ化、業務コード順。予定テンプレート・SOP の画面） */
+export function bizOptions(bizes: readonly BizMaster[]) {
+  const byClient = new Map<string, BizMaster[]>();
+  for (const b of [...bizes].sort((a, b) => a.business_code.localeCompare(b.business_code))) {
+    byClient.set(b.client_code, [...(byClient.get(b.client_code) ?? []), b]);
+  }
+  return [...byClient.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([clientCode, list]) => ({
+      label: `顧客 ${clientCode}`,
+      title: clientCode,
+      options: list.map((b) => ({ value: b.id, label: `${b.business_code}　${b.name}` })),
+    }));
+}

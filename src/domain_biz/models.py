@@ -227,13 +227,20 @@ class BizMaster(Base, SoftDeleteMixin):
 # ==========================================
 class SOPStatus(str, enum.Enum):
     """
-    SOPバージョンのライフサイクルステータス
+    SOPバージョンの保存される状態（M2.1）。草稿か承認済みかだけを持つ。
+    承認済みの「予定 / 現行 / 過去」は effective_at / expired_at と現在日時から決まる（SopState・SOPVersion.state）。
     """
-    DRAFT = "draft"          # 草稿：複数人が並行して自由に共同作業・編集する段階
-    FUTURE = "future"        # 未来実装：権限者が承認し、未来の発効日を待っている予約段階（常に最大1つ）
-    ACTIVE = "active"        # 現行：現在、本番で実際に稼働しているマニュアル（常に1つ）
-    ARCHIVED = "archived"    # 過去版：新しいバージョンが発効し、役目を終えた歴史データ
-    
+    DRAFT = "draft"          # 草稿：編集できる。オーダーには使われない（複数並行可）
+    APPROVED = "approved"    # 承認済み：内容は変えられない。effective_at ≤ 予定日時 < expired_at のオーダーに使われる
+
+
+class SopState(str, enum.Enum):
+    """画面に出すバージョンの状態（保存しない。日付から決まる）"""
+    DRAFT = "draft"          # 草稿
+    SCHEDULED = "scheduled"  # 予定：承認済みで、まだ発効していない（業務ごとに最大1つ）
+    CURRENT = "current"      # 現行：今有効
+    PAST = "past"            # 過去：次の版の発効で終わった
+
 
 # ==========================================
 # 📊 2. SOPVersion モデル
@@ -304,22 +311,30 @@ class SOPVersion(Base):
         # 同一業務内では、外部タグ（例：v1.1.0-draft-teamA）も絶対に重複させない
         # 人間の入力ミスによって全く同じ名前の草稿が作られるのを防ぎます。
         Index("uq_biz_version_tag", "biz_master_id", "version_tag", unique=True),
+
+        # 草稿は日付を持たない。承認済みは発効日時を持ち、終了日時（次の版の発効日時）はその後（M2.1）
+        CheckConstraint(
+            "(status = 'DRAFT') = (effective_at IS NULL)", name="ck_sop_version_effective_iff_approved"
+        ),
+        CheckConstraint(
+            "expired_at IS NULL OR (effective_at IS NOT NULL AND expired_at > effective_at)", name="ck_sop_version_expired_after"
+        ),
     )
 
+    def state_at(self, now: datetime) -> SopState:
+        """その時点での状態（草稿 / 予定 / 現行 / 過去）"""
+        if self.status == SOPStatus.DRAFT or self.effective_at is None:
+            return SopState.DRAFT
+        if self.effective_at > now:
+            return SopState.SCHEDULED
+        if self.expired_at is not None and self.expired_at <= now:
+            return SopState.PAST
+        return SopState.CURRENT
+
     @property
-    def dynamic_status(self) -> str:
-        if self.status == SOPStatus.DRAFT:
-            return "DRAFT"
-            
-        now = datetime.now(timezone.utc)
-        
-        if self.effective_at and self.effective_at > now:
-            return "FUTURE"
-            
-        if self.expired_at and self.expired_at <= now:
-            return "ARCHIVED"
-            
-        return "ACTIVE" 
+    def state(self) -> SopState:
+        """今の状態（API の応答用）"""
+        return self.state_at(datetime.now(timezone.utc))
 
 
 # ==========================================

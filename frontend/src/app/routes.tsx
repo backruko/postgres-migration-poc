@@ -8,6 +8,7 @@ import { HolidaySettingsPage } from "../features/plan-settings/HolidaySettingsPa
 import { PlanSettingsPage } from "../features/plan-settings/PlanSettingsPage";
 import { SheetSettingsPage } from "../features/plan-settings/SheetSettingsPage";
 import { SlaReportPage } from "../features/sla-report/SlaReportPage";
+import { SopSettingsPage } from "../features/sop-settings/SopSettingsPage";
 import { StaffSettingsPage } from "../features/staff-settings/StaffSettingsPage";
 import { AppLayout } from "./AppLayout";
 
@@ -18,6 +19,7 @@ import { AppLayout } from "./AppLayout";
  * - /reports/sla          集計: SLA（顧客 × 締切の月の完了・遅れ・期限内率。CSV 出力）
  * - /settings/clients     事前設定: 顧客の管理（一覧・登録・顧客名の変更・無効 / 有効）
  * - /settings/businesses  事前設定: 顧客の業務の管理（一覧・登録・編集・削除・元に戻す。?client=）
+ * - /settings/sop         事前設定: 業務の SOP（版の一覧・ステップ・新しい版・草稿の削除。?biz=&version=）
  * - /settings/templates   事前設定: 予定テンプレートの管理（一覧・作成・編集・削除）
  * - /settings/sheets      事前設定: 年間計画シートの参照と、ルールで日付を作るマーカー・日付の管理
  * - /settings/holidays    事前設定: 営業日カレンダーの休日の管理
@@ -33,6 +35,7 @@ export function AppRoutes() {
         <Route path="reports/sla" element={<SlaReportPage />} />
         <Route path="settings/clients" element={<ClientSettingsPage />} />
         <Route path="settings/businesses" element={<BusinessSettingsPage />} />
+        <Route path="settings/sop" element={<SopSettingsPage />} />
         <Route path="settings/templates" element={<PlanSettingsPage />} />
         <Route path="settings/sheets" element={<SheetSettingsPage />} />
         <Route path="settings/holidays" element={<HolidaySettingsPage />} />

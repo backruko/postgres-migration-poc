@@ -70,7 +70,7 @@ def started(db, staff, monkeypatch):
     code = new_client_code("M")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_repo.create(db, obj_in=ClientCreate(code=code, name="step action client"))
     biz = biz_master_repo.create(db, obj_in=BizMasterCreate(client_code=code, name="step biz", business_seq=1, manager_email=None, description=None))
-    version = SOPVersion(biz_master_id=biz.id, version_number=1, version_tag="v1.0.0", status=SOPStatus.ACTIVE,
+    version = SOPVersion(biz_master_id=biz.id, version_number=1, version_tag="v1.0.0", status=SOPStatus.APPROVED,
                          effective_at=datetime(2026, 1, 1, tzinfo=JST))
     db.add(version)
     db.flush()

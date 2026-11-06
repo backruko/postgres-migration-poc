@@ -156,6 +156,14 @@ class OpeOrderRepository:
         )
         return list(db.scalars(stmt).all())
 
+    def count_using_sop_version(self, db: Session, *, sop_version_id: int) -> int:
+        """その SOP バージョンを指定（pin）している・リリースで固定したオーダーの数（取消は除く。承認の取消の確認用）"""
+        stmt = select(func.count(OpeOrder.id)).where(
+            (OpeOrder.pinned_sop_version_id == sop_version_id) | (OpeOrder.frozen_sop_version_id == sop_version_id),
+            OpeOrder.status != OrderStatus.CANCELED,
+        )
+        return int(db.scalar(stmt) or 0)
+
     def count_unfinished_of_biz(self, db: Session, *, biz_id: int) -> int:
         """業務の、完了・取消以外のオーダーの数（業務の削除の確認用。過去の日付のものも数える）"""
         stmt = select(func.count(OpeOrder.id)).where(

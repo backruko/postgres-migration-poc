@@ -1,10 +1,10 @@
 import re
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.domain_biz.models import CompletionMode, DependencyKind, DependencyMatchRule, ExecutionType, ReleaseMode, SOPStatus
+from src.domain_biz.models import CompletionMode, DependencyKind, DependencyMatchRule, ExecutionType, ReleaseMode, SOPStatus, SopState
 
 RELEASE_FIELDS = ("release_mode", "release_time", "release_days_before")
 # 明示的な null を受け付けない項目（signal_type は null で解除できる）
@@ -89,25 +89,24 @@ class SOPVersionCreate(BaseModel):
             )
         return v
 
-class SOPVersionUpdate(BaseModel):
-    """リポジトリの型定義を満足させるためだけの空スキーマ（実際には使わない）"""
-    pass
+class SOPVersionUpdate(SOPVersionCreate):
+    """草稿のタグの変更（M2.2。承認済みの版は変えられない）。形式の確認は SOPVersionCreate と同じ"""
 
 class SOPVersionScheduleIn(BaseModel):
-    """【権限者承認用】未来実装(FUTURE)へ昇格させる際の発効日指定スキーマ"""
-    effective_at: datetime = Field(..., description="予約発効日時(UTCまたはタイムゾーン付き)")
+    """草稿の承認（M2.1）: この日の 0:00（日本時間）から有効にする。明日以降"""
+    effective_date: date = Field(..., description="first day (JST) the version applies to; tomorrow or later")
 
 class SOPVersionResponse(BaseModel):
     id: int
     biz_master_id: int
     version_number: int
     version_tag: str
-    status: SOPStatus
+    status: SOPStatus = Field(description="stored: draft or approved")
+    state: SopState = Field(description="draft / scheduled (approved, not yet in effect) / current / past, from the dates")
     effective_at: datetime | None
-    expired_at: datetime | None
+    expired_at: datetime | None = Field(description="end (exclusive): the next version's effective_at")
 
-    class Config:
-        from_attributes = True  # SQLAlchemyモデルから自動変換できるようにする設定 (Pydantic v2)
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==========================================
@@ -143,8 +142,10 @@ StepCondition = Annotated[Union[AlwaysCondition, MonthInCondition, FirstInWeekCo
 
 
 class SOPStepTemplateCreate(BaseModel):
-    step_num: int = Field(..., gt=0, description="ステップの実行順序（1以上の整数）")
-    title: str = Field(..., max_length=100, description="ステップタイトル")
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    step_num: int | None = Field(None, gt=0, description="ステップの実行順序（1以上の整数）。省略すると最後（最大 + 1）")
+    title: str = Field(..., min_length=1, max_length=100, description="ステップタイトル")
     content: str | None = Field(None, description="具体的な手順・マニュアル内容")
     condition: StepCondition = Field(default_factory=AlwaysCondition, description="when the step is included in an order")
     is_blocking: bool = Field(False, description="the next step opens only after this one is approved (otherwise on submit)")
@@ -162,8 +163,30 @@ class SOPStepTemplateResponse(BaseModel):
         from_attributes = True
 
 class SOPStepTemplateUpdate(BaseModel):
-    """リポジトリの型定義(CRUDBase)を通過させるためだけの空スキーマ（実際には使いません）"""
-    pass
+    """草稿のステップの変更（送った項目だけ変わる。M2.2）。番号は並べ替え（SOPStepOrderIn）で変える"""
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    title: str | None = Field(None, min_length=1, max_length=100)
+    content: str | None = Field(None, description="null で消す")
+    condition: StepCondition | None = None
+    is_blocking: bool | None = None
+
+    @model_validator(mode="after")
+    def check_not_null(self):
+        nulls = sorted(f for f in ("title", "condition", "is_blocking") if f in self.model_fields_set and getattr(self, f) is None)
+        if nulls:
+            raise ValueError(f"{nulls} must not be null")
+        return self
+
+
+class SOPStepOrderIn(BaseModel):
+    """草稿のステップの並び（すべてのステップの id を新しい順に。番号は 1 から振り直す）"""
+    step_ids: list[int] = Field(..., min_length=1)
+
+
+class SOPVersionDetailResponse(SOPVersionResponse):
+    """バージョンとそのステップ（番号順）"""
+    steps: list[SOPStepTemplateResponse]
 
 
 # ==========================================

@@ -237,3 +237,30 @@ class SignalResponse(BaseModel):
     handled_note: str | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# SOP バージョンの影響（M2.3）: その日から版を切り替えると、どのオーダーが使うか
+# ==========================================
+class SopImpactOrder(BaseModel):
+    id: int
+    template_id: int
+    template_name: str
+    scheduled_start: datetime
+    status: OrderStatus
+    pinned_sop_version_tag: str | None = Field(description="pinned: the version it keeps")
+    frozen_sop_version_tag: str | None = Field(description="released: the version frozen at release (null = released without one)")
+
+
+class SopImpactGroup(BaseModel):
+    total: int
+    orders: list[SopImpactOrder] = Field(description="earliest first, at most `limit`")
+
+
+class SopImpactResponse(BaseModel):
+    biz_id: int
+    effective_date: date
+    effective_at: datetime = Field(description="00:00 JST of effective_date")
+    will_switch: SopImpactGroup = Field(description="not released, not pinned, scheduled from effective_at: they will run the new version")
+    pinned: SopImpactGroup = Field(description="not released but pinned: they keep the pinned version")
+    released: SopImpactGroup = Field(description="released, not finished / canceled: they keep the version frozen at release")

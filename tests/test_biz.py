@@ -104,7 +104,7 @@ def test_step_template_condition_and_is_blocking(db, biz):
             SOPStepTemplateCreate.model_validate({"step_num": 9, "title": "x", "condition": bad})
 
     # 現行版を複製した草稿にも、条件と is_blocking が引き継がれる
-    draft.status = SOPStatus.ACTIVE
+    draft.status = SOPStatus.APPROVED
     draft.effective_at = datetime.now(tz.utc) - timedelta(days=1)
     db.commit()
     clone = services.clone_active_to_draft(db, biz.id, SOPVersionCreate(version_tag="v1.1.0"))

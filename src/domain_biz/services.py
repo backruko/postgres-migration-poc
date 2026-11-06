@@ -1,19 +1,22 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_, or_
+from sqlalchemy import func, select, and_, or_
 from sqlalchemy.exc import IntegrityError
 
 from src.infrastructure.repositories import biz_dependency_repo, biz_master_repo, client_repo, sop_version_repo, sop_step_repo
 from src.domain_biz.models import (
-    BizDependency, BizMaster, CompletionMode, ExecutionType, SOPVersion, SOPStepTemplate, SOPStatus,
+    BizDependency, BizMaster, CompletionMode, ExecutionType, SOPVersion, SOPStepTemplate, SOPStatus, SopState,
 )
 from src.domain_biz.schemas import (
     BizDependencyCreate, BizDependencyResponse, BizMasterCreate, BizMasterUpdate, BizRef, SOPVersionCreate,
-    SOPStepTemplateCreate,
+    SOPStepOrderIn, SOPStepTemplateCreate, SOPStepTemplateUpdate, SOPVersionUpdate,
 )
 from src.core.exceptions import BadRequestError, NotFoundError, DuplicatedRecordError
-from src.domain_biz import delete_checks, dependency_events
+from src.domain_biz import delete_checks, dependency_events, version_checks
 from src.domain_client.services import require_active_client
+
+LOCAL_TIMEZONE = ZoneInfo("Asia/Tokyo")  # SOP の発効日・業務の「今日」は日本時間
 
 # ==========================================
 # BizMaster Service
@@ -135,34 +138,6 @@ def restore_biz(db: Session, biz_id: int) -> BizMaster:
 # ==========================================
 # SOPVersion Service
 # ==========================================
-def create_sop_version(db: Session, biz_id: int, version_in: SOPVersionCreate) -> SOPVersion:
-    """特定業務(BizMaster)に対して、新しいSOPバージョンを新規作成します。"""
-    # 1. 親(BizMaster)が存在し、論理削除されていないかチェック
-    db_biz = biz_master_repo.get(db, id=biz_id)
-    if not db_biz:
-        raise NotFoundError(f"BizMaster(id={biz_id}) not found. Cannot create version.")
-        
-    try:
-        # version_in に biz_master_id を紐付けてレポジトリで作成
-        return sop_version_repo.create_with_biz(db, obj_in=version_in, biz_master_id=biz_id)
-    except IntegrityError:
-        # version_number や version_tag の一意制約違反(uq_biz_version_number 等)をキャッチ
-        raise DuplicatedRecordError(f"Version number or tag already exists for this BizMaster.")
-
-def get_latest_active_version(db: Session, biz_id: int) -> SOPVersion:
-    """指定された業務の最新の 'active' なSOPバージョンを1件取得します(コメントアウトの処理）。"""
-    # グローバルスコープにより、親が論理削除されていれば自動的に None になります
-    stmt = (
-        select(SOPVersion)
-        .where(SOPVersion.biz_master_id == biz_id, SOPVersion.status == "active")
-        .order_by(SOPVersion.version_number.desc())
-        .limit(1)
-    )
-    latest_version = db.scalars(stmt).first()
-    if not latest_version:
-        raise NotFoundError(f"Active SOPVersion for BizMaster(id={biz_id}) not found.")
-    return latest_version
-
 def create_new_sop_version(db: Session, biz_id: int, version_in: SOPVersionCreate) -> SOPVersion:
     """
     【新規立ち上げ用】業務(BizMaster)に対して、完全に新しい最初の草稿(DRAFT)を作成します。
@@ -193,7 +168,8 @@ def create_new_sop_version(db: Session, biz_id: int, version_in: SOPVersionCreat
         db.refresh(new_draft)
         return new_draft
     except IntegrityError:
-        raise DuplicatedRecordError(f"指定されたバージョンタグ '{version_in.version_tag}' は既に存在します。")
+        db.rollback()
+        raise DuplicatedRecordError(f"Version tag '{version_in.version_tag}' already exists for this business.")
 
 
 # ==========================================
@@ -245,141 +221,252 @@ def get_current_active_version(db: Session, biz_id: int) -> SOPVersion:
 
 
 # ==========================================
-# 1. 【複数並行OK】現行マニュアルをコピーして「新しい草稿(DRAFT)」を作る
+# 1. 新しい版: 最新の承認済みの版（予定があればそれ、なければ現行）を写した草稿。承認済みが無ければ空（M2.2）
 # ==========================================
+def _next_version_number(db: Session, biz_id: int) -> int:
+    max_num = db.scalar(select(func.max(SOPVersion.version_number)).where(SOPVersion.biz_master_id == biz_id))
+    return (max_num or 0) + 1
+
+
+def _newest_approved(db: Session, biz_id: int) -> SOPVersion | None:
+    """発効日時の最も新しい承認済みの版（予定の版があればそれ。過去の版になっていても、それより新しい版が無ければそれ）"""
+    return db.scalars(
+        select(SOPVersion)
+        .where(SOPVersion.biz_master_id == biz_id, SOPVersion.status == SOPStatus.APPROVED)
+        .order_by(SOPVersion.effective_at.desc(), SOPVersion.version_number.desc())
+        .limit(1)
+    ).first()
+
+
 def clone_active_to_draft(db: Session, biz_id: int, version_in: SOPVersionCreate) -> SOPVersion:
     """
-    現行をベースに、ユーザーが指定した自由なタグ名(version_in.version_tag)で草稿を生成します。
+    新しい草稿を作ります（業務管理者）。最新の承認済みの版のステップ（条件・承認で次へも）を写す。
+    承認済みの版がまだ無い業務（最初の SOP）は、空の草稿になる。草稿は複数並べて作れる。
     """
-    current_active = get_current_active_version(db, biz_id=biz_id)
-    
-    # 1. 【システム用】DBの一意制約のため、裏側の整数連番は自動で「最大値 + 1」
-    stmt_max = select(SOPVersion.version_number).where(SOPVersion.biz_master_id == biz_id).order_by(SOPVersion.version_number.desc()).limit(1)
-    max_num = db.scalars(stmt_max).first() or current_active.version_number
-    new_version_number = max_num + 1
-
-    # 2. 【人間用】Pydanticでバリデーション済みの、人間が入力したタグをそのまま採用！
-    new_draft = SOPVersion(
-        biz_master_id=biz_id,
-        version_number=new_version_number,  # 機械用（自動）
-        version_tag=version_in.version_tag,   # 人間用（自由：v1.1.0-teamA など）
-        status=SOPStatus.DRAFT,
-        effective_at=None,
-        expired_at=None
+    get_biz(db, biz_id)
+    source = _newest_approved(db, biz_id)
+    draft = SOPVersion(
+        biz_master_id=biz_id, version_number=_next_version_number(db, biz_id), version_tag=version_in.version_tag,
+        status=SOPStatus.DRAFT, effective_at=None, expired_at=None,
     )
-    db.add(new_draft)
-    db.flush()
-
-    # 現行のステップ手順を丸ごとコピー
-    for step in current_active.step_templates:
-        copied_step = SOPStepTemplate(
-            sop_version_id=new_draft.id,
-            step_num=step.step_num,
-            title=step.title,
-            content=step.content,
-            condition=step.condition,
-            is_blocking=step.is_blocking
-        )
-        db.add(copied_step)
-        
-    db.commit()
-    db.refresh(new_draft)
-    return new_draft
-
-
-
-# ==========================================
-# 2. 【現行・未来ロック】ステップの手順を編集する
-# ==========================================
-def create_step_template(db: Session, version_id: int, step_in: SOPStepTemplateCreate) -> SOPStepTemplate:
-    """特定のSOPバージョン内に、作業手順(ステップ)を新規作成します。"""
-    db_version = sop_version_repo.get(db, id=version_id)
-    if not db_version:
-        raise NotFoundError(f"SOPVersion(id={version_id}) not found.")
-        
-    #【仕様ロック】ステータスが DRAFT 以外（ACTIVE や FUTURE）なら手順の追加・変更を絶対禁止
-    if db_version.status != SOPStatus.DRAFT:
-        raise BadRequestError("稼働中(ACTIVE)または予約確定済(FUTURE)のバージョンを書き換えることはできません。草稿(DRAFT)で編集してください。")
-        
+    db.add(draft)
     try:
-        return sop_step_repo.create_with_version(db, obj_in=step_in, sop_version_id=version_id)
+        db.flush()
     except IntegrityError:
-        raise DuplicatedRecordError(f"Step number {step_in.step_num} already exists in this version.")
-
-
-# ==========================================
-# 👑 3. 【予約枠は常に1件】権限者が1つの草稿を選び「未来実装(FUTURE)」に昇格
-# ==========================================
-def approve_and_schedule_version(db: Session, biz_id: int, draft_version_id: int, effective_at: datetime) -> SOPVersion:
-    """【権限者専用】選ばれたDRAFTを承認し、未来の発効日に向けた1件限りの予約枠(FUTURE)へ昇格させます。"""
-    now = datetime.now(timezone.utc)
-    if effective_at <= now:
-        raise BadRequestError("発効日（有効開始日）は現在時刻より未来である必要があります。")
-
-    #【仕様ロック】すでに『FUTURE（未来実装）』の予約が他に存在しないかチェック
-    stmt_future = select(SOPVersion).where(SOPVersion.biz_master_id == biz_id, SOPVersion.status == SOPStatus.FUTURE)
-    existing_future = db.scalars(stmt_future).first()
-    if existing_future:
-        raise BadRequestError(f"既に別の予約（{existing_future.version_tag}）が存在します。同時に複数の予約は登録できません。")
-
-    # 昇格対象のDRAFTを取得
-    draft_version = sop_version_repo.get(db, id=draft_version_id)
-    if not draft_version or draft_version.status != SOPStatus.DRAFT:
-        raise NotFoundError("承認対象の有効な草稿(DRAFT)が見つかりません。")
-
-    # 現在稼働している無期限のエース（現行版）を探す
-    stmt_active = select(SOPVersion).where(SOPVersion.biz_master_id == biz_id, SOPVersion.status == SOPStatus.ACTIVE, SOPVersion.expired_at == None)
-    current_active = db.scalars(stmt_active).first()
-
-    # 【連動処理】現行版の「失効日」を、予約の「発効日」の1秒前に自動連結して蓋をする
-    if current_active:
-        current_active.expired_at = effective_at - timedelta(seconds=1)
-        db.add(current_active)
-
-    # DRAFTを正式に予約（FUTURE）へ昇格
-    draft_version.status = SOPStatus.FUTURE
-    draft_version.effective_at = effective_at
-    draft_version.expired_at = None  # 次の予約が入るまで無期限扱いにする
-
-    db.add(draft_version)
+        db.rollback()
+        raise DuplicatedRecordError(f"Version tag '{version_in.version_tag}' already exists for this business.")
+    if source is not None:
+        for step in sorted(source.step_templates, key=lambda s: s.step_num):
+            db.add(SOPStepTemplate(
+                sop_version_id=draft.id, step_num=step.step_num, title=step.title, content=step.content,
+                condition=step.condition, is_blocking=step.is_blocking,
+            ))
     db.commit()
-    db.refresh(draft_version)
-    return draft_version
+    db.refresh(draft)
+    return draft
 
 
 # ==========================================
-# 4. 【自動期間復元】予約（FUTURE）をキャンセルし、現行版の期限を無限に戻す
+# 2. 草稿の編集（タグ・ステップの追加 / 変更 / 削除 / 並べ替え・草稿の削除）。承認済みの版は変えられない（M2.2）
+# ==========================================
+def list_versions(db: Session, biz_id: int, include_drafts: bool = False) -> list[SOPVersion]:
+    """業務の版、新しい順。include_drafts=False なら承認済みだけ（オーダーに指定できる選択肢）"""
+    get_biz(db, biz_id)  # 存在しない・削除済みの業務は 404
+    if not include_drafts:
+        return sop_version_repo.get_approved(db, biz_master_id=biz_id)
+    return list(db.scalars(
+        select(SOPVersion).where(SOPVersion.biz_master_id == biz_id).order_by(SOPVersion.version_number.desc())
+    ).all())
+
+
+def get_version(db: Session, version_id: int) -> SOPVersion:
+    version = sop_version_repo.get(db, id=version_id)
+    if not version:
+        raise NotFoundError(f"SOPVersion(id={version_id}) not found.")
+    return version
+
+
+def _get_draft(db: Session, version_id: int, *, lock: bool = False) -> SOPVersion:
+    stmt = select(SOPVersion).where(SOPVersion.id == version_id)
+    version = db.scalars(stmt.with_for_update() if lock else stmt).first()
+    if not version:
+        raise NotFoundError(f"SOPVersion(id={version_id}) not found.")
+    if version.status != SOPStatus.DRAFT:
+        raise BadRequestError(f"{version.version_tag} is approved and can no longer be changed; edit a new draft instead.")
+    return version
+
+
+def _steps_of(db: Session, version_id: int) -> list[SOPStepTemplate]:
+    return list(db.scalars(
+        select(SOPStepTemplate).where(SOPStepTemplate.sop_version_id == version_id).order_by(SOPStepTemplate.step_num)
+    ).all())
+
+
+def rename_draft(db: Session, version_id: int, version_in: SOPVersionUpdate) -> SOPVersion:
+    draft = _get_draft(db, version_id)
+    draft.version_tag = version_in.version_tag
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise DuplicatedRecordError(f"Version tag '{version_in.version_tag}' already exists for this business.")
+    db.refresh(draft)
+    return draft
+
+
+def delete_draft(db: Session, version_id: int) -> SOPVersion:
+    """草稿を削除します（ステップごと）。草稿はオーダーに使われない"""
+    draft = _get_draft(db, version_id, lock=True)
+    db.delete(draft)
+    db.commit()
+    return draft
+
+
+def create_step_template(db: Session, version_id: int, step_in: SOPStepTemplateCreate) -> SOPStepTemplate:
+    """草稿にステップを追加します。番号を省くと最後（最大 + 1）"""
+    draft = _get_draft(db, version_id, lock=True)  # 同時の追加で同じ番号にならないよう版をロック
+    steps = _steps_of(db, draft.id)
+    step_num = step_in.step_num if step_in.step_num is not None else max((s.step_num for s in steps), default=0) + 1
+    if any(s.step_num == step_num for s in steps):
+        raise DuplicatedRecordError(f"Step number {step_num} already exists in {draft.version_tag}.")
+    step = SOPStepTemplate(
+        sop_version_id=draft.id, step_num=step_num, title=step_in.title, content=step_in.content,
+        condition=step_in.condition.model_dump(), is_blocking=step_in.is_blocking,
+    )
+    db.add(step)
+    db.commit()
+    db.refresh(step)
+    return step
+
+
+def _get_draft_step(db: Session, step_id: int) -> SOPStepTemplate:
+    step = db.get(SOPStepTemplate, step_id)
+    if step is None:
+        raise NotFoundError(f"SOPStepTemplate(id={step_id}) not found.")
+    _get_draft(db, step.sop_version_id, lock=True)
+    return step
+
+
+def update_step_template(db: Session, step_id: int, step_in: SOPStepTemplateUpdate) -> SOPStepTemplate:
+    """草稿のステップの変更（送った項目だけ）"""
+    step = _get_draft_step(db, step_id)
+    data = step_in.model_dump(exclude_unset=True)
+    for field, value in data.items():
+        setattr(step, field, value)
+    db.commit()
+    db.refresh(step)
+    return step
+
+
+def delete_step_template(db: Session, step_id: int) -> SOPStepTemplate:
+    """草稿のステップの削除（残りの番号はそのまま。詰めるときは並べ替え）"""
+    step = _get_draft_step(db, step_id)
+    db.delete(step)
+    db.commit()
+    return step
+
+
+def reorder_steps(db: Session, version_id: int, order_in: SOPStepOrderIn) -> list[SOPStepTemplate]:
+    """草稿のステップを、渡された id の順に 1 から振り直します（すべてのステップの id がちょうど 1 回ずつ必要）"""
+    draft = _get_draft(db, version_id, lock=True)
+    steps = {s.id: s for s in _steps_of(db, draft.id)}
+    if sorted(order_in.step_ids) != sorted(steps):
+        raise BadRequestError(f"step_ids must list every step of {draft.version_tag} exactly once ({sorted(steps)}).")
+    # 一意制約（版 × 番号）にぶつからないよう、いったん大きな番号へ逃がしてから振り直す
+    offset = max(s.step_num for s in steps.values()) + len(steps)
+    for n, step_id in enumerate(order_in.step_ids, start=1):
+        steps[step_id].step_num = offset + n
+    db.flush()
+    for n, step_id in enumerate(order_in.step_ids, start=1):
+        steps[step_id].step_num = n
+    db.commit()
+    return _steps_of(db, draft.id)
+
+
+# ==========================================
+# 3. 承認: 草稿を「予定」にする（発効は指定日の 0:00 日本時間。M2.1）
+# ==========================================
+def _versions_of(db: Session, biz_id: int) -> list[SOPVersion]:
+    return list(db.scalars(
+        select(SOPVersion).where(SOPVersion.biz_master_id == biz_id).order_by(SOPVersion.version_number)
+    ).all())
+
+
+def approve_and_schedule_version(db: Session, biz_id: int, draft_version_id: int, effective_date: date) -> SOPVersion:
+    """
+    草稿を承認し、effective_date の 0:00（日本時間）から有効にします（業務管理者）。
+    - effective_date は明日以降。業務に「予定」（承認済みで未発効）の版が既にあれば断る（予定は 1 つまで）
+    - ステップの無い草稿は承認しない
+    - 今有効な版（終了日時なし）は、新しい版の発効日時で終わる
+    その日以降に予定され、まだリリースされていない・指定（pin）されていないオーダーが新しい版を使う。
+    """
+    biz = biz_master_repo.get(db, id=biz_id)
+    if not biz:
+        raise NotFoundError(f"BizMaster(id={biz_id}) not found.")
+    # 同じ業務の承認を同時に走らせない（予定は 1 つまで・版のつなぎ目を守る）
+    db.execute(select(BizMaster.id).where(BizMaster.id == biz_id).with_for_update())
+
+    now = datetime.now(timezone.utc)
+    today = now.astimezone(LOCAL_TIMEZONE).date()
+    if effective_date <= today:
+        raise BadRequestError(f"The effective date must be tomorrow or later (today is {today.isoformat()} JST).")
+    effective_at = datetime.combine(effective_date, time(0, 0), tzinfo=LOCAL_TIMEZONE)
+
+    versions = _versions_of(db, biz_id)
+    draft = next((v for v in versions if v.id == draft_version_id), None)
+    if draft is None or draft.status != SOPStatus.DRAFT:
+        raise NotFoundError(f"Draft SOPVersion(id={draft_version_id}) of BizMaster(id={biz_id}) not found.")
+    if not draft.step_templates:
+        raise BadRequestError(f"{draft.version_tag} has no steps; add at least one step before approving.")
+    scheduled = next((v for v in versions if v.state_at(now) == SopState.SCHEDULED), None)
+    if scheduled:
+        raise BadRequestError(
+            f"{scheduled.version_tag} is already scheduled from {scheduled.effective_at:%Y-%m-%d}; cancel it first or wait until it takes effect."
+        )
+
+    # 今有効な版（終了日時のない承認済み）を、新しい版の発効日時で終える
+    for v in versions:
+        if v.status == SOPStatus.APPROVED and v.expired_at is None:
+            v.expired_at = effective_at
+
+    draft.status = SOPStatus.APPROVED
+    draft.effective_at = effective_at
+    draft.expired_at = None
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+# ==========================================
+# 4. 承認の取消: 「予定」の版を草稿に戻し、今有効な版の終了日時を外す（M2.1）
 # ==========================================
 def cancel_future_version(db: Session, biz_id: int, future_version_id: int) -> SOPVersion:
-    """【権限者専用】予約(FUTURE)を取り消し、現行版を再び『無期限』に自動復元した上で、データをDRAFTへと安全に引き戻します。"""
-    future_version = sop_version_repo.get(db, id=future_version_id)
-    if not future_version or future_version.status != SOPStatus.FUTURE:
-        raise NotFoundError("取り消し対象の未来実装(FUTURE)バージョンが見つかりません。")
-    if future_version.effective_at is None:
-        raise BadRequestError("未来実装(FUTURE)バージョンに発効日が設定されていません。")
+    """
+    まだ発効していない（予定の）版の承認を取り消し、草稿に戻します（業務管理者）。
+    発効した版・オーダーが指定（pin）している版・リリースで固定した版は戻せない（理由は登録された確認が返す）。
+    """
+    db.execute(select(BizMaster.id).where(BizMaster.id == biz_id).with_for_update())
+    now = datetime.now(timezone.utc)
+    versions = _versions_of(db, biz_id)
+    version = next((v for v in versions if v.id == future_version_id), None)
+    if version is None or version.status != SOPStatus.APPROVED:
+        raise NotFoundError(f"Approved SOPVersion(id={future_version_id}) of BizMaster(id={biz_id}) not found.")
+    if version.state_at(now) != SopState.SCHEDULED:
+        raise BadRequestError(f"{version.version_tag} has already taken effect; its approval can no longer be canceled.")
+    reasons = version_checks.reasons_not_to_cancel(db, version)
+    if reasons:
+        raise BadRequestError(f"{version.version_tag} cannot go back to a draft: " + "; ".join(reasons) + ".")
 
-    # 【連動処理】この予約のせいで期限を区切られていた現行版を逆探知する
-    stmt_active = select(SOPVersion).where(
-        SOPVersion.biz_master_id == biz_id,
-        SOPVersion.status == SOPStatus.ACTIVE,
-        SOPVersion.expired_at == future_version.effective_at - timedelta(seconds=1)
-    )
-    current_active = db.scalars(stmt_active).first()
+    # この版の発効日時で終わっていた版を、再び終了日時なしにする
+    for v in versions:
+        if v.id != version.id and v.status == SOPStatus.APPROVED and v.expired_at == version.effective_at:
+            v.expired_at = None
 
-    if current_active:
-        # 予約が消滅するため、現行版の終了期限の蓋を取り払い、再び「無期限（None）」に復元
-        current_active.expired_at = None
-        db.add(current_active)
-
-    # 予約データを削除せず、安全に再編集可能な「DRAFT」へ引き戻す（これで再利用や別案としての検討が可能）
-    future_version.status = SOPStatus.DRAFT
-    future_version.effective_at = None
-    
-    db.add(future_version)
+    version.status = SOPStatus.DRAFT
+    version.effective_at = None
+    version.expired_at = None
     db.commit()
-    db.refresh(future_version)
-    return future_version
-
+    db.refresh(version)
+    return version
 
 # ==========================================
 # 業務間の依存関係（Phase 6）
