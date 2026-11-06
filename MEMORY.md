@@ -25,8 +25,8 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   | SLA report | `feature/sla-report` → `706f166` | `GET /ops/sla` + nav 「SLA」 page `/reports/sla` (client × deadline month: 完了 / 遅れ / 期限内率 / 平均遅れ / 未完了の遅れ, CSV export) |
 - **Next: the MVP roadmap (decided by the user 2026-11-05 evening).** Goal: a small MVP online on the **internal
   network, own team only**. Order: **M1 → M2 → login → deployment**; the pool below waits until after go-live.
-  - **M1 client + business screens** (branch `feature/master-screens`): **M1.1 backend done (`2729ea7`)**, M1.2a 設定
-    menu built (uncommitted); details and the M1.2 step plan below in "M1"; M1.2 frontend — pages 「顧客」 `/settings/clients` and 「業務」
+  - **M1 client + business screens** (branch `feature/master-screens`): **M1.1 backend done (`2729ea7`)**, M1.2a 設定 menu done (`5a619b6`), M1.2b 顧客 page
+    built (uncommitted); details and the M1.2 step plan below in "M1"; M1.2 frontend — pages 「顧客」 `/settings/clients` and 「業務」
     `/settings/businesses?client=` (list, 登録, edit, 無効 / 有効 or 削除 / 元に戻す, link to 予定テンプレート), admin-only
     buttons. User's decisions: clients deactivate only (no hard delete); business code automatic and fixed;
     (2026-11-06) business delete refused while in use; inactive client hidden + no new data; `GET /biz/` query params.
@@ -760,8 +760,8 @@ preview** in the 登録 modal (no number field; API still accepts one for a load
 (release / client-event settings stay in that page's 業務の設定 panel).
 | # | Step | Status |
 |---|---|---|
-| M1.2a | `AppLayout`: カレンダー / 日次ダッシュボード / SLA flat; antd `Dropdown` 「設定」 (hover + click) with the 5 settings pages (`SETTINGS_PAGES`), button shows 「設定：<page>」 + active style when one is open (`currentSettingsPage`); links keep each page's last query string; CSS `.nav-menu*`. 顧客 / 業務 entries are added in M1.2b / c | **built, uncommitted** |
-| M1.2b | 顧客 page `/settings/clients` (clientApi writes, list with `include_inactive`, 登録 / 名前を変更 / 無効 / 有効, admin-only) | todo |
+| M1.2a | `AppLayout`: カレンダー / 日次ダッシュボード / SLA flat; antd `Dropdown` 「設定」 (hover + click) with the 5 settings pages (`SETTINGS_PAGES`), button shows 「設定：<page>」 + active style when one is open (`currentSettingsPage`); links keep each page's last query string; CSS `.nav-menu*`. 顧客 / 業務 entries are added in M1.2b / c | **done** (`5a619b6`) |
+| M1.2b | 顧客 page `/settings/clients` (`features/client-settings`: `ClientSettingsPage` + `ClientFormModal`; `clientApi` create / update / deactivate / activate, `list(signal, includeInactive)`; `useAllClients`; `domain/client/lib/clients.ts` `canManageClients` (active admin), `normalizeClientCode`, `clientCodeError` (4 alnum, not used — inactive included), `deactivateBlockedReason`). Table コード / 顧客名 / 状態 / 業務 (count of live businesses; becomes a link in M1.2c) / 登録日 / 操作 (admin: 名前を変更, 無効にする — disabled with the reason while businesses remain — / 有効にする, confirm; backend message shown on refusal); inactive rows greyed (`is-past-row`); first entry of the 設定 menu. Harness 15/15 on plan_check (client `YA64` id 3 left active, its business deleted) | **built, uncommitted** |
 | M1.2c | 業務 page `/settings/businesses?client=` (list with `include_deleted`, 登録 with code preview, edit basics, 削除 / 元に戻す, link to templates) | todo |
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
