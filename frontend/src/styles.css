@@ -74,6 +74,11 @@ button, input, select { font: inherit; color: inherit; }
 .nav-menu-caret { font-size: 10px; }
 /* 業務の設定画面: 業務名の下の説明 */
 .biz-description { font-size: 12px; white-space: pre-wrap; }
+/* SOP の画面: 左に版の一覧、右に選んだ版のステップ */
+.sop-layout { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 16px 24px; align-items: start; }
+@media (max-width: 900px) { .sop-layout { grid-template-columns: 1fr; } }
+.sop-version-selected > td { background: var(--select) !important; }
+.sop-step-content { font-size: 12px; white-space: pre-wrap; margin-top: 2px; }
 /* 操作する職員（ログインが入るまでの開発用） */
 .nav-spacer { flex: 1; }
 .acting-staff {

@@ -1,4 +1,4 @@
-import { EditOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { EditOutlined, OrderedListOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
@@ -97,12 +97,17 @@ export function BusinessSettingsPage() {
     {
       title: "操作",
       key: "actions",
-      width: canManage ? 360 : 220,
+      width: canManage ? 420 : 280,
       render: (_, b) => (
         <Space size={0} wrap>
           {!b.is_deleted && (
             <Button type="link" size="small" icon={<SettingOutlined />} onClick={() => navigate({ pathname: "/settings/templates", search: `?biz=${b.id}` })}>
               予定テンプレート・業務の設定
+            </Button>
+          )}
+          {!b.is_deleted && b.execution_type === "sop" && (
+            <Button type="link" size="small" icon={<OrderedListOutlined />} onClick={() => navigate({ pathname: "/settings/sop", search: `?biz=${b.id}` })}>
+              SOP
             </Button>
           )}
           {canManage && !b.is_deleted && (

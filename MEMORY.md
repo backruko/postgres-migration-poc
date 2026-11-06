@@ -29,7 +29,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
     `2729ea7` M1.1 backend · `5a619b6` M1.2a 設定 menu · `2cfb5fa` M1.2b 顧客 page · `13a7238` M1.2c 業務 page (detail in
     §2 "M1").
   - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; M2.1 `5b054ea`, M2.2 `ce85e39`,
-    **M2.3 built, uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
+    M2.3 `2582eaa`, **M2.4 built, uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
     delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
     is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
     copy of the current version into a draft.
@@ -773,8 +773,8 @@ approving a draft with **no steps is refused**; **no four-eyes** on SOP approval
 |---|---|---|
 | M2.1 | Version states from dates + approve / cancel rules; migration `7a3c5e9b1d24` | **done** (`5b054ea`) |
 | M2.2 | Draft editing API (as built below) | **done** (`ce85e39`) |
-| M2.3 | `GET /ope/sop-impact` (as built below) | **built, uncommitted** |
-| M2.4 | Page `/settings/sop?biz=` (「SOP」 link on 業務 rows): version list with state tags, read-only steps, 新しい版 (suggested tag), 草稿を削除 | todo |
+| M2.3 | `GET /ope/sop-impact` (as built below) | **done** (`2582eaa`) |
+| M2.4 | SOP page (as built below) | **built, uncommitted** |
 | M2.5 | Draft step editor (add / edit / delete / move; condition 毎回 / 指定した月 / 週の最初; 承認で次へ) | todo |
 | M2.6 | Approve dialog (date + impact list) and 予定を取り消す | todo |
 
@@ -824,6 +824,21 @@ in progress / on hold). `src/domain_ope/sop_impact.py` (`sop_impact(db, biz_id, 
 PlanTemplate with `include_deleted`). Tests `tests/test_sop_impact.py` (2; client prefix **`Z`**). HTTP 6/6 on
 plan_check (biz 1, a week ahead: 158 / 0 / 1). Gotcha: a backgrounded command whose cwd drifted to `frontend/` ran
 without its leading `cd` → start uvicorn with absolute paths (`/c/p/postgres-migration-poc/.env`, `.venv`, `LOG_FILE`).
+
+**M2.4 as built** (frontend only). `/settings/sop?biz=&version=` (「SOP」 = 3rd entry of the 設定 menu; 「SOP」 button on
+業務 rows for live SOP businesses — not LIGHTWEIGHT; page shows an info alert for LIGHTWEIGHT). Business select =
+`bizOptions` (moved from PlanSettingsPage to `domain/biz/lib/businesses.ts`). Layout `.sop-layout` (grid: versions
+left 280–360 px, steps right; one column under 900 px): versions table タグ / 状態 (草稿 / 予定 gold / 現行 green / 過去,
+past rows greyed) / 有効期間, row click → `?version=`; default selection `defaultVersion` = current → scheduled →
+newest. Right: tag + state + period, steps table 番号 / 手順 (title + 承認で次へ tag + content pre-wrap) / 含める条件
+(`conditionText`: 毎回 / 3月・9月のみ / 週の最初の予定のみ). Admin: 「新しい版」 modal (`NewDraftModal`: says what it copies
+via `newDraftSource`, tag prefilled by `suggestNextTag` = highest vX.Y.Z with Y+1, `VERSION_TAG_PATTERN`, duplicate check)
+and 「草稿を削除」 (confirm). New: `domain/biz/api/sopApi.ts` (listVersions(bizId, includeDrafts), getVersion, newDraft,
+deleteDraft), `domain/biz/lib/sop.ts` (`canManageSop` active admin, labels / colors, helpers above), types `SopState`,
+`SopVersionDetail`, `SopStep`, `SopStepCreate`, `SopStepUpdate`. **`periodText`** in `sopVersions.ts` shows the last day
+(expired_at − 1 ms, since expired_at = next version's start since M2.1); `pinOptions` in the order drawer uses it too.
+CSS `.sop-layout`, `.sop-version-selected` (`--select`), `.sop-step-content`. Harness 17/17 on plan_check (draft created
+and deleted again).
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

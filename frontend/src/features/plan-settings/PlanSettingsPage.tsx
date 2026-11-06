@@ -4,9 +4,9 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
+import { bizOptions } from "../../domain/biz/lib/businesses";
 import { BizSettingsPanel } from "./BizSettingsPanel";
 import { canEditPlanSettings, PLAN_SETTINGS_ADMIN_ONLY } from "../../domain/biz/lib/settings";
-import type { BizMaster } from "../../domain/biz/types";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { templateApi } from "../../domain/plan/api";
 import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
@@ -75,21 +75,6 @@ const columns: ColumnsType<PlanTemplate> = [
   },
   { title: "改訂", dataIndex: "revision", width: 72, className: "mono" },
 ];
-
-/** 業務の選択肢（顧客コードごとにグループ化、業務コード順） */
-function bizOptions(bizes: BizMaster[]) {
-  const byClient = new Map<string, BizMaster[]>();
-  for (const b of [...bizes].sort((a, b) => a.business_code.localeCompare(b.business_code))) {
-    byClient.set(b.client_code, [...(byClient.get(b.client_code) ?? []), b]);
-  }
-  return [...byClient.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([clientCode, list]) => ({
-      label: `顧客 ${clientCode}`,
-      title: clientCode,
-      options: list.map((b) => ({ value: b.id, label: `${b.business_code}　${b.name}` })),
-    }));
-}
 
 /**
  * 予定テンプレートの設定（事前設定）画面。
