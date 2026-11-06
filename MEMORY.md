@@ -28,8 +28,8 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   - **M1 client + business screens: done, merged into `main` (`44c1737`, 2026-11-06, not pushed)** — commits
     `2729ea7` M1.1 backend · `5a619b6` M1.2a 設定 menu · `2cfb5fa` M1.2b 顧客 page · `13a7238` M1.2c 業務 page (detail in
     §2 "M1").
-  - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; M2.1 done `5b054ea`,
-    **M2.2 built, uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
+  - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; M2.1 `5b054ea`, M2.2 `ce85e39`,
+    **M2.3 built, uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
     delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
     is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
     copy of the current version into a draft.
@@ -80,7 +80,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   ~2.5–6 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
   and with it the biz dependency and template listeners — is registered there). **Every new test file uses
   `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M G L N Q E
-  H J W F Y U C X. Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
+  H J W F Y U C X Z. Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
   errors. Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic
   check` → no drift; run alembic with `export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed
   's#/dev_db$#/plan_check#')` (`.env` points at the user's `dev_db`). Frontend: `cd frontend && npm run build` passes.
@@ -772,8 +772,8 @@ approving a draft with **no steps is refused**; **no four-eyes** on SOP approval
 | # | Step | Status |
 |---|---|---|
 | M2.1 | Version states from dates + approve / cancel rules; migration `7a3c5e9b1d24` | **done** (`5b054ea`) |
-| M2.2 | Draft editing API (as built below) | **built, uncommitted** |
-| M2.3 | `GET /ope/sop-impact?biz_id=&effective_date=`: unreleased unpinned orders from that day (will run it), pinned (keep pin), released (keep frozen) | todo |
+| M2.2 | Draft editing API (as built below) | **done** (`ce85e39`) |
+| M2.3 | `GET /ope/sop-impact` (as built below) | **built, uncommitted** |
 | M2.4 | Page `/settings/sop?biz=` (「SOP」 link on 業務 rows): version list with state tags, read-only steps, 新しい版 (suggested tag), 草稿を削除 | todo |
 | M2.5 | Draft step editor (add / edit / delete / move; condition 毎回 / 指定した月 / 週の最初; 承認で次へ) | todo |
 | M2.6 | Approve dialog (date + impact list) and 予定を取り消す | todo |
@@ -813,6 +813,17 @@ others) · `DELETE /biz/steps/{id}` (numbers kept; reorder to close gaps). All e
 `get_version`, `_get_draft`, `rename_draft`, `delete_draft`, `update_step_template`, `delete_step_template`,
 `reorder_steps`; `create_new_sop_version` now rolls back on a duplicate tag. Tests +3 in `tests/test_sop_versions.py`.
 HTTP 14/14 on plan_check: draft id 6 renamed **`v9.1793927904.0-http`** (1 step) left on biz 1.
+
+**M2.3 as built** (no migration; ope side, since biz must not read orders). `GET /ope/sop-impact?biz_id=&effective_date=&limit=`
+(`@require_active()`, limit 1–500, default 50) → `SopImpactResponse {biz_id, effective_date, effective_at (00:00 JST),
+will_switch, pinned, released}`, each `SopImpactGroup {total (exact), orders (earliest first, ≤ limit)}` of
+`SopImpactOrder {id, template_id, template_name, scheduled_start, status, pinned_sop_version_tag,
+frozen_sop_version_tag}`. Groups (orders of the biz scheduled ≥ effective_at, not finished / canceled):
+**will_switch** = `released_at` null + not pinned; **pinned** = not released + pinned; **released** = released (ready /
+in progress / on hold). `src/domain_ope/sop_impact.py` (`sop_impact(db, biz_id, effective_date, limit)`; joins
+PlanTemplate with `include_deleted`). Tests `tests/test_sop_impact.py` (2; client prefix **`Z`**). HTTP 6/6 on
+plan_check (biz 1, a week ahead: 158 / 0 / 1). Gotcha: a backgrounded command whose cwd drifted to `frontend/` ran
+without its leading `cd` → start uvicorn with absolute paths (`/c/p/postgres-migration-poc/.env`, `.venv`, `LOG_FILE`).
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

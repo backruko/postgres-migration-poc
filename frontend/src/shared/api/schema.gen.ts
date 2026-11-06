@@ -1453,6 +1453,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ope/sop-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sop Impact Endpoint
+         * @description その日の 0:00（日本時間）から業務の版を切り替えると、どのオーダーが新しい版を使うか。
+         *     will_switch = 未リリース・指定なし（新しい版を使う）、pinned = 指定した版のまま、released = リリースで固定した版のまま。
+         */
+        get: operations["sop_impact_endpoint_ope_sop_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ope/signals": {
         parameters: {
             query?: never;
@@ -3824,6 +3845,63 @@ export interface components {
              * @description not finished yet and already past their deadline (not in the other figures)
              */
             open_late: number;
+        };
+        /** SopImpactGroup */
+        SopImpactGroup: {
+            /** Total */
+            total: number;
+            /**
+             * Orders
+             * @description earliest first, at most `limit`
+             */
+            orders: components["schemas"]["SopImpactOrder"][];
+        };
+        /** SopImpactOrder */
+        SopImpactOrder: {
+            /** Id */
+            id: number;
+            /** Template Id */
+            template_id: number;
+            /** Template Name */
+            template_name: string;
+            /**
+             * Scheduled Start
+             * Format: date-time
+             */
+            scheduled_start: string;
+            status: components["schemas"]["OrderStatus"];
+            /**
+             * Pinned Sop Version Tag
+             * @description pinned: the version it keeps
+             */
+            pinned_sop_version_tag: string | null;
+            /**
+             * Frozen Sop Version Tag
+             * @description released: the version frozen at release (null = released without one)
+             */
+            frozen_sop_version_tag: string | null;
+        };
+        /** SopImpactResponse */
+        SopImpactResponse: {
+            /** Biz Id */
+            biz_id: number;
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /**
+             * Effective At
+             * Format: date-time
+             * @description 00:00 JST of effective_date
+             */
+            effective_at: string;
+            /** @description not released, not pinned, scheduled from effective_at: they will run the new version */
+            will_switch: components["schemas"]["SopImpactGroup"];
+            /** @description not released but pinned: they keep the pinned version */
+            pinned: components["schemas"]["SopImpactGroup"];
+            /** @description released, not finished / canceled: they keep the version frozen at release */
+            released: components["schemas"]["SopImpactGroup"];
         };
         /**
          * SopState
@@ -11611,6 +11689,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderDetailResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sop_impact_endpoint_ope_sop_impact_get: {
+        parameters: {
+            query: {
+                biz_id: number;
+                /** @description first day (JST) the new version would apply to */
+                effective_date: string;
+                /** @description orders listed per group (totals are exact) */
+                limit?: number;
+            };
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SopImpactResponse"];
                 };
             };
             /** @description Bad Request(リクエスト不正) */

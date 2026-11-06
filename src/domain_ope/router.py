@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 
 from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
 from src.infrastructure.database import get_db
-from src.domain_ope import signals
+from src.domain_ope import signals, sop_impact
 from src.domain_ope.schemas import (
     ConflictResolveIn, OrderCommentIn, OrderDetailResponse, OrderReasonIn, PinSopVersionIn, SignalHandleIn, SignalIn,
-    SignalResponse,
+    SignalResponse, SopImpactResponse,
 )
 from src.domain_ope.services import (
     approve_dependency_override, approve_early_start, approve_step, cancel_order, finish_order, get_order, hold_order, pin_sop_version, reject_step,
@@ -146,6 +146,25 @@ def approve_step_endpoint(
 def reject_step_endpoint(step_id: int, body: OrderReasonIn, db: Session = Depends(get_db), current_staff: StaffUser = STAFF):
     """submitted → todo（提出者以外・理由必須）。そのステップだけが戻り、後のステップはそのままです。"""
     return reject_step(db=db, step_id=step_id, actor_staff_id=current_staff.id, reason=body.reason)
+
+
+# ==========================================
+# SOP バージョンの影響（M2.3。承認の画面が承認前に見せる）
+# ==========================================
+
+@router.get("/sop-impact", response_model=SopImpactResponse, responses=RESPONSES)
+@require_active()
+def sop_impact_endpoint(
+    biz_id: int,
+    effective_date: date = Query(description="first day (JST) the new version would apply to"),
+    limit: int = Query(sop_impact.DEFAULT_LIMIT, ge=1, le=500, description="orders listed per group (totals are exact)"),
+    db: Session = Depends(get_db),
+):
+    """
+    その日の 0:00（日本時間）から業務の版を切り替えると、どのオーダーが新しい版を使うか。
+    will_switch = 未リリース・指定なし（新しい版を使う）、pinned = 指定した版のまま、released = リリースで固定した版のまま。
+    """
+    return sop_impact.sop_impact(db, biz_id, effective_date, limit)
 
 
 # ==========================================
