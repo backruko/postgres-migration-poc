@@ -31,6 +31,9 @@ docker compose exec app python scripts/create_staff.py admin "管理者の氏名
 ブラウザで `http://<サーバーの IP アドレス>/` を開き、`admin` とそのパスワードでログインします。
 ほかの職員は「設定 → 職員」で登録し、「有効化」と「仮パスワード」を設定します（本人は最初のログインで自分のパスワードに変えます）。
 
+本番を使い始める前の作業（復元の練習、営業日カレンダー `scripts/setup_calendar.py`、休日、最初の顧客、職員、
+ブラウザでの確認）は [GO-LIVE.md](GO-LIVE.md) のチェックリストに沿って進めます。
+
 ## 2. 更新（新しい版を入れる）
 
 ```sh

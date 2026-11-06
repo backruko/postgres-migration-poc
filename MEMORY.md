@@ -112,7 +112,7 @@ setup was merged and handed to the user for a test on the VM.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 90 (2026-11-06 evening: status sentence under Delivery phases updated — all phases + MVP built, deployment awaiting its first server run)** — read with `{"kind": "view", "sinceRev": 90}` to see only newer edits, and
+**Last rev written by me: 91 (2026-11-06: "Go-live" paragraph after "MVP deployment" — pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, internet check open, GO-LIVE.md)** — read with `{"kind": "view", "sinceRev": 91}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -1004,8 +1004,8 @@ does the VM reach Docker Hub / PyPI / npm** (directly or via a proxy)? The user 
 machine with Docker + internet and carried as `docker save` tars (the office PC has no Docker / WSL).
 | # | Step | Status |
 |---|---|---|
-| G.1 | `scripts/setup_calendar.py [--code JP_BANK] [--name 銀行営業日] [--weekend 6 7]`: creates the business calendar via `create_calendar`; existing code → prints it, changes nothing, exit 0 (note on stderr when `--weekend` differs); bad input exit 1. `tests/test_setup_calendar.py` (2, no client) | **built, uncommitted** |
-| G.2 | `deploy/GO-LIVE.md` (Japanese checklist A pre-check + restore drill into a scratch DB, B setup, C pilot client, D staff, E orders, F browser checks, G first days, H other clients) + README link + doc paragraph | planned |
+| G.1 | `scripts/setup_calendar.py [--code JP_BANK] [--name 銀行営業日] [--weekend 6 7]`: creates the business calendar via `create_calendar`; existing code → prints it, changes nothing, exit 0 (note on stderr when `--weekend` differs); bad input exit 1. `tests/test_setup_calendar.py` (2, no client) | **done** (`450f03e`) |
+| G.2 | `deploy/GO-LIVE.md` (Japanese checklist: A pre-check + **restore drill into a scratch DB `ops_restore_check`** with `deploy/restore-check.sql` = alembic version + 6 table counts, B first admin / setup_calendar / holidays incl. bank 12/31 1/2 1/3, C pilot client incl. "SOP effective tomorrow at the earliest → approve the day before the first order", D staff + role table + four-eyes, E orders + `create_orders.py` → `Created 0 orders`, F browser checks, G first days: worker / backup / NAS / plan extension log lines, H other clients); README §1 links it; doc rev 91. Checked: drill commands with local PG 16 tools on plan_check (restore exit 0, counts identical, scratch DB dropped), `create_orders.py` output, UI labels / messages grepped from the frontend. Docker-only commands not run | **built, uncommitted** |
 | G.3 | USB / zip transport: package command (`git archive`), compose + runbook for "fresh folder, data outside", and — depending on the internet check — proxy settings or `docker save` / `load` | planned, waits for the user's check |
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
