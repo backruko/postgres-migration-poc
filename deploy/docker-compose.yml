@@ -1,8 +1,8 @@
 # 社内ネットワーク用のデプロイ（http、ドメインなし）。使い方は deploy/README.md。
 #
-#   cd deploy
-#   cp .env.example .env   # パスワードなどを決める（.env は git に入れない）
-#   docker compose up -d --build
+#   サーバーでは版ごとのフォルダー（/srv/ops/releases/ops-…）に展開し、deploy/install.sh で起動する。
+#   設定（.env）・バックアップ・ログは版の外の /srv/ops に置く（README の「フォルダーの形」）。
+#   docker compose のコマンドは /srv/ops/current/deploy で実行する。
 #
 # サービス:
 #   db      PostgreSQL 16（データは名前付きボリューム pgdata）
@@ -18,12 +18,25 @@ x-logging: &logging
     max-size: "10m"
     max-file: "5"
 
+# イメージを作るときの会社のプロキシ（.env の HTTP_PROXY / HTTPS_PROXY / NO_PROXY。空なら直接つなぐ）。
+# apt / pip / npm がこれを使う。動いているコンテナには渡さない（インターネットに出る必要がないため）
+x-build-args: &build-args
+  HTTP_PROXY: ${HTTP_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  NO_PROXY: ${NO_PROXY:-}
+  http_proxy: ${HTTP_PROXY:-}
+  https_proxy: ${HTTPS_PROXY:-}
+  no_proxy: ${NO_PROXY:-}
+
 x-app-env: &app-env
   DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
   ENVIRONMENT: production
   COOKIE_SECURE: "false"   # http で配信するため（https にしたら true）
   SQL_ECHO: "false"
   TZ: Asia/Tokyo
+  # Docker の設定でプロキシがコンテナにも渡されたときでも、コンテナどうしと自分自身への通信はプロキシを通さない
+  NO_PROXY: localhost,127.0.0.1,db,app,web
+  no_proxy: localhost,127.0.0.1,db,app,web
 
 services:
   db:
@@ -47,13 +60,14 @@ services:
     build:
       context: ..
       dockerfile: deploy/app.Dockerfile
+      args: *build-args
     image: ops-app:latest
     restart: unless-stopped
     environment:
       <<: *app-env
       LOG_FILE: /app/logs/app.log
     volumes:
-      - ./logs:/app/logs
+      - ${LOG_DIR:-./logs}:/app/logs
     depends_on:
       db:
         condition: service_healthy
@@ -69,6 +83,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/app.Dockerfile
+      args: *build-args
     image: ops-app:latest
     restart: unless-stopped
     command: ["python", "scripts/worker.py"]
@@ -84,6 +99,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/web.Dockerfile
+      args: *build-args
     image: ops-web:latest
     restart: unless-stopped
     ports:
