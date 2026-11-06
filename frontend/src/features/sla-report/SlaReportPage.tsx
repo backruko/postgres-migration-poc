@@ -113,7 +113,7 @@ export function SlaReportPage() {
       </Typography.Paragraph>
 
       {notActive ? (
-        <Alert type="info" showIcon message="SLA を見るには、ナビの「操作する職員」で有効な職員を選んでください。" />
+        <Alert type="info" showIcon message="このアカウントでは SLA を見られません（利用開始前・停止中）。" />
       ) : report.error ? (
         <Alert type="error" showIcon message={`集計を取得できませんでした: ${report.error.message}`} action={<Button size="small" onClick={report.reload}>再読み込み</Button>} />
       ) : (

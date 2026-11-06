@@ -1,12 +1,12 @@
 import { http, unwrap } from "../../../shared/api/http";
-import type { CreateStaffInput, Role, RoleCode, Staff, StaffStatus, UpdateStaffInput } from "../types";
+import type { ApiKey, ApiKeyIssued, CreateStaffInput, Role, RoleCode, Staff, StaffStatus, UpdateStaffInput } from "../types";
 
 /**
- * 職員・ロール。どのリクエストにも、操作している職員（X-Staff-Id）が http.ts で付く。
+ * 職員・ロール。ログインのセッション（Cookie）で、ログインしている職員として呼ぶ。
  * 参照はシステム管理者・業務管理者・監査担当、登録・変更はシステム管理者のみ（バックエンドが判定する）。
  */
 export const staffApi = {
-  /** 操作している職員（利用開始前・停止中でも返る）（GET /staff/me） */
+  /** ログインしている職員（仮パスワードのままでも返る）（GET /staff/me） */
   me(signal?: AbortSignal): Promise<Staff> {
     return unwrap(http.GET("/staff/me", { signal }));
   },
@@ -36,8 +36,28 @@ export const staffApi = {
     return unwrap(http.PUT("/staff/{staff_id}/roles", { params: { path: { staff_id: staffId } }, body: { roles } }));
   },
 
-  /** 有効化・利用停止・再開（ロールはそのまま。自分の状態は変えられない）（PUT /staff/{id}/status） */
+  /** 有効化・利用停止・再開（ロールはそのまま。自分の状態は変えられない。停止でセッションも終わる）（PUT /staff/{id}/status） */
   setStatus(staffId: number, status: StaffStatus): Promise<Staff> {
     return unwrap(http.PUT("/staff/{staff_id}/status", { params: { path: { staff_id: staffId } }, body: { status } }));
+  },
+
+  /** 仮パスワードを設定する（本人は次のログインで変える。ロックも解ける。自分には使えない）（PUT /staff/{id}/password） */
+  setTemporaryPassword(staffId: number, password: string): Promise<Staff> {
+    return unwrap(http.PUT("/staff/{staff_id}/password", { params: { path: { staff_id: staffId } }, body: { password } }));
+  },
+
+  /** API キーの一覧（取り消したものも。キーそのものは返らない）（GET /staff/{id}/api-keys） */
+  listApiKeys(staffId: number, signal?: AbortSignal): Promise<ApiKey[]> {
+    return unwrap(http.GET("/staff/{staff_id}/api-keys", { params: { path: { staff_id: staffId } }, signal }));
+  },
+
+  /** API キーを発行する（信号の送信の職員だけ。キーはこの応答でだけ見られる）（POST /staff/{id}/api-keys） */
+  issueApiKey(staffId: number, label: string): Promise<ApiKeyIssued> {
+    return unwrap(http.POST("/staff/{staff_id}/api-keys", { params: { path: { staff_id: staffId } }, body: { label } }));
+  },
+
+  /** API キーを取り消す（POST /staff/api-keys/{id}/revoke） */
+  revokeApiKey(keyId: number): Promise<ApiKey> {
+    return unwrap(http.POST("/staff/api-keys/{key_id}/revoke", { params: { path: { key_id: keyId } } }));
   },
 };

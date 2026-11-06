@@ -4356,7 +4356,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4437,7 +4437,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4515,7 +4515,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4669,7 +4669,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4758,7 +4758,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4843,7 +4843,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4928,7 +4928,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5085,7 +5085,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5237,7 +5237,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5326,7 +5326,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5411,7 +5411,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5500,7 +5500,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5658,7 +5658,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5810,7 +5810,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5899,7 +5899,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6056,7 +6056,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6142,7 +6142,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6231,7 +6231,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6320,7 +6320,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6405,7 +6405,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6494,7 +6494,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6717,7 +6717,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6802,7 +6802,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6945,7 +6945,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7101,7 +7101,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7259,7 +7259,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7345,7 +7345,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7499,7 +7499,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7589,7 +7589,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7745,7 +7745,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7835,7 +7835,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7925,7 +7925,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8010,7 +8010,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8099,7 +8099,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8184,7 +8184,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8338,7 +8338,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8490,7 +8490,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8579,7 +8579,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8664,7 +8664,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8753,7 +8753,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8839,7 +8839,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8998,7 +8998,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9083,7 +9083,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9172,7 +9172,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9261,7 +9261,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9346,7 +9346,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9435,7 +9435,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9952,7 +9952,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10035,7 +10035,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10109,7 +10109,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10183,7 +10183,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10261,7 +10261,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10346,7 +10346,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10435,7 +10435,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10524,7 +10524,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10613,7 +10613,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10702,7 +10702,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10787,7 +10787,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10876,7 +10876,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -10961,7 +10961,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11046,7 +11046,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11135,7 +11135,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11224,7 +11224,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11313,7 +11313,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11402,7 +11402,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11491,7 +11491,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11580,7 +11580,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11669,7 +11669,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11758,7 +11758,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11847,7 +11847,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11936,7 +11936,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -12025,7 +12025,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -12114,7 +12114,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -12203,7 +12203,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -12292,7 +12292,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -12381,7 +12381,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -12471,7 +12471,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -12558,7 +12558,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -12647,7 +12647,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
             401: {
                 headers: {
                     [name: string]: unknown;

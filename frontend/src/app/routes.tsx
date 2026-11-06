@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { LoginPage } from "../features/auth/LoginPage";
 import { BusinessSettingsPage } from "../features/business-settings/BusinessSettingsPage";
 import { CalendarPage } from "../features/calendar/CalendarPage";
 import { ClientSettingsPage } from "../features/client-settings/ClientSettingsPage";
@@ -13,7 +14,8 @@ import { StaffSettingsPage } from "../features/staff-settings/StaffSettingsPage"
 import { AppLayout } from "./AppLayout";
 
 /**
- * 画面のルーティング
+ * 画面のルーティング（/login 以外はログインが必要。AppLayout がログイン画面へ移す）
+ * - /login               ログイン（ログイン ID・パスワード）
  * - /                     日々の利用: 顧客の月カレンダー（予定の変更・取消・臨時追加）
  * - /daily                日々の利用: 全顧客横断の日次ダッシュボード（参照のみ）
  * - /reports/sla          集計: SLA（顧客 × 締切の月の完了・遅れ・期限内率。CSV 出力）
@@ -29,6 +31,7 @@ import { AppLayout } from "./AppLayout";
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path="/login" element={<LoginPage />} />
       <Route element={<AppLayout />}>
         <Route index element={<CalendarPage />} />
         <Route path="daily" element={<DailyDashboardPage />} />

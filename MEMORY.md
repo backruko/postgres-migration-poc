@@ -31,8 +31,8 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   - **M2 SOP screens: done, merged into `main` (`28b94b6`, 2026-11-06, not pushed; user browser-tested OK)** —
     commits `5b054ea` M2.1 … `17aa788` M2.6 (detail in §2 "M2").
   - **Login** (branch `feature/login` from `main` `28b94b6`; plan approved 2026-11-06, see §2 "Login"):
-    LG.1 `3a93ffd` (migration `b4e8d2a6c913`), **LG.2 built, uncommitted** (backend switched: the current
-    frontend gets 401 everywhere until LG.3); LG.3 frontend to do.
+    LG.1 `3a93ffd` (migration `b4e8d2a6c913`), LG.2 `c644b4d` (backend switch), **LG.3 frontend built,
+    uncommitted** — then merge; next: deployment.
   - **Deployment** (user's decisions 2026-11-05, doc rev 78): **Linux VM + Docker Compose**, services `db`
     (PostgreSQL 16, volume, daily `pg_dump`), `app` (uvicorn + production frontend build same-origin with SPA
     fallback), **`worker`** = a loop replacing Task Scheduler: release due orders, sleep until the next release
@@ -871,8 +871,8 @@ as CSRF protection (same-origin app). Step names **LG.x** (L.x is the latest-bef
 | # | Step | Status |
 |---|---|---|
 | LG.1 | Model + building blocks (no endpoint uses them yet); migration `b4e8d2a6c913` | **done** (`3a93ffd`) |
-| LG.2 | Backend switch: `/auth/login` / `logout` / `password`, cookie in `get_current_staff`, X-Staff-Id removed, Bearer key on `POST /ope/signals`, must_change_password → 403 elsewhere, temporary password + API key endpoints (system_admin), suspend / password ends sessions, `create_staff.py` password prompt + `scripts/set_password.py`, guard tests; update the doc's X-Staff-Id paragraph | **built, uncommitted** |
-| LG.3 | Frontend: `/login`, 401 → login, forced password change, nav name + パスワード変更 + ログアウト (replaces 操作する職員), 職員 page 仮パスワード + API キー | todo |
+| LG.2 | Backend switch: `/auth/login` / `logout` / `password`, cookie in `get_current_staff`, X-Staff-Id removed, Bearer key on `POST /ope/signals`, must_change_password → 403 elsewhere, temporary password + API key endpoints (system_admin), suspend / password ends sessions, `create_staff.py` password prompt + `scripts/set_password.py`, guard tests; update the doc's X-Staff-Id paragraph | **done** (`c644b4d`) |
+| LG.3 | Frontend (as built below) | **built, uncommitted** |
 
 **LG.1 as built** (migration `b4e8d2a6c913`). `staff_user` + `password_hash` (String 255, null = cannot log in),
 `must_change_password`, `failed_logins`, `locked_until`, `password_changed_at`. New `staff_session` (`token_hash`
@@ -924,6 +924,35 @@ call needs a session (or the signal API key); open: `/auth/login`, `/auth/logout
   list / signal 201 / refused elsewhere / revoked). Left: one more unmatched signal `http_check`, a revoked key on staff 9.
 - **Harness pattern from now on:** log in first (`POST /auth/login`, keep the cookie: Python `http.cookiejar`; node:
   read `set-cookie` and send `Cookie`).
+
+**LG.3 as built** (frontend; backend only the 401 description text in `src/core/schemas/error.py`).
+- **Removed:** `app/ActingStaffPicker.tsx`, `shared/api/actingStaff.ts`, `shared/hooks/useActingStaffId.ts`,
+  `DEFAULT_STAFF_ID` / `VITE_DEFAULT_STAFF_ID` (config, vite-env.d.ts, .env.example); http.ts no longer sets a header.
+- `shared/api/session.ts` (store `{version, signedOut}`; `markSignedIn` / `markSignedOut`) + `shared/hooks/useSession.ts`;
+  http.ts `onResponse`: any 401 except `/auth/login` → `markSignedOut()`. `useCurrentStaff` / `useStaffList` /
+  `useRoles` / `useSlaReport` re-fetch on `version` (no more `enabled: actingId !== null`).
+- `AppLayout` = the login gate: `signedOut` or me 401 → `<Navigate to="/login" state={{from: location}} />`; loading
+  spinner; other error → alert + reload; **`must_change_password` → full-page 「パスワードを変更してください」 card
+  (`PasswordChangeForm`)** instead of nav + pages; else nav with **`UserMenu`** (name pill reusing `.acting-staff`
+  CSS; menu: ログインID, パスワードを変更 (modal), ログアウト → `authApi.logout` + `markSignedOut` + `/login`).
+- Route **`/login`** outside the layout (`features/auth/LoginPage.tsx`: ログインID / パスワード, error text by code via
+  `domain/staff/lib/login.ts` `loginErrorText` (INVALID_CREDENTIALS / ACCOUNT_LOCKED with the HH:MM / STAFF_NOT_ACTIVE),
+  success → `markSignedIn` + back to `state.from`; already logged in → redirect). `PasswordChangeForm` (current / new /
+  confirm; `newPasswordProblem` mirrors the backend rules; `passwordChangeErrorText`).
+- `domain/staff/api/authApi.ts` (login, logout, changePassword); `staffApi` + setTemporaryPassword, listApiKeys,
+  issueApiKey, revokeApiKey; types `LoginInput`, `PasswordChangeInput`, `ApiKey`, `ApiKeyIssued`.
+- 職員 page: 「この職員として操作」 and the acting-staff alerts removed; 状態 column adds tags パスワード未設定 (gold) /
+  仮パスワード (blue) / ロック中 (red, until HH:mm); system_admin actions **仮パスワード** (`TemporaryPasswordModal`, not
+  yourself) and, for signal_sender staff, **API キー** (`ApiKeysModal`: list with prefix / issued / last used / 取消済み,
+  発行 with a label → green alert with the full key + copy button, shown only until the modal closes; 取り消す confirm).
+- Texts "ナビの「操作する職員」で…" in OrderDrawer / SignalsPanel / SLA → "このアカウントでは…（利用開始前・停止中）".
+- CSS `.login-wrap`, `.login-card`, `.api-key-value`; removed the picker-only `.acting-staff-panel` / `-note` /
+  `.is-warning` / `.ant-tag` rules.
+- Checked: build; node harness 18/18 against 8001 with a cookie-keeping `fetch` (scratchpad `cookie_fetch.ts`, imported
+  first): 401 → signedOut, login failure doesn't sign out, cookie set / cleared, temporary password → 403
+  PASSWORD_CHANGE_REQUIRED → change → unblocked, API key issue / list / revoke / non-sender 400; **curl through Vite 5174**:
+  401 → login Set-Cookie passes the proxy → 200 → logout 204 → 401; `/login` served. plan_check staff 6 password is
+  `check-pass-6` again; API key on staff 10 revoked. **Not checked: the browser.**
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic
@@ -1183,11 +1212,11 @@ react-router-dom 6.28. Exact-pinned versions. Plain CSS with color variables (li
   month), sheet-date tags with provenance labels, occurrences per business (time, chipStyle swatch + Icon, 人が変更 /
   臨時 tags, 元の日付 when the slot date differs); past days add struck-through voided rows with the reason
   (`VOID_REASON_LABEL`) and note. Pure logic in `dailyDashboard.ts`.
-- **Acting staff (until login):** `shared/api/actingStaff.ts` keeps the id (localStorage, else `VITE_DEFAULT_STAFF_ID`);
-  an openapi-fetch middleware in `http.ts` sends it as `X-Staff-Id` on every request; `useActingStaffId`
-  (useSyncExternalStore). Nav picker `app/ActingStaffPicker.tsx` (enter id, shows name / status / roles).
+- **Login (LG.3, replaced the acting-staff picker):** `/login` page; session in the HttpOnly `ops_session` cookie;
+  `shared/api/session.ts` + `useSession`; http.ts marks signed out on 401; `AppLayout` redirects to `/login` and forces
+  a password change for temporary passwords; nav `UserMenu` (パスワードを変更, ログアウト). Detail in §2 "Login".
 - **職員** (`/settings/staff`, `features/staff-settings`): list, 職員を登録, 編集 (name, email, role checkboxes; own
-  system_admin locked), 有効化 / 利用停止 / 再開 (confirm; own row disabled), 「この職員として操作」. UI permissions in
+  system_admin locked), 有効化 / 利用停止 / 再開 (confirm; own row disabled), 仮パスワード / API キー (system_admin, LG.3). UI permissions in
   `domain/staff/lib/permissions.ts` mirror the backend (display only).
 - **Template settings page:** 「次の予定」 column (template timezone) and a warning tag + banner for templates with no
   upcoming occurrence. The layout remembers each page's last query string, so switching pages keeps

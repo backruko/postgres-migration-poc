@@ -1,5 +1,5 @@
 import createClient from "openapi-fetch";
-import { getActingStaffId } from "./actingStaff";
+import { markSignedOut } from "./session";
 import type { components, paths } from "./schema.gen";
 
 /**
@@ -16,12 +16,12 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, ""
  */
 export const http = createClient<paths>({ baseUrl: API_BASE });
 
-// 操作している職員をすべてのリクエストに付ける（職員・ロールの判定があるエンドポイントで使われる）
+// ログインのセッションは Cookie（同じオリジン）で送られる。401（未ログイン・期限切れ）ならログイン画面へ（LG.3）。
+// ログインの失敗（POST /auth/login の 401）は画面が自分で表示するので除く
 http.use({
-  onRequest({ request }) {
-    const staffId = getActingStaffId();
-    if (staffId !== null) request.headers.set("X-Staff-Id", String(staffId));
-    return request;
+  onResponse({ request, response }) {
+    if (response.status === 401 && !new URL(request.url).pathname.endsWith("/auth/login")) markSignedOut();
+    return response;
   },
 });
 

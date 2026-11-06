@@ -10,9 +10,9 @@ import { TIMEZONE } from "../../shared/config";
 import { inZone } from "../../shared/lib/datetime";
 
 interface Props {
-  /** 人の対応が必要な信号（ページで取得する: タブの件数にも使う）。操作する職員が有効でないときは取得しない */
+  /** 人の対応が必要な信号（ページで取得する: タブの件数にも使う）。ログインしている職員が有効でないときは取得しない */
   signals: { data: Signal[] | null; error: ApiError | null; reload: () => void };
-  /** 操作する職員が有効か（無効なら一覧を出さない） */
+  /** ログインしている職員が有効か（無効なら一覧を出さない） */
   active: boolean;
   /** 対応でオーダーが変わったとき（ダッシュボードを取り直す） */
   onChanged: () => void;
@@ -38,7 +38,7 @@ export function SignalsPanel({ signals, active, onChanged }: Props) {
 
   const rows = signals.data ?? [];
   if (!active) {
-    return <Empty description="信号を見るには、ナビの「操作する職員」で有効な職員を選んでください" />;
+    return <Empty description="このアカウントでは信号を見られません（利用開始前・停止中）" />;
   }
 
   const open = (s: Signal) => {

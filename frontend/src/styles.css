@@ -87,12 +87,8 @@ button, input, select { font: inherit; color: inherit; }
 }
 .acting-staff:hover { border-color: var(--accent); }
 .acting-staff:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.acting-staff.is-warning { border-color: var(--sun); color: var(--sun); }
-.acting-staff .ant-tag { margin-inline-end: 0; }
 .acting-staff-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 @media (max-width: 720px) { .acting-staff-name { display: none; } }
-.acting-staff-panel { width: 280px; }
-.acting-staff-note { font-size: 12px; }
 
 /* 職員: ロールの選択 */
 .role-checks { display: grid; gap: 6px; }
@@ -299,3 +295,7 @@ h1 .client { color: var(--accent); }
 .sop-impact-head { margin-bottom: 4px; }
 .sop-impact-list { margin: 0; padding-left: 18px; font-size: 13px; }
 .sop-impact-list li { margin: 2px 0; }
+/* ログイン・パスワードの変更（LG.3） */
+.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.login-card { width: min(400px, 100%); background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px; padding: 28px 28px 24px; box-shadow: 0 2px 12px rgb(0 0 0 / .06); }
+.api-key-value { word-break: break-all; }
