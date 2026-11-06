@@ -1,4 +1,4 @@
-import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
@@ -6,7 +6,9 @@ import { useSearchParams } from "react-router-dom";
 import { sopApi } from "../../domain/biz/api/sopApi";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import { bizOptions } from "../../domain/biz/lib/businesses";
-import { canManageSop, conditionText, defaultVersion, SOP_STATE_COLOR, SOP_STATE_LABEL } from "../../domain/biz/lib/sop";
+import {
+  canManageSop, conditionText, defaultVersion, hasNumberGaps, movedStepIds, SOP_STATE_COLOR, SOP_STATE_LABEL,
+} from "../../domain/biz/lib/sop";
 import { periodText } from "../../domain/biz/lib/sopVersions";
 import type { SopStep, SopVersion } from "../../domain/biz/types";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
@@ -16,13 +18,15 @@ import { useApiQuery } from "../../shared/hooks/useApiQuery";
 import { inZone } from "../../shared/lib/datetime";
 import { ReturnLink } from "../../shared/ui/ReturnLink";
 import { NewDraftModal } from "./NewDraftModal";
+import { RenameDraftModal } from "./RenameDraftModal";
+import { StepFormModal } from "./StepFormModal";
 
 const formatDate = (iso: string) => inZone(iso, TIMEZONE).format("YYYY/M/D");
 
 /**
  * SOP（作業手順）の画面（業務ごと）。版の一覧（草稿も含む）と、選んだ版のステップ。
  * 見るのは誰でも。新しい版・草稿の削除は業務管理者だけ（バックエンドが判定する）。承認済みの版は変えられない。
- * 草稿の編集（M2.5）と承認（M2.6）はこの画面に足していく。
+ * 草稿は、この画面でタグ・ステップ（追加・編集・削除・並べ替え）を変えられる（M2.5）。承認（M2.6）はこの画面に足していく。
  * 選んだ業務と版は URL の ?biz= / ?version= に保持する。
  */
 export function SopSettingsPage() {
@@ -43,6 +47,44 @@ export function SopSettingsPage() {
   const detail = useApiQuery((signal) => sopApi.getVersion(versionId as number, signal), [versionId], { enabled: versionId !== null });
 
   const [newDraftOpen, setNewDraftOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  // ステップの追加・編集モーダル（step が null なら追加）。閉じる間の表示が切り替わらないよう、閉じても対象は残す
+  const [stepEditor, setStepEditor] = useState<{ open: boolean; step: SopStep | null }>({ open: false, step: null });
+  const [moving, setMoving] = useState(false);
+
+  const steps = detail.data?.id === versionId ? detail.data.steps : [];
+
+  const reorder = async (ids: number[], done: string) => {
+    if (versionId === null) return;
+    setMoving(true);
+    try {
+      await sopApi.reorderSteps(versionId, ids);
+      message.success(done);
+    } catch (e) {
+      message.error(`並べ替えできませんでした: ${e instanceof ApiError ? e.message : "通信に失敗しました。"}`);
+    } finally {
+      setMoving(false);
+    }
+    detail.reload();
+  };
+
+  const confirmDeleteStep = (step: SopStep) =>
+    modal.confirm({
+      title: `ステップ ${step.step_num}「${step.title}」を削除しますか？`,
+      content: "残りのステップの番号はそのままです（「番号を振り直す」で 1 から並べ直せます）。",
+      okText: "削除",
+      okButtonProps: { danger: true },
+      cancelText: "キャンセル",
+      onOk: async () => {
+        try {
+          await sopApi.deleteStep(step.id);
+          message.success(`ステップ ${step.step_num} を削除しました。`);
+        } catch (e) {
+          message.error(`削除できませんでした: ${e instanceof ApiError ? e.message : "通信に失敗しました。"}`);
+        }
+        detail.reload();
+      },
+    });
 
   const setQuery = (biz: number | null, version: number | null) => {
     const next = new URLSearchParams(params);
@@ -102,6 +144,27 @@ export function SopSettingsPage() {
   ];
 
   const selected = rows.find((v) => v.id === versionId) ?? null;
+  const editable = canManage && selected?.state === "draft";
+  const columns: ColumnsType<SopStep> = editable
+    ? [
+        ...stepColumns,
+        {
+          title: "操作",
+          key: "actions",
+          width: 200,
+          render: (_, step, index) => (
+            <Space size={0}>
+              <Button type="text" size="small" icon={<ArrowUpOutlined />} aria-label="上へ" title="上へ" disabled={moving || index === 0}
+                onClick={() => void reorder(movedStepIds(steps, index, -1)!, `ステップ「${step.title}」を上へ動かしました。`)} />
+              <Button type="text" size="small" icon={<ArrowDownOutlined />} aria-label="下へ" title="下へ" disabled={moving || index === steps.length - 1}
+                onClick={() => void reorder(movedStepIds(steps, index, 1)!, `ステップ「${step.title}」を下へ動かしました。`)} />
+              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => setStepEditor({ open: true, step })}>編集</Button>
+              <Button type="link" size="small" danger onClick={() => confirmDeleteStep(step)}>削除</Button>
+            </Space>
+          ),
+        },
+      ]
+    : stepColumns;
 
   return (
     <div className="wrap">
@@ -177,21 +240,36 @@ export function SopSettingsPage() {
                       <Tag color={SOP_STATE_COLOR[selected.state]}>{SOP_STATE_LABEL[selected.state]}</Tag>
                       <span className="muted mono">{periodText(selected, formatDate)}</span>
                     </Space>
-                    {canManage && selected.state === "draft" && (
-                      <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteDraft(selected)}>
-                        草稿を削除
-                      </Button>
+                    {editable && (
+                      <Space size={8} wrap>
+                        <Button size="small" onClick={() => setRenameOpen(true)}>タグを変更</Button>
+                        <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setStepEditor({ open: true, step: null })}>
+                          ステップを追加
+                        </Button>
+                        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteDraft(selected)}>
+                          草稿を削除
+                        </Button>
+                      </Space>
                     )}
                   </div>
                   {selected.state !== "draft" && (
                     <Typography.Paragraph type="secondary">承認済みの版は変えられません。変えるときは「新しい版」で草稿を作ります。</Typography.Paragraph>
                   )}
+                  {editable && hasNumberGaps(steps) && (
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message="ステップの番号に抜けがあります（オーダーには番号のまま出ます）。"
+                      action={<Button size="small" disabled={moving} onClick={() => void reorder(steps.map((x) => x.id), "番号を 1 から振り直しました。")}>番号を振り直す</Button>}
+                    />
+                  )}
                   {detail.error && <Alert type="error" showIcon message={detail.error.message} />}
                   <Table<SopStep>
                     rowKey="id"
-                    columns={stepColumns}
-                    dataSource={detail.data?.id === selected.id ? detail.data.steps : []}
-                    loading={detail.loading}
+                    columns={columns}
+                    dataSource={steps}
+                    loading={detail.loading || moving}
                     pagination={false}
                     size="middle"
                     locale={{ emptyText: <Empty description="ステップがありません" /> }}
@@ -200,6 +278,24 @@ export function SopSettingsPage() {
               )}
             </section>
           </div>
+          {canManage && versionId !== null && (
+            <>
+              <StepFormModal
+                open={stepEditor.open}
+                versionId={versionId}
+                step={stepEditor.step}
+                onClose={() => setStepEditor((x) => ({ ...x, open: false }))}
+                onSaved={detail.reload}
+              />
+              <RenameDraftModal
+                open={renameOpen}
+                draft={selected}
+                versions={rows}
+                onClose={() => setRenameOpen(false)}
+                onSaved={versions.reload}
+              />
+            </>
+          )}
           {canManage && (
             <NewDraftModal
               open={newDraftOpen}

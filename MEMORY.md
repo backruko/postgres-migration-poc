@@ -29,7 +29,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
     `2729ea7` M1.1 backend · `5a619b6` M1.2a 設定 menu · `2cfb5fa` M1.2b 顧客 page · `13a7238` M1.2c 業務 page (detail in
     §2 "M1").
   - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; M2.1 `5b054ea`, M2.2 `ce85e39`,
-    M2.3 `2582eaa`, **M2.4 built, uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
+    M2.3 `2582eaa`, M2.4 `f549312`, **M2.5 built, uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
     delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
     is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
     copy of the current version into a draft.
@@ -774,8 +774,8 @@ approving a draft with **no steps is refused**; **no four-eyes** on SOP approval
 | M2.1 | Version states from dates + approve / cancel rules; migration `7a3c5e9b1d24` | **done** (`5b054ea`) |
 | M2.2 | Draft editing API (as built below) | **done** (`ce85e39`) |
 | M2.3 | `GET /ope/sop-impact` (as built below) | **done** (`2582eaa`) |
-| M2.4 | SOP page (as built below) | **built, uncommitted** |
-| M2.5 | Draft step editor (add / edit / delete / move; condition 毎回 / 指定した月 / 週の最初; 承認で次へ) | todo |
+| M2.4 | SOP page (as built below) | **done** (`f549312`) |
+| M2.5 | Draft step editor (as built below) | **built, uncommitted** |
 | M2.6 | Approve dialog (date + impact list) and 予定を取り消す | todo |
 
 **M2.1 as built** (migration `7a3c5e9b1d24`: rebuilds `sop_status_enum` as DRAFT / APPROVED — FUTURE / ACTIVE / ARCHIVED →
@@ -839,6 +839,16 @@ deleteDraft), `domain/biz/lib/sop.ts` (`canManageSop` active admin, labels / col
 (expired_at − 1 ms, since expired_at = next version's start since M2.1); `pinOptions` in the order drawer uses it too.
 CSS `.sop-layout`, `.sop-version-selected` (`--select`), `.sop-step-content`. Harness 17/17 on plan_check (draft created
 and deleted again).
+
+**M2.5 as built** (frontend only). On a **draft** (admin): header buttons タグを変更 (`RenameDraftModal`) / ステップを追加 /
+草稿を削除; steps table gets 操作: ↑ / ↓ (swap via `movedStepIds` → `reorderSteps` = renumber 1..n), 編集, 削除 (confirm;
+numbers kept); info alert + 「番号を振り直す」 when `hasNumberGaps`. `StepFormModal` (add / edit): 手順 (1–100), 内容,
+含める条件 radio 毎回 / 指定した月だけ / 週の最初の予定だけ with help text (`CONDITION_LABEL` / `CONDITION_HELP`), month
+checkboxes 1–12 (`.sop-months` grid of 6) required ≥ 1 (`conditionError`), 承認で次へ checkbox with explanation.
+`sop.ts`: `conditionBody` (months deduped + sorted), `stepFormValues`, `stepCreateBody` (blank content → null),
+`stepUpdateBody` (changed fields only, null when unchanged), `movedStepIds`, `hasNumberGaps`. `sopApi`: renameDraft,
+addStep, updateStep, deleteStep, reorderSteps. Harness 16/16 on plan_check (draft id 6 `v9.1793927904.0-http` now has 2
+steps).
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

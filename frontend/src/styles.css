@@ -293,3 +293,4 @@ h1 .client { color: var(--accent); }
 @media (prefers-reduced-motion: no-preference) {
   .day, .legend-item { transition: background-color .12s, opacity .12s, border-color .12s; }
 }
+.sop-months { display: grid; grid-template-columns: repeat(6, auto); gap: 4px 12px; justify-content: start; }

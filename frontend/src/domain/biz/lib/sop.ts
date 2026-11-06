@@ -1,5 +1,5 @@
 import type { Staff } from "../../staff/types";
-import type { SopState, SopVersion } from "../types";
+import type { SopState, SopStep, SopStepCreate, SopStepUpdate, SopVersion } from "../types";
 
 /**
  * SOP の画面のルールと表示（表示用。最終的な判定はバックエンド: src/domain_biz/services.py）。
@@ -65,3 +65,78 @@ export function conditionText(condition: Record<string, unknown>): string {
       return "毎回";
   }
 }
+
+// ---- 草稿のステップの編集（M2.5） ----
+export type ConditionType = "always" | "month_in" | "first_in_week";
+
+export const CONDITION_LABEL: Record<ConditionType, string> = {
+  always: "毎回",
+  month_in: "指定した月だけ",
+  first_in_week: "週の最初の予定だけ",
+};
+
+export const CONDITION_HELP: Record<ConditionType, string> = {
+  always: "すべてのオーダーにこのステップを含めます。",
+  month_in: "予定日の月が選んだ月のオーダーだけに含めます（例: 年次の照合は 4 月だけ）。",
+  first_in_week: "その週（月〜日）で、このテンプレートの最初の予定のオーダーだけに含めます（例: 週次のまとめ）。",
+};
+
+export interface StepFormValues {
+  title?: string;
+  content?: string;
+  condition_type?: ConditionType;
+  months?: number[];
+  is_blocking?: boolean;
+}
+
+type Condition = NonNullable<SopStepCreate["condition"]>;
+
+/** フォームの条件 → 保存する条件（指定した月は重複なし・昇順） */
+export function conditionBody(v: StepFormValues): Condition {
+  if (v.condition_type === "month_in") return { type: "month_in", months: [...new Set(v.months ?? [])].sort((a, b) => a - b) };
+  if (v.condition_type === "first_in_week") return { type: "first_in_week" };
+  return { type: "always" };
+}
+
+/** 条件の入力の誤り（なければ null）。指定した月は 1 つ以上 */
+export const conditionError = (v: StepFormValues): string | null =>
+  v.condition_type === "month_in" && !(v.months ?? []).length ? "月を 1 つ以上選んでください" : null;
+
+/** 保存されたステップ → フォームの初期値 */
+export function stepFormValues(step: SopStep | null): StepFormValues {
+  if (!step) return { condition_type: "always", months: [], is_blocking: false, content: "" };
+  const type = (["month_in", "first_in_week"].includes(String(step.condition.type)) ? step.condition.type : "always") as ConditionType;
+  const months = Array.isArray(step.condition.months) ? (step.condition.months as number[]) : [];
+  return { title: step.title, content: step.content ?? "", condition_type: type, months, is_blocking: step.is_blocking };
+}
+
+/** 追加の本文（番号は省いて最後に付く） */
+export const stepCreateBody = (v: StepFormValues): SopStepCreate => ({
+  title: (v.title ?? "").trim(),
+  content: (v.content ?? "").trim() || null,
+  condition: conditionBody(v),
+  is_blocking: v.is_blocking ?? false,
+});
+
+/** 変更の本文（変わった項目だけ。変わっていなければ null） */
+export function stepUpdateBody(step: SopStep, v: StepFormValues): SopStepUpdate | null {
+  const next = stepCreateBody(v);
+  const body: SopStepUpdate = {};
+  if (next.title !== step.title) body.title = next.title;
+  if ((next.content ?? null) !== (step.content ?? null)) body.content = next.content;
+  if (JSON.stringify(next.condition) !== JSON.stringify(conditionBody(stepFormValues(step)))) body.condition = next.condition;
+  if (next.is_blocking !== step.is_blocking) body.is_blocking = next.is_blocking;
+  return Object.keys(body).length ? body : null;
+}
+
+/** 1 つ上 / 下へ動かした後の、すべてのステップの id の並び（端なら null） */
+export function movedStepIds(steps: readonly Pick<SopStep, "id">[], index: number, direction: -1 | 1): number[] | null {
+  const target = index + direction;
+  if (index < 0 || index >= steps.length || target < 0 || target >= steps.length) return null;
+  const ids = steps.map((s) => s.id);
+  [ids[index], ids[target]] = [ids[target], ids[index]];
+  return ids;
+}
+
+/** 番号に抜けがあるか（削除の後など。並べ替えで 1 から振り直せる） */
+export const hasNumberGaps = (steps: readonly Pick<SopStep, "step_num">[]) => steps.some((s, i) => s.step_num !== i + 1);
