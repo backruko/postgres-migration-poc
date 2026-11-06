@@ -2,6 +2,7 @@ import { EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import { clientApi } from "../../domain/client/api/clientApi";
 import { useAllClients } from "../../domain/client/hooks/useClients";
@@ -16,6 +17,7 @@ import { ClientFormModal } from "./ClientFormModal";
  * 顧客の設定画面。一覧（無効にした顧客も含む）・登録・顧客名の変更・無効 / 有効。
  * 見るのは誰でも。登録・変更は業務管理者だけ（バックエンドが判定する）。顧客は削除しない:
  * 使わなくなったら無効にする（有効な業務が残っている間は無効にできない）。無効な顧客はほかの画面の選択肢から消える。
+ * 「業務」の列から、その顧客の業務の画面（/settings/businesses?client=）を開く。
  */
 export function ClientSettingsPage() {
   const { message, modal } = App.useApp();
@@ -72,7 +74,11 @@ export function ClientSettingsPage() {
       width: 96,
       render: (_, c) => {
         const n = businessCount.get(c.code) ?? 0;
-        return n ? <span className="mono">{n} 件</span> : <span className="muted">なし</span>;
+        return (
+          <Link to={{ pathname: "/settings/businesses", search: `?client=${c.code}` }} title="この顧客の業務を開く">
+            {n ? <span className="mono">{n} 件</span> : "なし"}
+          </Link>
+        );
       },
     },
     { title: "登録日", dataIndex: "created_at", width: 112, className: "mono", render: (v: string) => dayjs(v).format("YYYY/M/D") },

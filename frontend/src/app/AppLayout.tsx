@@ -17,6 +17,7 @@ const PAGES: Page[] = [
 /** 事前設定の画面（「設定」メニューにまとめる） */
 const SETTINGS_PAGES: Page[] = [
   { path: "/settings/clients", label: "顧客", end: false },
+  { path: "/settings/businesses", label: "業務", end: false },
   { path: "/settings/templates", label: "予定テンプレート設定", end: false },
   { path: "/settings/sheets", label: "年間計画シート", end: false },
   { path: "/settings/holidays", label: "休日カレンダー", end: false },

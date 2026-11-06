@@ -2,6 +2,7 @@
 import type { components } from "../../../shared/api/schema.gen";
 
 export type BizMaster = components["schemas"]["BizMasterResponse"];
+export type BizMasterCreate = components["schemas"]["BizMasterCreate"];
 
 // ---- 業務間の依存関係 ----
 export type BizDependency = components["schemas"]["BizDependencyResponse"];

@@ -72,6 +72,8 @@ button, input, select { font: inherit; color: inherit; }
 .nav-menu { background: none; border-top: 0; border-left: 0; border-right: 0; cursor: pointer; font: inherit; font-size: 13px; gap: 4px; }
 .nav-menu-current { font-weight: 400; }
 .nav-menu-caret { font-size: 10px; }
+/* 業務の設定画面: 業務名の下の説明 */
+.biz-description { font-size: 12px; white-space: pre-wrap; }
 /* 操作する職員（ログインが入るまでの開発用） */
 .nav-spacer { flex: 1; }
 .acting-staff {

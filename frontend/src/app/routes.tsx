@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { BusinessSettingsPage } from "../features/business-settings/BusinessSettingsPage";
 import { CalendarPage } from "../features/calendar/CalendarPage";
 import { ClientSettingsPage } from "../features/client-settings/ClientSettingsPage";
 import { DailyDashboardPage } from "../features/daily-dashboard/DailyDashboardPage";
@@ -16,6 +17,7 @@ import { AppLayout } from "./AppLayout";
  * - /daily                日々の利用: 全顧客横断の日次ダッシュボード（参照のみ）
  * - /reports/sla          集計: SLA（顧客 × 締切の月の完了・遅れ・期限内率。CSV 出力）
  * - /settings/clients     事前設定: 顧客の管理（一覧・登録・顧客名の変更・無効 / 有効）
+ * - /settings/businesses  事前設定: 顧客の業務の管理（一覧・登録・編集・削除・元に戻す。?client=）
  * - /settings/templates   事前設定: 予定テンプレートの管理（一覧・作成・編集・削除）
  * - /settings/sheets      事前設定: 年間計画シートの参照と、ルールで日付を作るマーカー・日付の管理
  * - /settings/holidays    事前設定: 営業日カレンダーの休日の管理
@@ -30,6 +32,7 @@ export function AppRoutes() {
         <Route path="daily" element={<DailyDashboardPage />} />
         <Route path="reports/sla" element={<SlaReportPage />} />
         <Route path="settings/clients" element={<ClientSettingsPage />} />
+        <Route path="settings/businesses" element={<BusinessSettingsPage />} />
         <Route path="settings/templates" element={<PlanSettingsPage />} />
         <Route path="settings/sheets" element={<SheetSettingsPage />} />
         <Route path="settings/holidays" element={<HolidaySettingsPage />} />
