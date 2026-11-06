@@ -28,7 +28,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Clients Endpoint */
+        /**
+         * Get Clients Endpoint
+         * @description 顧客の一覧（コード順）。無効にした顧客は include_inactive=true のときだけ含めます。
+         */
         get: operations["get_clients_endpoint_clients__get"];
         put?: never;
         /** Create Client Endpoint */
@@ -49,12 +52,54 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Client Endpoint */
-        delete: operations["delete_client_endpoint_clients__client_id__delete"];
+        delete?: never;
         options?: never;
         head?: never;
-        /** Update Client Endpoint */
+        /**
+         * Update Client Endpoint
+         * @description 顧客名を変えます（顧客コードは変えられません）。
+         */
         patch: operations["update_client_endpoint_clients__client_id__patch"];
+        trace?: never;
+    };
+    "/clients/{client_id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate Client Endpoint
+         * @description 顧客を無効にします（有効な業務が残っている間は 400）。一覧・選択肢から消え、新しい業務・シートは作れません。
+         */
+        post: operations["deactivate_client_endpoint_clients__client_id__deactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{client_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate Client Endpoint
+         * @description 無効にした顧客を、再び有効にします。
+         */
+        post: operations["activate_client_endpoint_clients__client_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/biz/": {
@@ -66,7 +111,8 @@ export interface paths {
         };
         /**
          * Get Bizes Endpoint
-         * @description BizMaster レコードを一覧取得します(ペイジング対応)。
+         * @description BizMaster レコードを業務コード順に一覧取得します(ペイジング対応)。
+         *     client_code で顧客を絞り、include_deleted=true で論理削除された業務（is_deleted）も含めます。
          */
         get: operations["get_bizes_endpoint_biz__get"];
         put?: never;
@@ -1535,9 +1581,9 @@ export interface components {
             description?: string | null;
             /**
              * Business Seq
-             * @description sequence num > 0
+             * @description sequence num 1-9999; omit for the client's next free number
              */
-            business_seq: number;
+            business_seq?: number | null;
         };
         /** BizMasterResponse */
         BizMasterResponse: {
@@ -1862,7 +1908,7 @@ export interface components {
         ClientCreate: {
             /**
              * Code
-             * @description client code must be 4 Characters
+             * @description client code: 4 letters or digits (upper-cased, fixed after creation)
              */
             code: string;
             /**
@@ -1929,14 +1975,21 @@ export interface components {
             name: string;
             /** Id */
             id: number;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** ClientUpdate */
         ClientUpdate: {
-            /**
-             * Code
-             * @description client code must be 4 characters
-             */
-            code?: string | null;
             /**
              * Name
              * @description client name max to 100
@@ -3818,7 +3871,9 @@ export interface operations {
     };
     get_clients_endpoint_clients__get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_inactive?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3832,66 +3887,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClientResponse"][];
-                };
-            };
-            /** @description Bad Request(リクエスト不正) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Not Found(データが見つからない) */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Conflict (Record already exists etc.) */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error(サーバーエラー) */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_client_endpoint_clients__post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ClientCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClientResponse"];
                 };
             };
             /** @description Bad Request(リクエスト不正) */
@@ -3941,19 +3936,24 @@ export interface operations {
             };
         };
     };
-    delete_client_endpoint_clients__client_id__delete: {
+    create_client_endpoint_clients__post: {
         parameters: {
             query?: never;
-            header?: never;
-            path: {
-                client_id: number;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
             };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientCreate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3963,6 +3963,24 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4011,7 +4029,10 @@ export interface operations {
     update_client_endpoint_clients__client_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
             path: {
                 client_id: number;
             };
@@ -4034,6 +4055,200 @@ export interface operations {
             };
             /** @description Bad Request(リクエスト不正) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deactivate_client_endpoint_clients__client_id__deactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                client_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    activate_client_endpoint_clients__client_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description acting staff user id (development only, until login exists) */
+                "x-staff-id"?: number | null;
+            };
+            path: {
+                client_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(操作する職員が指定されていない・存在しない) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4084,6 +4299,8 @@ export interface operations {
             query?: {
                 skip?: number;
                 limit?: number;
+                client_code?: string | null;
+                include_deleted?: boolean;
             };
             header?: never;
             path?: never;

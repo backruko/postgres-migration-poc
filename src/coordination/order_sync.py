@@ -25,6 +25,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.coordination import master_guards
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import DuplicatedRecordError
 from src.domain_biz import dependency_events
@@ -48,10 +49,14 @@ def _now() -> datetime:
 
 
 def register() -> None:
-    """plan の発生枠の変更・biz の依存関係の定義の変更の受け手として登録します（何度呼んでも1回だけ登録される）。"""
+    """
+    plan の発生枠の変更・biz の依存関係の定義の変更の受け手、顧客の無効化・業務の削除の前の確認（M1.1）として
+    登録します（何度呼んでも1回だけ登録される）。
+    """
     register_slot_listener(apply_slot_changes)
     dependency_events.register_dependency_listener(apply_dependency_change)
     template_events.register_template_listener(apply_template_deadline_change)
+    master_guards.register()
 
 
 def apply_template_deadline_change(db: Session, template: PlanTemplate) -> None:

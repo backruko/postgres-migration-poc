@@ -35,11 +35,14 @@ def get_biz_endpoint(biz_id: int, db: Session = Depends(get_db)):
     return get_biz(db=db, biz_id=biz_id)
 
 @router.get("/", response_model=list[BizMasterResponse], responses={**COMMON_ERRORS})
-def get_bizes_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def get_bizes_endpoint(
+    skip: int = 0, limit: int = 100, client_code: str | None = None, include_deleted: bool = False, db: Session = Depends(get_db),
+):
     """
-    BizMaster レコードを一覧取得します(ペイジング対応)。
+    BizMaster レコードを業務コード順に一覧取得します(ペイジング対応)。
+    client_code で顧客を絞り、include_deleted=true で論理削除された業務（is_deleted）も含めます。
     """
-    return get_bizes(db=db, skip=skip, limit=limit)
+    return get_bizes(db=db, skip=skip, limit=limit, client_code=client_code, include_deleted=include_deleted)
 
 @router.patch("/{biz_id}", response_model=BizMasterResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
 @require_roles([RoleCode.ADMIN])

@@ -23,7 +23,8 @@ class BizMasterBase(BaseModel):
         return v.upper() if v else v
 
 class BizMasterCreate(BizMasterBase):
-    business_seq: int = Field(..., gt=0, description="sequence num > 0")
+    # 省略すると顧客の次の空き番号（削除された業務の番号も使い回さない）。業務コードは作成後に変えられない（M1.1）
+    business_seq: int | None = Field(None, gt=0, le=9999, description="sequence num 1-9999; omit for the client's next free number")
 
 class BizMasterUpdate(BaseModel):
     name: str | None = Field(None, max_length=100)

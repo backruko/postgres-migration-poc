@@ -75,6 +75,7 @@ from src.domain_plan.schemas import (
 )
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
+from src.domain_client.services import require_active_client
 
 # ローリングホライズン: テンプレート作成時に「今から何日先まで」インスタンスを生成するか
 MATERIALIZE_HORIZON = timedelta(days=90)
@@ -467,8 +468,7 @@ def delete_holiday(db: Session, calendar_id: int, holiday_date: date) -> Calenda
 # ReferenceSheet Service
 # ==========================================
 def create_sheet(db: Session, sheet_in: ReferenceSheetCreate) -> ReferenceSheet:
-    if not client_repo.get_by_code(db, code=sheet_in.client_code):
-        raise NotFoundError(f"Client with code '{sheet_in.client_code}' does not exist.")
+    require_active_client(db, sheet_in.client_code)  # 無い顧客は 404、無効な顧客は 400（M1.1）
 
     sheet = ReferenceSheet(**sheet_in.model_dump())
     db.add(sheet)
@@ -672,8 +672,7 @@ def import_sheet(db: Session, import_in: ReferenceSheetImport, replace_events: b
     - 日付: 無いものは追加。replace_events=True の場合はファイルに無い日付を削除し、シートをファイルと完全一致させる
     - 日付が変わったマーカーを参照しているテンプレートは、未来分を自動で再照合する
     """
-    if not client_repo.get_by_code(db, code=import_in.client_code):
-        raise NotFoundError(f"Client with code '{import_in.client_code}' does not exist.")
+    require_active_client(db, import_in.client_code)  # 無い顧客は 404、無効な顧客は 400（M1.1）
 
     sheet = reference_sheet_repo.get_by_client_and_name(db, client_code=import_in.client_code, name=import_in.sheet_name)
     created = sheet is None
