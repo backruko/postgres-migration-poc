@@ -156,6 +156,13 @@ class OpeOrderRepository:
         )
         return list(db.scalars(stmt).all())
 
+    def count_unfinished_of_biz(self, db: Session, *, biz_id: int) -> int:
+        """業務の、完了・取消以外のオーダーの数（業務の削除の確認用。過去の日付のものも数える）"""
+        stmt = select(func.count(OpeOrder.id)).where(
+            OpeOrder.biz_master_id == biz_id, OpeOrder.status.not_in((OrderStatus.FINISHED, OrderStatus.CANCELED))
+        )
+        return int(db.scalar(stmt) or 0)
+
 
 # ==========================================
 #  OpeStep Repository

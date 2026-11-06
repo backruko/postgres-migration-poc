@@ -80,8 +80,10 @@ def test_refused_combinations(db):
         link(db, b, a)  # 逆向きの直接の循環
     link(db, a, c)  # 循環しない近道は作れる
 
-    # 削除された業務とは結べない
-    biz_services.delete_biz(db, c)
+    # 削除された業務とは結べない（定義の残る業務は delete_biz では消せない（M1.1）ので、リポジトリで直接論理削除する）
+    with pytest.raises(BadRequestError, match="dependency definition"):
+        biz_services.delete_biz(db, c)
+    biz_master_repo.remove(db, id=c)
     with pytest.raises(NotFoundError):
         link(db, c, b)
 

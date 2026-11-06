@@ -1,5 +1,5 @@
 import { http, unwrap } from "../../../shared/api/http";
-import type { BizMaster, BizMasterUpdate, SopVersion } from "../types";
+import type { BizMaster, BizMasterCreate, BizMasterUpdate, SopVersion } from "../types";
 
 /**
  * 選択肢として一度に取得する業務の上限。
@@ -11,6 +11,31 @@ export const bizApi = {
   /** 業務の一覧（論理削除されたものは含まれない）（GET /biz/） */
   list(signal?: AbortSignal): Promise<BizMaster[]> {
     return unwrap(http.GET("/biz/", { params: { query: { skip: 0, limit: LIST_LIMIT } }, signal }));
+  },
+
+  /** 顧客の業務の一覧（業務コード順）。includeDeleted で論理削除された業務も（GET /biz/?client_code=） */
+  listForClient(clientCode: string, includeDeleted: boolean, signal?: AbortSignal): Promise<BizMaster[]> {
+    return unwrap(
+      http.GET("/biz/", {
+        params: { query: { client_code: clientCode, include_deleted: includeDeleted, skip: 0, limit: LIST_LIMIT } },
+        signal,
+      }),
+    );
+  },
+
+  /** 業務の登録（業務管理者。business_seq を省くと顧客の次の空き番号）（POST /biz/） */
+  create(body: BizMasterCreate): Promise<BizMaster> {
+    return unwrap(http.POST("/biz/", { body }));
+  },
+
+  /** 業務の削除（論理削除。業務管理者。テンプレート・未完了のオーダー・依存関係が残っていると 400）（DELETE /biz/{id}） */
+  remove(bizId: number): Promise<BizMaster> {
+    return unwrap(http.DELETE("/biz/{biz_id}", { params: { path: { biz_id: bizId } } }));
+  },
+
+  /** 削除した業務を元に戻す（業務管理者。顧客が有効なときだけ）（POST /biz/{id}/restore） */
+  restore(bizId: number): Promise<BizMaster> {
+    return unwrap(http.POST("/biz/{biz_id}/restore", { params: { path: { biz_id: bizId } } }));
   },
 
   /** 業務の設定の変更（送った項目だけ変わる）（PATCH /biz/{id}） */

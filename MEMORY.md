@@ -25,12 +25,11 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   | SLA report | `feature/sla-report` → `706f166` | `GET /ops/sla` + nav 「SLA」 page `/reports/sla` (client × deadline month: 完了 / 遅れ / 期限内率 / 平均遅れ / 未完了の遅れ, CSV export) |
 - **Next: the MVP roadmap (decided by the user 2026-11-05 evening).** Goal: a small MVP online on the **internal
   network, own team only**. Order: **M1 → M2 → login → deployment**; the pool below waits until after go-live.
-  - **M1 client + business screens** (branch `feature/master-screens`, step plan proposed, not started): M1.1 backend —
-    client create / edit / deactivate / re-activate = admin (list open), deactivate refused while the client has active
-    businesses, `include_inactive` on the list, client code fixed; business `business_seq` optional → next free number
-    per client (never reusing a deleted business's number); M1.2 frontend — pages 「顧客」 `/settings/clients` and 「業務」
+  - **M1 client + business screens** (branch `feature/master-screens`): **M1.1 backend done (`2729ea7`)**, M1.2a 設定 menu done (`5a619b6`), M1.2b 顧客 page done (`2cfb5fa`), M1.2c 業務 page
+    built (uncommitted); details and the M1.2 step plan below in "M1"; M1.2 frontend — pages 「顧客」 `/settings/clients` and 「業務」
     `/settings/businesses?client=` (list, 登録, edit, 無効 / 有効 or 削除 / 元に戻す, link to 予定テンプレート), admin-only
-    buttons. User's decisions: clients deactivate only (no hard delete); business code automatic and fixed.
+    buttons. User's decisions: clients deactivate only (no hard delete); business code automatic and fixed;
+    (2026-11-06) business delete refused while in use; inactive client hidden + no new data; `GET /biz/` query params.
   - **M2 SOP**: backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
     delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
     is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
@@ -82,7 +81,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   ~2.5–6 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
   and with it the biz dependency and template listeners — is registered there). **Every new test file uses
   `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M G L N Q E
-  H J W F Y U. Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
+  H J W F Y U C. Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
   errors. Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic
   check` → no drift; run alembic with `export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed
   's#/dev_db$#/plan_check#')` (`.env` points at the user's `dev_db`). Frontend: `cd frontend && npm run build` passes.
@@ -114,7 +113,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 78 (2026-11-05, MVP deployment paragraph after the delivery-phase list)** — read with `{"kind": "view", "sinceRev": 78}` to see only newer edits, and
+**Last rev written by me: 79 (2026-11-06, M1 master-data paragraph before the MVP deployment paragraph)** — read with `{"kind": "view", "sinceRev": 79}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -729,6 +728,41 @@ Random client-code flake seen twice in Phase N (once unidentified, once `YCFD` i
 2026-11-05: `tests/client_codes.py` `new_client_code(prefix)`** (per-prefix shuffled pool, no repeats within a run) used by all
 21 test files (branch `fix/test-client-codes-all`). Use it in every new test file. Before: the other
 test files still draw `prefix + 3 hex` at random → proposed: move `test_plan.py`'s unique pool into a shared test module.
+
+### M1 — client + business master data (branch `feature/master-screens`, 2026-11-06; doc rev 79)
+User's decisions (all as I recommended): **business delete refused while in use** (dependency definitions, live plan
+templates, orders not finished / canceled — past-dated open orders count too); **inactive client = hidden from
+`GET /clients/` (unless `include_inactive=true`) + no new businesses / sheets / business restores**, history stays;
+**`GET /biz/?client_code=&include_deleted=`**. Earlier: clients never deleted; business code automatic and fixed.
+**M1.1 as built** (no migration — `client_master.is_active` already existed):
+- Client: `ClientCreate.code` pattern `^[A-Za-z0-9]{4}$` (upper-cased), name 1–100; `ClientUpdate` = name only,
+  `extra="forbid"` (sending `code` → 422); `ClientResponse` + `is_active`, `created_at`, `updated_at`. Endpoints:
+  `GET /clients/?include_inactive=` (open, code order) · `POST /clients/` 201 · `PATCH /clients/{id}` ·
+  `POST /clients/{id}/deactivate` · `POST /clients/{id}/activate` (all writes `@require_roles([ADMIN])`);
+  **`DELETE /clients/{id}` removed** (405). `client_services.require_active_client(db, code, lock=)` (404 / 400 inactive)
+  used by biz create / restore and plan `create_sheet` / `import_sheet`.
+- Business: `BizMasterCreate.business_seq` optional, 1–9999 (LPAD 4 would truncate 10000); omitted → client's max seq
+  **including deleted** + 1, client row locked `FOR UPDATE`; explicit number used by a live / deleted business → 409
+  (DB already had a global unique `biz_master_business_code_key`). `delete_biz` → 400 listing reasons; `restore_biz`
+  needs an active client.
+- Hooks (client / biz must not import biz / plan / ope): `domain_client/deactivation_checks.py`,
+  `domain_biz/delete_checks.py`; checks registered by `src/coordination/master_guards.py` (`register()` called from
+  `order_sync.register()`): alive businesses of the client; live templates (`plan_template_repo.get_by_biz`);
+  unfinished orders (`ope_order_repo.count_unfinished_of_biz`). Repos: `client_repo.get_list` / `get_locked` /
+  `get_locked_by_code`, `biz_master_repo.get_list` / `max_business_seq` / `count_alive_of_client`.
+- Tests `tests/test_master_data.py` (6; client prefix **`C`**). HTTP-checked on `plan_check` (24/24): **new client
+  `Z8E4` (id 2) with business `Z8E40001` live, `Z8E40002` / `0003` deleted**; MOCK0001 delete refused ("18 plan
+  template(s); 186 order(s) …"). Frontend types regenerated; no UI yet (M1.2). Committed `2729ea7`.
+
+**M1.2 step plan (approved 2026-11-06).** User's decisions (all as I recommended): business number **automatic with a
+preview** in the 登録 modal (no number field; API still accepts one for a load script); nav = **「設定」 dropdown**;
+業務 page edits **basics (名前 / 管理者メール / 説明) + a link** 「予定テンプレート・業務の設定」 → `/settings/templates?biz=`
+(release / client-event settings stay in that page's 業務の設定 panel).
+| # | Step | Status |
+|---|---|---|
+| M1.2a | `AppLayout`: カレンダー / 日次ダッシュボード / SLA flat; antd `Dropdown` 「設定」 (hover + click) with the 5 settings pages (`SETTINGS_PAGES`), button shows 「設定：<page>」 + active style when one is open (`currentSettingsPage`); links keep each page's last query string; CSS `.nav-menu*`. 顧客 / 業務 entries are added in M1.2b / c | **done** (`5a619b6`) |
+| M1.2b | 顧客 page `/settings/clients` (`features/client-settings`: `ClientSettingsPage` + `ClientFormModal`; `clientApi` create / update / deactivate / activate, `list(signal, includeInactive)`; `useAllClients`; `domain/client/lib/clients.ts` `canManageClients` (active admin), `normalizeClientCode`, `clientCodeError` (4 alnum, not used — inactive included), `deactivateBlockedReason`). Table コード / 顧客名 / 状態 / 業務 (count of live businesses; becomes a link in M1.2c) / 登録日 / 操作 (admin: 名前を変更, 無効にする — disabled with the reason while businesses remain — / 有効にする, confirm; backend message shown on refusal); inactive rows greyed (`is-past-row`); first entry of the 設定 menu. Harness 15/15 on plan_check (client `YA64` id 3 left active, its business deleted) | **done** (`2cfb5fa`) |
+| M1.2c | 業務 page `/settings/businesses?client=` (`features/business-settings`: `BusinessSettingsPage` + `BizFormModal`; `bizApi.listForClient(code, includeDeleted)` / `create` / `remove` / `restore`; `domain/biz/lib/businesses.ts` `canManageBusinesses` (active admin), `nextBusinessCode` (max seq incl. deleted + 1, null past 9999), `bizBasics` (blank → null), `bizUpdateBody` (changed fields only)). Client field like 業務の依存関係 (active clients; warning when `?client=` is inactive / unknown → no 登録 / 元に戻す). Table 業務コード / 業務名 (+ description) / 管理者メール / 状態 有効 / 削除済み / 操作: 「予定テンプレート・業務の設定」 (all users, live rows; navigate to `/settings/templates?biz=`), admin: 編集, 削除 (confirm; backend's in-use reasons shown 10 s), 元に戻す. 登録 modal shows the code it will get. 顧客 page 業務 column = link to this page; 業務 = 2nd entry of the 設定 menu; CSS `.biz-description`. Harness 16/16 on plan_check (YA64 now has YA640002 live, YA640001 deleted) | **built, uncommitted** |
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

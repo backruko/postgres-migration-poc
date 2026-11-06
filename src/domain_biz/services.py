@@ -12,30 +12,50 @@ from src.domain_biz.schemas import (
     SOPStepTemplateCreate,
 )
 from src.core.exceptions import BadRequestError, NotFoundError, DuplicatedRecordError
-from src.domain_biz import dependency_events
+from src.domain_biz import delete_checks, dependency_events
+from src.domain_client.services import require_active_client
 
 # ==========================================
 # BizMaster Service
 # ==========================================
+MAX_BUSINESS_SEQ = 9999  # 業務コード = 顧客コード + 連番4桁（LPAD 4）のため
+
+
 def create_biz(db: Session, biz_in: BizMasterCreate) -> BizMaster:
-    # 1. 存在チェック
-    client = client_repo.get_by_code(db, code=biz_in.client_code)
-    if not client:
-        raise NotFoundError(f"Client with code '{biz_in.client_code}' does not exist.")
+    # 顧客が有効であること。顧客の行をロックして採番する（同時の登録・無効化と重ならない）
+    client = require_active_client(db, biz_in.client_code, lock=True)
+    used = biz_master_repo.max_business_seq(db, client_code=client.code)
+    if biz_in.business_seq is None:
+        # 次の空き番号 = 削除された業務も含めた最大値 + 1（業務コードは使い回さない）
+        if used >= MAX_BUSINESS_SEQ:
+            raise BadRequestError(f"Client {client.code} has no business number left (max {MAX_BUSINESS_SEQ}).")
+        biz_in = biz_in.model_copy(update={"business_seq": used + 1})
+    else:
+        taken = db.scalars(
+            select(BizMaster)
+            .where(BizMaster.client_code == client.code, BizMaster.business_seq == biz_in.business_seq)
+            .execution_options(include_deleted=True)
+        ).first()
+        if taken:
+            state = "a deleted business" if taken.is_deleted else "another business"
+            raise DuplicatedRecordError(f"Business code {taken.business_code} is already used by {state}; codes are never reused.")
     try:
         return biz_master_repo.create(db, obj_in=biz_in)
     except IntegrityError:
         # 重複エラーが発生した場合、データベースのロールバックはリポジトリまたは共通処理に任せる前提
         raise DuplicatedRecordError(f"BizMaster with unique key already exists.")
 
-def get_biz(db: Session, biz_id: int) -> BizMaster:  
+def get_biz(db: Session, biz_id: int) -> BizMaster:
     db_obj = biz_master_repo.get(db, id=biz_id)
     if not db_obj:
-        raise NotFoundError(f"BizMaster(id={biz_id}) not found.") 
+        raise NotFoundError(f"BizMaster(id={biz_id}) not found.")
     return db_obj
 
-def get_bizes(db: Session, skip: int = 0, limit: int = 100) -> list[BizMaster]:
-    return biz_master_repo.get_multi(db, skip=skip, limit=limit)
+def get_bizes(
+    db: Session, skip: int = 0, limit: int = 100, client_code: str | None = None, include_deleted: bool = False,
+) -> list[BizMaster]:
+    code = client_code.strip().upper() if client_code else None
+    return biz_master_repo.get_list(db, client_code=code, include_deleted=include_deleted, skip=skip, limit=limit)
 
 def _check_client_event_settings(db: Session, biz: BizMaster, biz_in: BizMasterUpdate) -> None:
     """
@@ -72,16 +92,35 @@ def update_biz(db: Session, biz_id: int, biz_in: BizMasterUpdate) -> BizMaster:
         raise DuplicatedRecordError(f"Update failed: Unique constraint violation.")
 
 def delete_biz(db: Session, biz_id: int) -> BizMaster:
+    """
+    業務を論理削除します。使われている間（依存関係の定義・テンプレート・未完了のオーダーが残る間）は断ります（M1.1）。
+    テンプレートを先に削除すると、未リリース・リリース済のオーダーは取消になります。
+    """
+    biz = biz_master_repo.get(db, id=biz_id)
+    if not biz:
+        # 見つからない(None)なら、ビジネスエラーに変換して raise する役割
+        raise NotFoundError(f"BizMaster(id={biz_id}) not found for deletion.")
+    reasons: list[str] = []
+    dependencies = biz_dependency_repo.get_for_biz(db, biz_id=biz.id)
+    if dependencies:
+        reasons.append(f"{len(dependencies)} dependency definition(s)")
+    reasons.extend(delete_checks.reasons_not_to_delete(db, biz))
+    if reasons:
+        raise BadRequestError(f"Business {biz.business_code} is still in use: " + "; ".join(reasons) + ". Remove them first.")
     deleted_obj = biz_master_repo.remove(db, id=biz_id)
     if not deleted_obj:
-        # 見つからない(None)なら、ビジネスエラーに変換して raise する役割
         raise NotFoundError(f"BizMaster(id={biz_id}) not found for deletion.")
     return deleted_obj
 
 def restore_biz(db: Session, biz_id: int) -> BizMaster:
     """
-    論理削除された BizMaster レコードを復元します。
+    論理削除された BizMaster レコードを復元します（顧客が有効なときだけ）。
     """
+    deleted = db.scalars(
+        select(BizMaster).where(BizMaster.id == biz_id, BizMaster.is_deleted.is_(True)).execution_options(include_deleted=True)
+    ).first()
+    if deleted:
+        require_active_client(db, deleted.client_code, lock=True)
     # 1. Repositoryのrestoreを呼び出す
     # （内部でスコープ解除、復元、重複チェック、DuplicatedRecordErrorの送出まで完結しています）
     restored_obj = biz_master_repo.restore(db, id=biz_id)

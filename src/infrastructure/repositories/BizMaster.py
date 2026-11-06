@@ -1,4 +1,4 @@
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from src.infrastructure.repositories.base import SoftCRUDBase
@@ -6,7 +6,30 @@ from src.domain_biz.models import BizDependency, BizMaster
 from src.domain_biz.schemas import BizMasterCreate, BizMasterUpdate
 
 class BizMasterRepository(SoftCRUDBase[BizMaster, BizMasterCreate, BizMasterUpdate]):
-    pass
+    def get_list(
+        self, db: Session, *, client_code: str | None = None, include_deleted: bool = False, skip: int = 0, limit: int = 100,
+    ) -> list[BizMaster]:
+        """業務の一覧（業務コード順）。顧客で絞れる。include_deleted=True で論理削除された業務も含める"""
+        stmt = select(BizMaster).order_by(BizMaster.business_code, BizMaster.id).offset(skip).limit(limit)
+        if client_code is not None:
+            stmt = stmt.where(BizMaster.client_code == client_code)
+        if include_deleted:
+            stmt = stmt.execution_options(include_deleted=True)
+        return list(db.scalars(stmt).all())
+
+    def max_business_seq(self, db: Session, *, client_code: str) -> int:
+        """顧客の業務連番の最大値（論理削除された業務も含む。業務コードは使い回さない）。業務が無ければ 0"""
+        stmt = (
+            select(func.coalesce(func.max(BizMaster.business_seq), 0))
+            .where(BizMaster.client_code == client_code)
+            .execution_options(include_deleted=True)
+        )
+        return int(db.scalar(stmt) or 0)
+
+    def count_alive_of_client(self, db: Session, *, client_code: str) -> int:
+        """顧客の（論理削除されていない）業務の数"""
+        stmt = select(func.count(BizMaster.id)).where(BizMaster.client_code == client_code, BizMaster.deleted_at.is_(None))
+        return int(db.scalar(stmt) or 0)
 
 
 
