@@ -10,8 +10,8 @@ setup was merged and handed to the user for a test on the VM.
 - **`main` = `origin/main` = `6390c87` (pushed by the user, 2026-11-06).** After `895cbe5` the user committed `a00b2b1`
   "mvp" / `242dda6` "staging" (MEMORY.md + a `deploy_package.zip`) and `6390c87` "git" (zip removed again; it held no
   secrets). **The VM reaches only the office network (no GitHub): code goes as a zip on a USB
-  drive** (user, 2026-11-06); whether it reaches Docker Hub / PyPI / npm is **unknown — the user checks** (see §2
-  "Go-live" G.3). The user pushes; I never do. The user
+  drive** (user, 2026-11-06); it reaches the internet **only through a corporate HTTP/HTTPS proxy** (built for in G.3,
+  see §2 "Go-live"). The user is installing Windows Server on the machine **for now only — the final server is Linux**. The user pushes; I never do. The user
   sometimes commits a step themselves — check `git log` before committing.
 - **Built and merged into `main`:** all design-doc phases (1 daily dashboard · 2 generation job · 3 staff · 4 ope
   orders · 5 steps / maker-checker · 6 dependencies (+ L latest-before) · 7 client events / signals · 8 deadlines / due
@@ -112,7 +112,7 @@ setup was merged and handed to the user for a test on the VM.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 91 (2026-11-06: "Go-live" paragraph after "MVP deployment" — pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, internet check open, GO-LIVE.md)** — read with `{"kind": "view", "sinceRev": 91}` to see only newer edits, and
+**Last rev written by me: 92 (2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 92}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -988,7 +988,8 @@ moment, cap 60 s", much simpler).
 - `deploy/README.md` (Japanese runbook): first start, first admin via `docker compose exec app python
   scripts/create_staff.py admin "…" --roles system_admin admin`, update (`git pull` + `docker compose up -d --build`),
   logs, backup now / restore (`pg_restore --clean --if-exists --no-owner` with app + worker stopped), common commands,
-  notes (COOKIE_SECURE, `/api/openapi.json`, no Task Scheduler on the server).
+  notes (COOKIE_SECURE, `/api/openapi.json`, no Task Scheduler on the server). **Superseded by G.3** (§2 "Go-live"):
+  no git on the server — USB zip, `deploy/install.sh`, `/srv/ops` layout, proxies.
 - Repo: `.dockerignore` (root), `.gitattributes` `*.sh text eol=lf`, `.gitignore` + `deploy/backups/`, `deploy/logs/`
   (`deploy/.env` already ignored by `.env`).
 - **Not verified (no Docker here):** image builds (python:3.14-slim + `psycopg-binary` wheel, `npm ci` in node:24),
@@ -998,15 +999,46 @@ moment, cap 60 s", much simpler).
 ### Go-live (branch `feature/go-live` from `main` `6390c87`, 2026-11-06)
 User's decisions: see §1 "Go-live decisions". Then (2026-11-06): **the VM can't reach GitHub → code by zip on a USB
 drive**; **VM layout = a fresh folder per zip, data outside** (`.env`, backups, logs in one fixed folder such as
-`/srv/ops`, so a file removed in a new version — e.g. a renamed migration — can't linger and break alembic). **Open:
-does the VM reach Docker Hub / PyPI / npm** (directly or via a proxy)? The user runs `docker pull hello-world`, `curl
--sI https://pypi.org/simple/`, `curl -sI https://registry.npmjs.org/` on the VM. If not: images must be built on a
-machine with Docker + internet and carried as `docker save` tars (the office PC has no Docker / WSL).
+`/srv/ops`, so a file removed in a new version — e.g. a renamed migration — can't linger and break alembic). Then
+(user): **internet only through a corporate HTTP/HTTPS proxy**; Windows Server is temporary, **the final server is
+Linux**. Decisions (all as I recommended): **build on the server through the proxy** (not `docker save` tars — no
+machine with Docker + internet exists); **optional company CA** for proxies that inspect HTTPS. Checking it on the server
+is still to do: `docker pull hello-world`, `curl -sI https://pypi.org/simple/`, `curl -sI https://registry.npmjs.org/`.
 | # | Step | Status |
 |---|---|---|
 | G.1 | `scripts/setup_calendar.py [--code JP_BANK] [--name 銀行営業日] [--weekend 6 7]`: creates the business calendar via `create_calendar`; existing code → prints it, changes nothing, exit 0 (note on stderr when `--weekend` differs); bad input exit 1. `tests/test_setup_calendar.py` (2, no client) | **done** (`450f03e`) |
-| G.2 | `deploy/GO-LIVE.md` (Japanese checklist: A pre-check + **restore drill into a scratch DB `ops_restore_check`** with `deploy/restore-check.sql` = alembic version + 6 table counts, B first admin / setup_calendar / holidays incl. bank 12/31 1/2 1/3, C pilot client incl. "SOP effective tomorrow at the earliest → approve the day before the first order", D staff + role table + four-eyes, E orders + `create_orders.py` → `Created 0 orders`, F browser checks, G first days: worker / backup / NAS / plan extension log lines, H other clients); README §1 links it; doc rev 91. Checked: drill commands with local PG 16 tools on plan_check (restore exit 0, counts identical, scratch DB dropped), `create_orders.py` output, UI labels / messages grepped from the frontend. Docker-only commands not run | **built, uncommitted** |
-| G.3 | USB / zip transport: package command (`git archive`), compose + runbook for "fresh folder, data outside", and — depending on the internet check — proxy settings or `docker save` / `load` | planned, waits for the user's check |
+| G.2 | `deploy/GO-LIVE.md` (Japanese checklist: A pre-check + **restore drill into a scratch DB `ops_restore_check`** with `deploy/restore-check.sql` = alembic version + 6 table counts, B first admin / setup_calendar / holidays incl. bank 12/31 1/2 1/3, C pilot client incl. "SOP effective tomorrow at the earliest → approve the day before the first order", D staff + role table + four-eyes, E orders + `create_orders.py` → `Created 0 orders`, F browser checks, G first days: worker / backup / NAS / plan extension log lines, H other clients); README §1 links it; doc rev 91. Checked: drill commands with local PG 16 tools on plan_check (restore exit 0, counts identical, scratch DB dropped), `create_orders.py` output, UI labels / messages grepped from the frontend. Docker-only commands not run | **done** (`3771751`) |
+| G.3 | USB zip + proxy (as built below) | **built, uncommitted** |
+
+**G.3 as built** (no migration, no app code). Layout on the server: `/srv/ops/{.env, certs/, backups/, logs/,
+releases/ops-YYYYMMDD-<sha>/, current -> releases/…}`; all `docker compose` commands in `/srv/ops/current/deploy`.
+- `scripts/make_package.py [--out packages] [--allow-dirty]`: refuses with uncommitted tracked changes; `git -c
+  core.autocrlf=false archive --format=zip --prefix=ops-<commit date>-<sha>/` of HEAD → `packages/` (git-ignored);
+  prints the two server commands. **The `-c core.autocrlf=false` matters:** the office PC has `autocrlf=true`, and a
+  plain `git archive` turned 281 of 285 files CRLF; with it, 0.
+- `deploy/install.sh` (same for first install and updates; `OPS_HOME` default `/srv/ops`): needs `/srv/ops/.env`
+  (else prints the cp command, exit 1) → `ln -sfn` it as the release's `deploy/.env` → copies `/srv/ops/certs/*.crt` into
+  `deploy/certs/` → if the `backup` service is running (`docker compose ps -q backup`; project name fixed `ops`, so the
+  old release's containers are visible) `backup.sh once` → `docker compose up -d --build` (blocks until app is healthy
+  because worker depends on it) → only then `ln -sfn` release as `/srv/ops/current` → `ps`. Rollback = run an older
+  release's install.sh (README warns: not across a migration; restore the pre-update backup instead).
+- Proxy: compose `x-build-args` (HTTP_PROXY / HTTPS_PROXY / NO_PROXY + lowercase, from `.env`, empty = direct) on app,
+  worker and web builds — Docker's predefined build args, no `ARG`, not kept in the image; **not** passed to running
+  containers, and `x-app-env` sets `NO_PROXY=localhost,127.0.0.1,db,app,web` in case Docker injects proxies (the app
+  healthcheck uses urllib, which honors it). `docker pull` proxy = `/etc/docker/daemon.json` `proxies` (README §0;
+  Docker Engine 23+), apt proxy `/etc/apt/apt.conf.d/95proxy`.
+- Company CA: `deploy/certs/` (README.md only in git; `*.crt` / `*.pem` git-ignored). app image: copied to
+  `/usr/local/share/ca-certificates/company/` + `update-ca-certificates` + `PIP_CERT=/etc/ssl/certs/ca-certificates.crt`;
+  web build: `*.crt` concatenated → `NODE_EXTRA_CA_CERTS` for `npm ci` (only when a file exists). Host trust for `docker
+  pull`: README §0.5.
+- `.env.example`: `BACKUP_DIR=/srv/ops/backups`, new `LOG_DIR=/srv/ops/logs` (compose `${LOG_DIR:-./logs}`), proxy
+  block. README rewritten (folder layout, §0 server prep with proxies, §1 first start via zip, §2 update / rollback,
+  `sudo` + `/srv/ops/current/deploy` everywhere); GO-LIVE.md paths updated. `.dockerignore` + `packages`.
+- Checked: compose parsed with js-yaml (anchors expand on app / worker / web, NO_PROXY in app / worker env, volumes);
+  `sh -n` install.sh / backup.sh; pyright 0; make_package refused dirty, built a 731 KB zip (285 files, one top
+  folder, no `.env` / logs / node_modules, 0 CR); install.sh with a fake `docker` in Git Bash: no .env → exit 1, first
+  install, update with backup first, failed build → exit 1 and `current` untouched. **Not checked (no Docker):** the
+  builds through a real proxy, `update-ca-certificates` in python:3.14-slim, NODE_EXTRA_CA_CERTS with npm, daemon.json.
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

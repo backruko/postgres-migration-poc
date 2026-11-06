@@ -4,7 +4,7 @@
 最初は **1 つの顧客だけ**（パイロット）で始め、数日使って問題がなければ残りの顧客を足します（H）。
 サーバーの立て方・更新・ログ・バックアップの基本は [README.md](README.md) を見てください。
 
-- コマンドはすべて `deploy` フォルダーで実行します（`docker compose …`）。
+- コマンドはすべて `/srv/ops/current/deploy` で実行します（`docker compose …`。docker グループに入っていなければ先頭に `sudo`）。
 - `-U ops -d ops` は `.env` の `POSTGRES_USER` / `POSTGRES_DB` です。違う値にしたときは読み替えてください。
 - 画面の操作には **業務管理者**（設定の変更）や **システム管理者**（職員の管理）のロールが要ります。
 
@@ -18,9 +18,9 @@
 
   ```sh
   docker compose exec backup sh /backup.sh once        # 今すぐバックアップ（ファイル名がログに出る）
-  ls backups/                                          # .env の BACKUP_DIR を変えたときはそのフォルダー
+  ls /srv/ops/backups/                                 # .env の BACKUP_DIR を変えたときはそのフォルダー
   docker compose exec db createdb -U ops ops_restore_check
-  docker compose exec -T db pg_restore --no-owner -U ops -d ops_restore_check < backups/ops_YYYYMMDD_HHMMSS.dump
+  docker compose exec -T db pg_restore --no-owner -U ops -d ops_restore_check < /srv/ops/backups/ops_YYYYMMDD_HHMMSS.dump
   docker compose exec -T db psql -X -A -t -U ops -d ops < restore-check.sql
   docker compose exec -T db psql -X -A -t -U ops -d ops_restore_check < restore-check.sql
   docker compose exec db dropdb -U ops ops_restore_check
@@ -92,7 +92,7 @@
 ## G. 最初の数日
 
 - [ ] 翌朝: 自動リリースの業務があれば `docker compose logs worker` に `Released … pending automatic orders` が出ている
-- [ ] 翌朝: バックアップのフォルダーに 01:00 のファイル `ops_YYYYMMDD_0100xx.dump` がある
+- [ ] 翌朝: `/srv/ops/backups/` に 01:00 のファイル `ops_YYYYMMDD_0100xx.dump` がある
 - [ ] NAS への同期を OS 側で設定した（バックアップのフォルダーを同期。`*.partial` は書き込み中なので外す）
 - [ ] 2 日目以降: `docker compose logs worker` に毎日 00:05 過ぎの `Plan extension: …` が出ている
 

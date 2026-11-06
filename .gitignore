@@ -69,3 +69,8 @@ frontend/.vite/
 # ==========================================
 deploy/backups/
 deploy/logs/
+# 会社の証明書（サーバーの /srv/ops/certs/ に置く。deploy/certs/README.md）
+deploy/certs/*.crt
+deploy/certs/*.pem
+# scripts/make_package.py が作るサーバー用の zip
+packages/
