@@ -63,3 +63,9 @@ node_modules/
 frontend/dist/
 # Vite の依存キャッシュ（起動のたびに作り直される）
 frontend/.vite/
+
+# ==========================================
+# Deployment (deploy/): server settings, backups, logs
+# ==========================================
+deploy/backups/
+deploy/logs/

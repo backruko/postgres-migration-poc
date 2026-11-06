@@ -31,8 +31,10 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   - **M2 SOP screens: done, merged into `main` (`28b94b6`, 2026-11-06, not pushed; user browser-tested OK)** —
     commits `5b054ea` M2.1 … `17aa788` M2.6 (detail in §2 "M2").
   - **Login** (branch `feature/login` from `main` `28b94b6`; plan approved 2026-11-06, see §2 "Login"):
-    LG.1 `3a93ffd` (migration `b4e8d2a6c913`), LG.2 `c644b4d` (backend switch), **LG.3 frontend built,
-    uncommitted** — then merge; next: deployment.
+    LG.1 `3a93ffd` (migration `b4e8d2a6c913`), LG.2 `c644b4d` (backend switch), LG.3 `311c38e` (frontend).
+    **Not merged into `main` yet** (the user hasn't said "merge"); `feature/deployment` branches from it.
+  - **Deployment files built 2026-11-06, uncommitted** on `feature/deployment` (from `feature/login` `311c38e`);
+    see §2 "Deployment". Not run anywhere yet: **no Docker on the office PC**.
   - **Deployment** (user's decisions 2026-11-05, doc rev 78): **Linux VM + Docker Compose**, services `db`
     (PostgreSQL 16, volume, daily `pg_dump`), `app` (uvicorn + production frontend build same-origin with SPA
     fallback), **`worker`** = a loop replacing Task Scheduler: release due orders, sleep until the next release
@@ -112,7 +114,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 86 (2026-11-06, LG.2: "MVP login" paragraph says login for everything; "Who changed it" paragraph now says the logged-in staff)** — read with `{"kind": "view", "sinceRev": 86}` to see only newer edits, and
+**Last rev written by me: 89 (2026-11-06, "MVP deployment" paragraph: what was built — HTTP intranet, nginx web, migrations at start, nightly backup)** — read with `{"kind": "view", "sinceRev": 89}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -872,7 +874,7 @@ as CSRF protection (same-origin app). Step names **LG.x** (L.x is the latest-bef
 |---|---|---|
 | LG.1 | Model + building blocks (no endpoint uses them yet); migration `b4e8d2a6c913` | **done** (`3a93ffd`) |
 | LG.2 | Backend switch: `/auth/login` / `logout` / `password`, cookie in `get_current_staff`, X-Staff-Id removed, Bearer key on `POST /ope/signals`, must_change_password → 403 elsewhere, temporary password + API key endpoints (system_admin), suspend / password ends sessions, `create_staff.py` password prompt + `scripts/set_password.py`, guard tests; update the doc's X-Staff-Id paragraph | **done** (`c644b4d`) |
-| LG.3 | Frontend (as built below) | **built, uncommitted** |
+| LG.3 | Frontend (as built below) | **done** (`311c38e`) |
 
 **LG.1 as built** (migration `b4e8d2a6c913`). `staff_user` + `password_hash` (String 255, null = cannot log in),
 `must_change_password`, `failed_logins`, `locked_until`, `password_changed_at`. New `staff_session` (`token_hash`
@@ -953,6 +955,47 @@ call needs a session (or the signal API key); open: `/auth/login`, `/auth/logout
   PASSWORD_CHANGE_REQUIRED → change → unblocked, API key issue / list / revoke / non-sender 400; **curl through Vite 5174**:
   401 → login Set-Cookie passes the proxy → 200 → logout 204 → 401; `/login` served. plan_check staff 6 password is
   `check-pass-6` again; API key on staff 10 revoked. **Not checked: the browser.**
+
+### Deployment (branch `feature/deployment`, 2026-11-06; doc rev 89)
+User's decisions: **intranet, plain HTTP, no domain, no HTTPS**; **daily `pg_dump` to a local folder** (`./backups`),
+the user syncs it to the NAS at OS level; (asked, as I recommended) **01:00 JST, keep 14 days**; **migrations run
+automatically at app start**. Earlier: Linux VM + Docker Compose, worker loop. My calls: a separate **`web` (nginx)**
+service serves the built frontend and proxies `/api/` → `app:8000/` (same origin, like the Vite proxy) instead of
+FastAPI serving static files; compose files live in **`deploy/`** (so the dev `.env` at the root is never read by
+Compose; build context `..`); **uvicorn 1 process** (one writer for the rotating `app.log`); worker checks releases at
+**second 1 of every minute** (release times are minute-granular ⇒ ≤ 1 min late, same outcome as "sleep until the next
+moment, cap 60 s", much simpler).
+- `scripts/worker.py`: `order_sync.register()`, loop: plan extension once a day after `WORKER_EXTEND_AT` (00:05 JST;
+  also right after start if that day's run hasn't happened), then `release_due_orders`, then
+  `stop.wait(seconds_until_next_run)`; errors logged, loop continues; SIGTERM/SIGINT stop after the current pass;
+  logs to stdout (releases logged only when something was released). Pure helpers `seconds_until_next_run`,
+  `extension_due`, `parse_time` → `tests/test_worker.py` (2, no DB). Ran 75 s against plan_check OK.
+- `deploy/app.Dockerfile` (python:3.14-slim + tzdata, TZ=Asia/Tokyo, requirements, copies alembic / main.py / src /
+  scripts; `deploy/app-entrypoint.sh`: mkdir logs, `alembic upgrade head`, `exec uvicorn main:app --host 0.0.0.0
+  --port 8000 --workers 1 --proxy-headers`), CRLF stripped in the image. `deploy/web.Dockerfile` (node:24-alpine
+  `npm ci` + `npm run build` → nginx:1.27-alpine) + `deploy/nginx.conf` (SPA fallback `try_files $uri /index.html`,
+  `/assets/` cached 1 y immutable, index no-cache).
+- `deploy/docker-compose.yml` (project `ops`): `db` postgres:16 (volume `pgdata`, pg_isready healthcheck), `app`
+  (image `ops-app`, `./logs:/app/logs`, `LOG_FILE=/app/logs/app.log`, healthcheck GET `/`), `worker` (same image,
+  `python scripts/worker.py`, waits for app healthy = migrations done), `web` (image `ops-web`, port
+  `${HTTP_PORT:-80}:80`), `backup` (postgres:16 running `deploy/backup.sh` mounted read-only, `${BACKUP_DIR:-./backups}`);
+  shared env `DATABASE_URL` built from `POSTGRES_*`, `ENVIRONMENT=production`, `COOKIE_SECURE=false`, `TZ`; json-file
+  logs 10 MB × 5. DB port not published. `deploy/.env.example` (POSTGRES_DB / USER / PASSWORD — letters + digits only,
+  HTTP_PORT, BACKUP_DIR / TIME / KEEP_DAYS).
+- `deploy/backup.sh`: daily loop (GNU `date -d "today/tomorrow HH:MM"`), `pg_dump --format=custom --compress=6` to
+  `<db>_YYYYMMDD_HHMMSS.dump` via a `.partial` name, then `find -mtime +(KEEP-1) -delete` (KEEP 0 = keep all); `once`
+  argument for an immediate dump; `BACKUP_DEST` overrides `/backups` (for testing). Tested on the office PC with the local
+  PostgreSQL 16 `pg_dump` against plan_check: dump 212 KB, `pg_restore --list` OK, 20-day file removed / 5-day kept, the
+  loop fired at the set minute.
+- `deploy/README.md` (Japanese runbook): first start, first admin via `docker compose exec app python
+  scripts/create_staff.py admin "…" --roles system_admin admin`, update (`git pull` + `docker compose up -d --build`),
+  logs, backup now / restore (`pg_restore --clean --if-exists --no-owner` with app + worker stopped), common commands,
+  notes (COOKIE_SECURE, `/api/openapi.json`, no Task Scheduler on the server).
+- Repo: `.dockerignore` (root), `.gitattributes` `*.sh text eol=lf`, `.gitignore` + `deploy/backups/`, `deploy/logs/`
+  (`deploy/.env` already ignored by `.env`).
+- **Not verified (no Docker here):** image builds (python:3.14-slim + `psycopg-binary` wheel, `npm ci` in node:24),
+  nginx config, compose start-up order / healthchecks, the backup service inside the postgres image. First real run =
+  on the VM; check `docker compose ps` / `logs`.
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

@@ -1,0 +1,20 @@
+# docker build の起点（リポジトリのルート）から送らないもの
+.git
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+!.env.example
+*.log
+*.log.*
+frontend/node_modules
+frontend/dist
+deploy/.env
+deploy/backups
+deploy/logs
+mock_data
+tests
+.vscode
+.idea
