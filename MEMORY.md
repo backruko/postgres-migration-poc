@@ -32,9 +32,9 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
     commits `5b054ea` M2.1 … `17aa788` M2.6 (detail in §2 "M2").
   - **Login** (branch `feature/login` from `main` `28b94b6`; plan approved 2026-11-06, see §2 "Login"):
     LG.1 `3a93ffd` (migration `b4e8d2a6c913`), LG.2 `c644b4d` (backend switch), LG.3 `311c38e` (frontend).
-    **Not merged into `main` yet** (the user hasn't said "merge"); `feature/deployment` branches from it.
-  - **Deployment files built 2026-11-06, uncommitted** on `feature/deployment` (from `feature/login` `311c38e`);
-    see §2 "Deployment". Not run anywhere yet: **no Docker on the office PC**.
+  - **Deployment files** `7a2e3c6` on `feature/deployment` (from `feature/login`); see §2 "Deployment".
+  - **Login + deployment merged into `main` (`895cbe5`, 2026-11-06, not pushed).** Never run in Docker yet (no Docker
+    on the office PC) — **waiting for the user's test report from the VM** before anything else.
   - **Deployment** (user's decisions 2026-11-05, doc rev 78): **Linux VM + Docker Compose**, services `db`
     (PostgreSQL 16, volume, daily `pg_dump`), `app` (uvicorn + production frontend build same-origin with SPA
     fallback), **`worker`** = a loop replacing Task Scheduler: release due orders, sleep until the next release
