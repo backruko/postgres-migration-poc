@@ -31,7 +31,8 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   - **M2 SOP screens: done, merged into `main` (`28b94b6`, 2026-11-06, not pushed; user browser-tested OK)** —
     commits `5b054ea` M2.1 … `17aa788` M2.6 (detail in §2 "M2").
   - **Login** (branch `feature/login` from `main` `28b94b6`; plan approved 2026-11-06, see §2 "Login"):
-    **LG.1 built, uncommitted** (migration `b4e8d2a6c913`); LG.2 backend switch, LG.3 frontend to do.
+    LG.1 `3a93ffd` (migration `b4e8d2a6c913`), **LG.2 built, uncommitted** (backend switched: the current
+    frontend gets 401 everywhere until LG.3); LG.3 frontend to do.
   - **Deployment** (user's decisions 2026-11-05, doc rev 78): **Linux VM + Docker Compose**, services `db`
     (PostgreSQL 16, volume, daily `pg_dump`), `app` (uvicorn + production frontend build same-origin with SPA
     fallback), **`worker`** = a loop replacing Task Scheduler: release due orders, sleep until the next release
@@ -79,7 +80,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   ~2.5–6 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
   and with it the biz dependency and template listeners — is registered there). **Every new test file uses
   `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M G L N Q E
-  H J W F Y U C X Z. Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
+  H J W F Y U C X Z (test_credentials / test_login use no client). Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
   errors. Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic
   check` → no drift; run alembic with `export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed
   's#/dev_db$#/plan_check#')` (`.env` points at the user's `dev_db`). Frontend: `cd frontend && npm run build` passes.
@@ -111,7 +112,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 82 (2026-11-06, "MVP login" paragraph after the master-data paragraph; the older "Who changed it … X-Staff-Id" paragraph in Propagating plan changes must be updated in LG.2)** — read with `{"kind": "view", "sinceRev": 82}` to see only newer edits, and
+**Last rev written by me: 86 (2026-11-06, LG.2: "MVP login" paragraph says login for everything; "Who changed it" paragraph now says the logged-in staff)** — read with `{"kind": "view", "sinceRev": 86}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -869,8 +870,8 @@ stdlib `hashlib.scrypt` (no new dependency), cookie `Secure` from a setting (off
 as CSRF protection (same-origin app). Step names **LG.x** (L.x is the latest-before phase).
 | # | Step | Status |
 |---|---|---|
-| LG.1 | Model + building blocks (no endpoint uses them yet); migration `b4e8d2a6c913` | **built, uncommitted** |
-| LG.2 | Backend switch: `/auth/login` / `logout` / `password`, cookie in `get_current_staff`, X-Staff-Id removed, Bearer key on `POST /ope/signals`, must_change_password → 403 elsewhere, temporary password + API key endpoints (system_admin), suspend / password ends sessions, `create_staff.py` password prompt + `scripts/set_password.py`, guard tests; update the doc's X-Staff-Id paragraph | todo |
+| LG.1 | Model + building blocks (no endpoint uses them yet); migration `b4e8d2a6c913` | **done** (`3a93ffd`) |
+| LG.2 | Backend switch: `/auth/login` / `logout` / `password`, cookie in `get_current_staff`, X-Staff-Id removed, Bearer key on `POST /ope/signals`, must_change_password → 403 elsewhere, temporary password + API key endpoints (system_admin), suspend / password ends sessions, `create_staff.py` password prompt + `scripts/set_password.py`, guard tests; update the doc's X-Staff-Id paragraph | **built, uncommitted** |
 | LG.3 | Frontend: `/login`, 401 → login, forced password change, nav name + パスワード変更 + ログアウト (replaces 操作する職員), 職員 page 仮パスワード + API キー | todo |
 
 **LG.1 as built** (migration `b4e8d2a6c913`). `staff_user` + `password_hash` (String 255, null = cannot log in),
@@ -889,6 +890,40 @@ ends the staff's other sessions), `authenticate` (row locked; unknown login stil
 `revoke_api_key`. New `ErrorCode`s `PASSWORD_CHANGE_REQUIRED`, `ACCOUNT_LOCKED` (`INVALID_CREDENTIALS` existed).
 Messages are English like the rest of the API; the login page maps codes to Japanese (LG.3). Tests
 `tests/test_credentials.py` (6, no client). Round trip + `alembic check` on plan_check OK.
+
+**LG.2 as built** (no migration). User decision 2026-11-06 (as I recommended): **login for everything** — every API
+call needs a session (or the signal API key); open: `/auth/login`, `/auth/logout`, `/openapi.json` + `/docs`, `/`
+(and the old `/test-error` in main.py).
+- `src/domain_staff/auth.py`: `SESSION_COOKIE = "ops_session"`; `get_current_staff(request, db, session_token =
+  APIKeyCookie, bearer = HTTPBearer)` (OpenAPI shows `security: APIKeyCookie / HTTPBearer`): session → staff and
+  `request.state.session_id`; Bearer key only on **`API_KEY_ROUTES = {("POST", "/ope/signals")}`** (route path from
+  `request.scope["route"]`); commits the touch; cached on `request.state.staff`; else 401 "Login required.".
+  `require_login` (added to every router in `main.py`: `include_router(..., dependencies=[Depends(require_login)])`):
+  non-active → 403 `STAFF_NOT_ACTIVE` except `GET /staff/me`; `must_change_password` → 403 `PASSWORD_CHANGE_REQUIRED`
+  except **`PASSWORD_CHANGE_ROUTES`** (`GET /staff/me`, `POST /auth/password`, `POST /auth/logout`).
+  `current_session_id(request)`. `require_roles` / `require_active` unchanged. **X-Staff-Id is gone.**
+- `src/domain_staff/auth_router.py` (`/auth`, no global dependency): `POST /login` (`LoginIn`) → `StaffResponse` +
+  cookie (HttpOnly, SameSite=Lax, Path=/, max-age 7 d, `Secure` if **`COOKIE_SECURE=1`** — new `settings.cookie_secure`,
+  default false); `POST /logout` → 204, revokes + deletes the cookie (works without a session); `POST /password`
+  (`PasswordChangeIn`; `Depends(require_login)`; wrong current → 401, same as current → 400; keeps this session).
+- Staff router (system_admin): `PUT /staff/{id}/password` (`TemporaryPasswordIn`; not yourself → 400) · `GET /staff/{id}/api-keys`
+  · `POST /staff/{id}/api-keys` (`ApiKeyCreate {label}` → 201 `ApiKeyIssuedResponse` with `key` once) ·
+  `POST /staff/api-keys/{key_id}/revoke`. `set_staff_status` to non-active revokes the staff's sessions.
+  `StaffResponse` + `has_password`, `must_change_password`, `locked_until` (model property `has_password`).
+- Services `login` (commits failure counts even when it raises), `logout`, `change_own_password`,
+  `set_temporary_password`, `list_api_keys`, `issue_api_key`, `revoke_api_key`.
+- Scripts: `create_staff.py` asks for the password twice (getpass) and sets it (not temporary);
+  **new `scripts/set_password.py <login_id> [--temporary]`** (getpass twice; clears lock, ends sessions).
+- Tests: new `tests/openapi_auth.py` `needs_login(op)`; nine files' x-staff-id checks → `needs_login`; "reads stay
+  open" → `test_reads_need_a_login_but_no_role`; `test_staff.py` `test_get_current_staff_reads_the_session_or_an_api_key`
+  (fake starlette `Request` with `route`); new `tests/test_login.py` (4).
+- **plan_check passwords** (set by my scratchpad `seed_passwords.py`, plan_check only): every staff id N has
+  **`check-pass-N`** (e.g. 8 admin `http-admin-6eb1ee` / `check-pass-8`, 1 `check-admin` system_admin, 4 operator
+  `http-operator-1793324910`, 5 releaser `http-releaser-1793324911`, 9 signal_sender `signal-bot-cc9a19`). HTTP 26/26
+  (cookie flags, logout, temporary password flow, lock 5 → unlock via temporary, suspend ends session, API key issue /
+  list / signal 201 / refused elsewhere / revoked). Left: one more unmatched signal `http_check`, a revoked key on staff 9.
+- **Harness pattern from now on:** log in first (`POST /auth/login`, keep the cookie: Python `http.cookiejar`; node:
+  read `set-cookie` and send `Cookie`).
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

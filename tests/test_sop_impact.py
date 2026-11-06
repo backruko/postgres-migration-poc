@@ -6,6 +6,7 @@ SOP バージョンの影響（M2.3: GET /ope/sop-impact）のテスト: その�
 
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
+from tests.openapi_auth import needs_login
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -95,4 +96,4 @@ def test_impact_endpoint_needs_an_active_staff():
 
     op = app.openapi()["paths"]["/ope/sop-impact"]["get"]
     names = {p["name"] for p in op["parameters"]}
-    assert {"biz_id", "effective_date", "limit", "x-staff-id"} <= names
+    assert {"biz_id", "effective_date", "limit"} <= names and needs_login(op)

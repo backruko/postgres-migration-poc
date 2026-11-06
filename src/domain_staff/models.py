@@ -92,6 +92,10 @@ class StaffUser(Base):
     def role_codes(self) -> list[RoleCode]:
         return [RoleCode(r.code) for r in self.roles]
 
+    @property
+    def has_password(self) -> bool:
+        return self.password_hash is not None
+
 
 class StaffRole(Base):
     """職員とロールの割り当て（1人が複数のロールを持てる。全顧客に共通）"""

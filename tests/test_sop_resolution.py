@@ -5,6 +5,7 @@
 
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
+from tests.openapi_auth import needs_login
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -160,7 +161,7 @@ def test_pin_endpoints_are_guarded():
     paths = app.openapi()["paths"]
     for action in ("pin", "unpin"):
         op = paths[f"/ope/orders/{{order_id}}/{action}"]["post"]
-        assert "x-staff-id" in {p["name"] for p in op.get("parameters", [])}
+        assert needs_login(op)
         assert {"401", "403"} <= set(op["responses"])
 
 

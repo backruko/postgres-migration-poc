@@ -4,6 +4,7 @@ domain_staff のテスト（職員・ロール・状態、require_roles デコ�
 
 ※ Service層は内部で commit するため、テストごとに一意なログインIDを使ってデータを分離しています。
 """
+from tests.openapi_auth import needs_login
 import asyncio
 import inspect
 import uuid
@@ -160,23 +161,66 @@ def test_require_roles_decorator_injects_and_checks_the_staff(db):
         require_active()(endpoint)
 
 
-def test_get_current_staff_reads_the_header(db):
-    staff = make_staff(db, RoleCode.VIEWER, status=StaffStatus.SUSPENDED)
-    assert get_current_staff(x_staff_id=staff.id, db=db).id == staff.id  # 状態は問わない（判定は require_*）
-    with pytest.raises(UnauthorizedError, match="required"):
-        get_current_staff(x_staff_id=None, db=db)
-    with pytest.raises(UnauthorizedError, match="does not exist"):
-        get_current_staff(x_staff_id=999_999_999, db=db)
+def _request(method: str, path: str):
+    """get_current_staff / require_login に渡す最小のリクエスト（ルートのパスで API キーを通すか決まる）"""
+    from types import SimpleNamespace
+
+    from starlette.requests import Request
+
+    return Request({"type": "http", "method": method, "path": path, "headers": [], "route": SimpleNamespace(path=path)})
 
 
-def test_staff_endpoints_declare_the_staff_header():
+def test_get_current_staff_reads_the_session_or_an_api_key(db):
+    from datetime import datetime, timezone
+
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    from src.domain_staff import credentials
+    from src.domain_staff.auth import require_login
+
+    now = datetime.now(timezone.utc)
+    staff = make_staff(db, RoleCode.VIEWER)
+    token = credentials.create_session(db, staff, now=now).token
+    db.commit()
+    assert get_current_staff(_request("GET", "/biz/"), db=db, session_token=token, bearer=None).id == staff.id
+    with pytest.raises(UnauthorizedError, match="Login required"):
+        get_current_staff(_request("GET", "/biz/"), db=db, session_token=None, bearer=None)
+    with pytest.raises(UnauthorizedError):
+        get_current_staff(_request("GET", "/biz/"), db=db, session_token="forged", bearer=None)
+
+    # API キーは信号の送信のエンドポイントでだけ通る
+    sender = make_staff(db, RoleCode.SIGNAL_SENDER)
+    key = credentials.issue_api_key(db, sender, "watcher", actor=None, now=now).key
+    db.commit()
+    bearer = HTTPAuthorizationCredentials(scheme="Bearer", credentials=key)
+    assert get_current_staff(_request("POST", "/ope/signals"), db=db, session_token=None, bearer=bearer).id == sender.id
+    with pytest.raises(UnauthorizedError):
+        get_current_staff(_request("GET", "/ope/signals"), db=db, session_token=None, bearer=bearer)
+
+    # 仮パスワードのままなら、自分の情報・パスワードの変更・ログアウトだけ
+    credentials.set_password(db, staff, "temporary pw 1", temporary=True, now=now)
+    db.commit()
+    assert require_login(_request("GET", "/staff/me"), staff).id == staff.id
+    assert require_login(_request("POST", "/auth/password"), staff).id == staff.id
+    with pytest.raises(ForbiddenError) as e:
+        require_login(_request("GET", "/biz/"), staff)
+    assert e.value.error_code == ErrorCode.PASSWORD_CHANGE_REQUIRED
+    # 停止中は自分の情報だけ
+    suspended = make_staff(db, RoleCode.VIEWER, status=StaffStatus.SUSPENDED)
+    assert require_login(_request("GET", "/staff/me"), suspended).id == suspended.id
+    with pytest.raises(ForbiddenError) as e2:
+        require_login(_request("GET", "/biz/"), suspended)
+    assert e2.value.error_code == ErrorCode.STAFF_NOT_ACTIVE
+
+
+def test_staff_endpoints_need_a_login():
     from main import app
 
     paths = app.openapi()["paths"]
     for path, method in (("/staff/", "get"), ("/staff/", "post"), ("/staff/{staff_id}/roles", "put"), ("/staff/roles", "get"), ("/staff/me", "get")):
         params = {p["name"]: p for p in paths[path][method].get("parameters", [])}
-        assert "x-staff-id" in params, (path, method)
+        assert needs_login(paths[path][method]), (path, method)
         assert "_require_roles_current_staff" not in params
         assert {"401", "403"} <= set(paths[path][method]["responses"])
-    # 既存の plan のエンドポイントは対象外（変更なし）
-    assert "x-staff-id" not in {p["name"] for p in paths["/plans/templates"]["get"].get("parameters", [])}
+    # ログイン自体はログインなしで呼べる
+    assert not needs_login(paths["/auth/login"]["post"])

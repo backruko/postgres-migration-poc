@@ -21,6 +21,293 @@
         }
       }
     },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login Endpoint",
+        "description": "ログイン ID とパスワードでログインし、セッションの Cookie を設定します。\n違う: 401 INVALID_CREDENTIALS（5 回続くと 15 分ロック: 403 ACCOUNT_LOCKED）、停止中など: 403 STAFF_NOT_ACTIVE。\nmust_change_password が true なら、POST /auth/password で変えるまでほかの操作はできません。",
+        "operationId": "login_endpoint_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout Endpoint",
+        "description": "セッションを終え、Cookie を消します（ログインしていなくても 204）。",
+        "operationId": "logout_endpoint_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change Password Endpoint",
+        "description": "本人のパスワードを変えます（仮パスワードのままでも使えます）。このセッションは続き、ほかのセッションは終わります。",
+        "operationId": "change_password_endpoint_auth_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/clients/": {
       "post": {
         "tags": [
@@ -28,24 +315,12 @@
         ],
         "summary": "Create Client Endpoint",
         "operationId": "create_client_endpoint_clients__post",
-        "parameters": [
+        "security": [
           {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
           }
         ],
         "requestBody": {
@@ -148,6 +423,14 @@
         "summary": "Get Clients Endpoint",
         "description": "顧客の一覧（コード順）。無効にした顧客は include_inactive=true のときだけ含めます。",
         "operationId": "get_clients_endpoint_clients__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "include_inactive",
@@ -236,6 +519,14 @@
         "summary": "Update Client Endpoint",
         "description": "顧客名を変えます（顧客コードは変えられません）。",
         "operationId": "update_client_endpoint_clients__client_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "client_id",
@@ -245,24 +536,6 @@
               "type": "integer",
               "title": "Client Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -367,6 +640,14 @@
         "summary": "Deactivate Client Endpoint",
         "description": "顧客を無効にします（有効な業務が残っている間は 400）。一覧・選択肢から消え、新しい業務・シートは作れません。",
         "operationId": "deactivate_client_endpoint_clients__client_id__deactivate_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "client_id",
@@ -376,24 +657,6 @@
               "type": "integer",
               "title": "Client Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -488,6 +751,14 @@
         "summary": "Activate Client Endpoint",
         "description": "無効にした顧客を、再び有効にします。",
         "operationId": "activate_client_endpoint_clients__client_id__activate_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "client_id",
@@ -497,24 +768,6 @@
               "type": "integer",
               "title": "Client Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -608,24 +861,12 @@
         ],
         "summary": "Create Biz Endpoint",
         "operationId": "create_biz_endpoint_biz__post",
-        "parameters": [
+        "security": [
           {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
           }
         ],
         "requestBody": {
@@ -728,6 +969,14 @@
         "summary": "Get Bizes Endpoint",
         "description": "BizMaster レコードを業務コード順に一覧取得します(ペイジング対応)。\nclient_code で顧客を絞り、include_deleted=true で論理削除された業務（is_deleted）も含めます。",
         "operationId": "get_bizes_endpoint_biz__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "skip",
@@ -851,6 +1100,14 @@
         ],
         "summary": "Get Biz Endpoint",
         "operationId": "get_biz_endpoint_biz__biz_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -931,6 +1188,14 @@
         ],
         "summary": "Update Biz Endpoint",
         "operationId": "update_biz_endpoint_biz__biz_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -940,24 +1205,6 @@
               "type": "integer",
               "title": "Biz Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -1059,6 +1306,14 @@
         ],
         "summary": "Delete Biz Endpoint",
         "operationId": "delete_biz_endpoint_biz__biz_id__delete",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -1068,24 +1323,6 @@
               "type": "integer",
               "title": "Biz Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -1180,6 +1417,14 @@
         "summary": "Restore Biz Endpoint",
         "description": "論理削除された BizMaster レコードを復元します。",
         "operationId": "restore_biz_endpoint_biz__biz_id__restore_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -1189,24 +1434,6 @@
               "type": "integer",
               "title": "Biz Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -1301,6 +1528,14 @@
         "summary": "Clone Active To Draft Endpoint",
         "description": "【新しい版】最新の承認済みの版（予定の版があればそれ、なければ現行）のステップを写した草稿を作ります。\n承認済みの版が無い業務（最初の SOP）は空の草稿になります。草稿は複数並べて作れます。",
         "operationId": "clone_active_to_draft_endpoint_biz__biz_id__versions_clone_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -1310,24 +1545,6 @@
               "type": "integer",
               "title": "Biz Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -1432,6 +1649,14 @@
         "summary": "List Versions Endpoint",
         "description": "業務の版を新しい順に返します。既定は承認済みだけ（オーダーに指定（pin）できる選択肢）。\ninclude_drafts=true で草稿も含めます。state は日付から決まる状態（draft / scheduled / current / past）です。",
         "operationId": "list_versions_endpoint_biz__biz_id__versions_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -1527,6 +1752,14 @@
         "summary": "Create New Sop Version Endpoint",
         "description": "【新規立ち上げ】特定の業務に、完全に新しい最初の草稿(DRAFT)を新規作成します。",
         "operationId": "create_new_sop_version_endpoint_biz__biz_id__versions_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -1536,24 +1769,6 @@
               "type": "integer",
               "title": "Biz Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -1658,6 +1873,14 @@
         "summary": "Get Version Endpoint",
         "description": "版と、そのステップ（番号順）",
         "operationId": "get_version_endpoint_biz_versions__version_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "version_id",
@@ -1739,6 +1962,14 @@
         "summary": "Rename Draft Endpoint",
         "description": "草稿のタグを変えます（承認済みの版は 400）。",
         "operationId": "rename_draft_endpoint_biz_versions__version_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "version_id",
@@ -1748,24 +1979,6 @@
               "type": "integer",
               "title": "Version Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -1868,6 +2081,14 @@
         "summary": "Delete Draft Endpoint",
         "description": "草稿をステップごと削除します（承認済みの版は 400）。",
         "operationId": "delete_draft_endpoint_biz_versions__version_id__delete",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "version_id",
@@ -1877,24 +2098,6 @@
               "type": "integer",
               "title": "Version Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -1989,6 +2192,14 @@
         "summary": "Get Current Active Version Endpoint",
         "description": "【現在稼働中】現在の日時を基準にして、自動的に『今現場で使われている有効なバージョン』を1件取得します。",
         "operationId": "get_current_active_version_endpoint_biz__biz_id__versions_current_active_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -2072,6 +2283,14 @@
         "summary": "Approve And Schedule Version Endpoint",
         "description": "【業務管理者】草稿を承認し、effective_date（明日以降）の 0:00（日本時間）から有効にします（状態は「予定」）。\n予定の版は業務ごとに 1 つまで。ステップの無い草稿は承認できません。今有効な版は、この発効日時で終わります。",
         "operationId": "approve_and_schedule_version_endpoint_biz__biz_id__versions__draft_version_id__approve_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -2090,24 +2309,6 @@
               "type": "integer",
               "title": "Draft Version Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -2212,6 +2413,14 @@
         "summary": "Cancel Future Version Endpoint",
         "description": "【業務管理者】まだ発効していない（予定の）版の承認を取り消し、草稿に戻します。今有効な版の終了日時は外れます。\n発効した版・オーダーが指定（pin）している版・リリースで固定した版は取り消せません（400）。",
         "operationId": "cancel_future_version_endpoint_biz__biz_id__versions__future_version_id__cancel_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -2230,24 +2439,6 @@
               "type": "integer",
               "title": "Future Version Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -2342,6 +2533,14 @@
         "summary": "Create Step Template Endpoint",
         "description": "草稿にステップを追加します（step_num を省くと最後）。承認済みの版は変えられません（400）。",
         "operationId": "create_step_template_endpoint_biz_versions__version_id__steps_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "version_id",
@@ -2351,24 +2550,6 @@
               "type": "integer",
               "title": "Version Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -2473,6 +2654,14 @@
         "summary": "Reorder Steps Endpoint",
         "description": "草稿のステップを step_ids の順に並べ、番号を 1 から振り直します（すべてのステップを 1 回ずつ）。",
         "operationId": "reorder_steps_endpoint_biz_versions__version_id__steps_order_put",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "version_id",
@@ -2482,24 +2671,6 @@
               "type": "integer",
               "title": "Version Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -2608,6 +2779,14 @@
         "summary": "Update Step Template Endpoint",
         "description": "草稿のステップを変えます（送った項目だけ。title / condition / is_blocking は null にできません）。",
         "operationId": "update_step_template_endpoint_biz_steps__step_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "step_id",
@@ -2617,24 +2796,6 @@
               "type": "integer",
               "title": "Step Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -2737,6 +2898,14 @@
         "summary": "Delete Step Template Endpoint",
         "description": "草稿のステップを削除します（残りの番号はそのまま）。",
         "operationId": "delete_step_template_endpoint_biz_steps__step_id__delete",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "step_id",
@@ -2746,24 +2915,6 @@
               "type": "integer",
               "title": "Step Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -2858,6 +3009,14 @@
         "summary": "List Client Dependencies Endpoint",
         "description": "顧客の業務どうしの依存関係すべて",
         "operationId": "list_client_dependencies_endpoint_biz_clients__client_code__dependencies_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "client_code",
@@ -2945,6 +3104,14 @@
         "summary": "List Dependencies Endpoint",
         "description": "この業務が上流または下流になっている依存関係",
         "operationId": "list_dependencies_endpoint_biz__biz_id__dependencies_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -3030,6 +3197,14 @@
         "summary": "Create Dependency Endpoint",
         "description": "この業務（下流）が上流の業務を待つ定義を作ります（同じ顧客の業務のみ。循環・二重登録は不可）。",
         "operationId": "create_dependency_endpoint_biz__biz_id__dependencies_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -3039,24 +3214,6 @@
               "type": "integer",
               "title": "Biz Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -3161,6 +3318,14 @@
         "summary": "Delete Dependency Endpoint",
         "description": "依存関係の定義を削除します。",
         "operationId": "delete_dependency_endpoint_biz_dependencies__dependency_id__delete",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "dependency_id",
@@ -3170,24 +3335,6 @@
               "type": "integer",
               "title": "Dependency Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -3275,41 +3422,92 @@
       }
     },
     "/plans/calendars": {
+      "get": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Get Calendars Endpoint",
+        "operationId": "get_calendars_endpoint_plans_calendars_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BusinessCalendarResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Calendars Endpoint Plans Calendars Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
       "post": {
         "tags": [
           "plans"
         ],
         "summary": "Create Calendar Endpoint",
         "operationId": "create_calendar_endpoint_plans_calendars_post",
-        "parameters": [
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/BusinessCalendarCreate"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -3392,70 +3590,15 @@
               }
             }
           }
-        }
-      },
-      "get": {
-        "tags": [
-          "plans"
-        ],
-        "summary": "Get Calendars Endpoint",
-        "operationId": "get_calendars_endpoint_plans_calendars_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/BusinessCalendarResponse"
-                  },
-                  "title": "Response Get Calendars Endpoint Plans Calendars Get"
-                }
-              }
-            }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
           },
-          "400": {
-            "description": "Bad Request(リクエスト不正)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found(データが見つからない)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict (Record already exists etc.)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error(サーバーエラー)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+          {
+            "HTTPBearer": []
           }
-        }
+        ]
       }
     },
     "/plans/calendars/{calendar_id}": {
@@ -3465,6 +3608,14 @@
         ],
         "summary": "Get Calendar Endpoint",
         "operationId": "get_calendar_endpoint_plans_calendars__calendar_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "calendar_id",
@@ -3546,6 +3697,14 @@
         "summary": "Update Calendar Endpoint",
         "description": "週末の曜日を変更すると、このカレンダーを使う全テンプレートの未来の予定が再計算されます。",
         "operationId": "update_calendar_endpoint_plans_calendars__calendar_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "calendar_id",
@@ -3555,24 +3714,6 @@
               "type": "integer",
               "title": "Calendar Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -3676,6 +3817,14 @@
         ],
         "summary": "Get Holidays Endpoint",
         "operationId": "get_holidays_endpoint_plans_calendars__calendar_id__holidays_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "calendar_id",
@@ -3777,6 +3926,14 @@
         "summary": "Add Holidays Endpoint",
         "description": "休日を一括登録します（登録済みの日付は名前のみ更新）。\nこのカレンダーを使う全テンプレートの未来の予定が、休日ポリシーに従って再計算されます。\n今日より前（日本時間）の日付は追加も名前の変更もできません（400）。",
         "operationId": "add_holidays_endpoint_plans_calendars__calendar_id__holidays_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "calendar_id",
@@ -3786,24 +3943,6 @@
               "type": "integer",
               "title": "Calendar Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -3908,6 +4047,14 @@
         "summary": "Delete Holiday Endpoint",
         "description": "休日を削除します（その日は営業日に戻ります）。今日より前（日本時間）の休日は削除できません（400）。",
         "operationId": "delete_holiday_endpoint_plans_calendars__calendar_id__holidays__holiday_date__delete",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "calendar_id",
@@ -3927,24 +4074,6 @@
               "format": "date",
               "title": "Holiday Date"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -4038,24 +4167,12 @@
         ],
         "summary": "Create Sheet Endpoint",
         "operationId": "create_sheet_endpoint_plans_sheets_post",
-        "parameters": [
+        "security": [
           {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
           }
         ],
         "requestBody": {
@@ -4157,6 +4274,14 @@
         ],
         "summary": "Get Sheets Endpoint",
         "operationId": "get_sheets_endpoint_plans_sheets_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "client_code",
@@ -4244,6 +4369,14 @@
         "summary": "Import Sheet Endpoint",
         "description": "年間計画シート（マーカーと日付）を一括で取り込みます。\n新規作成時は 201、既存シート（client_code + sheet_name が一致）の更新時は 200 を返します。\n同じファイルを再度取り込んでも変化はありません。全件1トランザクションで、エラー時は何も反映されません。",
         "operationId": "import_sheet_endpoint_plans_sheets_import_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "replace_events",
@@ -4256,24 +4389,6 @@
               "title": "Replace Events"
             },
             "description": "true: delete dates not in the file so the sheet matches it exactly"
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -4377,6 +4492,14 @@
         ],
         "summary": "Get Sheet Endpoint",
         "operationId": "get_sheet_endpoint_plans_sheets__sheet_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "sheet_id",
@@ -4459,6 +4582,14 @@
         ],
         "summary": "Add Marker Endpoint",
         "operationId": "add_marker_endpoint_plans_sheets__sheet_id__markers_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "sheet_id",
@@ -4468,24 +4599,6 @@
               "type": "integer",
               "title": "Sheet Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -4590,6 +4703,14 @@
         "summary": "Update Marker Endpoint",
         "description": "マーカーの説明・生成ルールを変更します。\nrule を指定するとルールから日付を再生成します（人が編集・追加・取消した日付は常に維持）。\nrule に null を指定すると生成をやめ、今ある日付をそのまま残します（出どころ・取消の記録も残る）。\nrule: null と同時に cancel_future_dates: true を指定すると、今日以降の日付をすべて取り消します（業務が終わった場合。過去は残る）。",
         "operationId": "update_marker_endpoint_plans_sheets__sheet_id__markers__marker__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "sheet_id",
@@ -4608,24 +4729,6 @@
               "type": "string",
               "title": "Marker"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -4730,6 +4833,14 @@
         "summary": "Add Sheet Events Endpoint",
         "description": "マーカーに日付を追加します（登録済みの日付は無視）。\nこのマーカーを参照している全テンプレートの未来の予定が自動で再計算されます。",
         "operationId": "add_sheet_events_endpoint_plans_sheets__sheet_id__markers__marker__events_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "sheet_id",
@@ -4748,24 +4859,6 @@
               "type": "string",
               "title": "Marker"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -4869,6 +4962,14 @@
         ],
         "summary": "Update Sheet Event Endpoint",
         "operationId": "update_sheet_event_endpoint_plans_sheets_events__event_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "event_id",
@@ -4878,24 +4979,6 @@
               "type": "integer",
               "title": "Event Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -4998,6 +5081,14 @@
         "summary": "Delete Sheet Event Endpoint",
         "description": "日付を削除します。生成マーカーのルール由来の日付は、再生成で復活しないよう「取消」として記録されます。",
         "operationId": "delete_sheet_event_endpoint_plans_sheets_events__event_id__delete",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "event_id",
@@ -5007,24 +5098,6 @@
               "type": "integer",
               "title": "Event Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -5119,6 +5192,14 @@
         "summary": "Revert Sheet Event Endpoint",
         "description": "生成マーカーの日付に対する人の編集・取消を取り消し、ルールの日付に戻します。",
         "operationId": "revert_sheet_event_endpoint_plans_sheets_events__event_id__revert_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "event_id",
@@ -5128,24 +5209,6 @@
               "type": "integer",
               "title": "Event Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -5240,24 +5303,12 @@
         "summary": "Create Template Endpoint",
         "description": "テンプレートを作成し、今から90日先までのインスタンスを生成します。\ntemplate_type により必須項目が変わります（rrule / explicit_dates / reference_sheet_based）。",
         "operationId": "create_template_endpoint_plans_templates_post",
-        "parameters": [
+        "security": [
           {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
           }
         ],
         "requestBody": {
@@ -5430,6 +5481,14 @@
         ],
         "summary": "Get Templates Endpoint",
         "operationId": "get_templates_endpoint_plans_templates_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -5516,6 +5575,14 @@
         ],
         "summary": "Get Template Endpoint",
         "operationId": "get_template_endpoint_plans_templates__template_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "template_id",
@@ -5597,6 +5664,14 @@
         "summary": "Update Template Endpoint",
         "description": "生成に影響する項目を変更するとリビジョンが上がり、未来のインスタンスが再照合されます（過去分は不変）。",
         "operationId": "update_template_endpoint_plans_templates__template_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "template_id",
@@ -5606,24 +5681,6 @@
               "type": "integer",
               "title": "Template Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -5725,6 +5782,14 @@
         ],
         "summary": "Delete Template Endpoint",
         "operationId": "delete_template_endpoint_plans_templates__template_id__delete",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "template_id",
@@ -5734,24 +5799,6 @@
               "type": "integer",
               "title": "Template Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -5845,6 +5892,14 @@
         ],
         "summary": "Restore Template Endpoint",
         "operationId": "restore_template_endpoint_plans_templates__template_id__restore_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "template_id",
@@ -5854,24 +5909,6 @@
               "type": "integer",
               "title": "Template Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -5966,6 +6003,14 @@
         "summary": "Add Explicit Dates Endpoint",
         "description": "顧客指定日を追加します(登録済みの日付は無視)。",
         "operationId": "add_explicit_dates_endpoint_plans_templates__template_id__dates_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "template_id",
@@ -5975,24 +6020,6 @@
               "type": "integer",
               "title": "Template Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -6096,6 +6123,14 @@
         ],
         "summary": "Remove Explicit Date Endpoint",
         "operationId": "remove_explicit_date_endpoint_plans_templates__template_id__dates__local_date__delete",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "template_id",
@@ -6115,24 +6150,6 @@
               "format": "date",
               "title": "Local Date"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -6227,6 +6244,14 @@
         "summary": "Get Instances Endpoint",
         "description": "無効化済みを含む全インスタンス(監査用)。",
         "operationId": "get_instances_endpoint_plans_templates__template_id__instances_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "template_id",
@@ -6332,6 +6357,14 @@
         "summary": "Add One Off Instance Endpoint",
         "description": "発生枠に紐づかない単発のインスタンスを追加します(scheduled_end 省略時はテンプレートの所要時間)。\nテンプレートのルールを変更しても維持されます。",
         "operationId": "add_one_off_instance_endpoint_plans_templates__template_id__instances_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "template_id",
@@ -6341,24 +6374,6 @@
               "type": "integer",
               "title": "Template Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -6462,6 +6477,14 @@
         ],
         "summary": "Rebuild Cache Endpoint",
         "operationId": "rebuild_cache_endpoint_plans_templates__template_id__cache_rebuild_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "template_id",
@@ -6471,24 +6494,6 @@
               "type": "integer",
               "title": "Template Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -6583,6 +6588,14 @@
         "summary": "Override Instance Endpoint",
         "description": "特定の1件だけ時刻を変更します(延期・前倒し)。テンプレートのルールは変わりません。\n元のインスタンスは MANUAL で無効化され、新しい時刻のインスタンスが追記されます(履歴は不変)。\n以後テンプレートやシート日付が変更されても、この手動変更は維持されます。",
         "operationId": "override_instance_endpoint_plans_instances__instance_id__override_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -6592,24 +6605,6 @@
               "type": "integer",
               "title": "Instance Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -6714,6 +6709,14 @@
         "summary": "Cancel Instance Endpoint",
         "description": "特定の1件だけ取り消します。以後の再生成でも復活しません。",
         "operationId": "cancel_instance_endpoint_plans_instances__instance_id__cancel_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -6723,24 +6726,6 @@
               "type": "integer",
               "title": "Instance Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -6852,6 +6837,14 @@
         "summary": "Restore Cancelled Instance Endpoint",
         "description": "取り消した予定を、取消の直前と同じ日時で元に戻します（臨時の予定・日時を変更した予定も可）。\n時刻が過ぎた予定は戻せません。取消の記録は履歴として残ります。",
         "operationId": "restore_cancelled_instance_endpoint_plans_instances__instance_id__restore_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -6861,24 +6854,6 @@
               "type": "integer",
               "title": "Instance Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -6973,6 +6948,14 @@
         "summary": "Revert Instance Endpoint",
         "description": "手動変更・取消を取り消し、その発生枠をテンプレートのルールに戻します。\n置き換えの連鎖のどのインスタンスIDを指定しても構いません。",
         "operationId": "revert_instance_endpoint_plans_instances__instance_id__revert_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "instance_id",
@@ -6982,24 +6965,6 @@
               "type": "integer",
               "title": "Instance Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -7110,6 +7075,14 @@
         ],
         "summary": "Get Occurrences Endpoint",
         "operationId": "get_occurrences_endpoint_plans_occurrences_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -7221,6 +7194,14 @@
         "summary": "Get Client Occurrences Endpoint",
         "description": "顧客に属する全業務の予定を、開始時刻順に一覧で取得します（業務コード・業務名付き）。",
         "operationId": "get_client_occurrences_endpoint_plans_clients__client_code__occurrences_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "client_code",
@@ -7332,6 +7313,14 @@
         "summary": "Get Client Calendar Endpoint",
         "description": "顧客に属する全業務の予定を、月カレンダーの形で返します。\nその月の全日（予定の無い日も含む）と、日ごとの予定（開始時刻順）、凡例用のテンプレート一覧を返すため、\nそのままカレンダーに描画できます。",
         "operationId": "get_client_calendar_endpoint_plans_clients__client_code__calendar_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "client_code",
@@ -7457,6 +7446,14 @@
         "summary": "Get Cancelled Instances Endpoint",
         "description": "顧客に属する全業務の、取り消された予定の一覧（元に戻せるかどうか付き）。カレンダーには表示されない予定です。",
         "operationId": "get_cancelled_instances_endpoint_plans_clients__client_code__cancelled_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "client_code",
@@ -7568,6 +7565,14 @@
         "summary": "Get Daily Dashboard Endpoint",
         "description": "指定日に予定されている全顧客の予定を、顧客 → 業務の順にまとめて返します。\nその日の年間計画シートの日付と、各営業日カレンダーでの休日かどうかも返します。\n過去の日付では、無効化・取消された予定も理由付きで返します。",
         "operationId": "get_daily_dashboard_endpoint_ops_daily_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "date",
@@ -7673,6 +7678,14 @@
         "summary": "Get Attention Endpoint",
         "description": "完了・取消以外で、締切を過ぎた（遅れ）か「まもなく」の時刻を過ぎたオーダーを、日付によらず締切の早い順に返します。\n日次ダッシュボードの上の「締切が近い・遅れ」の一覧用（数分おきに読まれる想定。保存した締切を部分インデックスで引く）。",
         "operationId": "get_attention_endpoint_ops_attention_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "limit",
@@ -7761,6 +7774,14 @@
         "summary": "Get Sla Report Endpoint",
         "description": "SLA の集計: 顧客 × 締切の月（日本時間）。完了・遅れ・期限内率・平均遅れ（遅れたものだけ）・未完了の遅れ。\n取消したオーダーは数えない。期間は最大 36 か月。有効な職員なら誰でも。",
         "operationId": "get_sla_report_endpoint_ops_sla_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "from",
@@ -7815,24 +7836,6 @@
               "title": "Client Code"
             },
             "description": "顧客コードで絞り込む（省略時は全顧客）"
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -7925,28 +7928,8 @@
           "staff"
         ],
         "summary": "Get Me Endpoint",
-        "description": "X-Staff-Id で指定した職員（利用開始前・利用停止中でも返します。画面で状態を表示するため）",
+        "description": "ログインしている職員（仮パスワードのままでも返します。画面で「パスワードを変更」を出すため）",
         "operationId": "get_me_endpoint_staff_me_get",
-        "parameters": [
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8017,18 +8000,16 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/staff/roles": {
@@ -8038,36 +8019,16 @@
         ],
         "summary": "Get Roles Endpoint",
         "operationId": "get_roles_endpoint_staff_roles_get",
-        "parameters": [
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/RoleResponse"
                   },
+                  "type": "array",
                   "title": "Response Get Roles Endpoint Staff Roles Get"
                 }
               }
@@ -8132,18 +8093,16 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/staff/": {
@@ -8153,36 +8112,16 @@
         ],
         "summary": "Get Staff List Endpoint",
         "operationId": "get_staff_list_endpoint_staff__get",
-        "parameters": [
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/StaffResponse"
                   },
+                  "type": "array",
                   "title": "Response Get Staff List Endpoint Staff  Get"
                 }
               }
@@ -8247,18 +8186,16 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -8267,35 +8204,15 @@
         "summary": "Create Staff Endpoint",
         "description": "職員を登録します（利用開始前の状態で作られます。PUT /staff/{id}/status で有効化してください）。",
         "operationId": "create_staff_endpoint_staff__post",
-        "parameters": [
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/StaffCreate"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -8378,7 +8295,15 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/staff/{staff_id}": {
@@ -8388,6 +8313,14 @@
         ],
         "summary": "Get Staff Endpoint",
         "operationId": "get_staff_endpoint_staff__staff_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "staff_id",
@@ -8397,24 +8330,6 @@
               "type": "integer",
               "title": "Staff Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -8506,6 +8421,14 @@
         ],
         "summary": "Update Staff Endpoint",
         "operationId": "update_staff_endpoint_staff__staff_id__patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "staff_id",
@@ -8515,24 +8438,6 @@
               "type": "integer",
               "title": "Staff Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -8637,6 +8542,14 @@
         "summary": "Set Staff Roles Endpoint",
         "description": "ロールを指定した集合に置き換えます（自分のシステム管理者ロールは外せません）。",
         "operationId": "set_staff_roles_endpoint_staff__staff_id__roles_put",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "staff_id",
@@ -8646,24 +8559,6 @@
               "type": "integer",
               "title": "Staff Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -8766,8 +8661,16 @@
           "staff"
         ],
         "summary": "Set Staff Status Endpoint",
-        "description": "有効化・利用停止・再開（ロールはそのまま残ります。自分の状態は変えられません）。",
+        "description": "有効化・利用停止・再開（ロールはそのまま残ります。自分の状態は変えられません）。停止するとセッションも終わります。",
         "operationId": "set_staff_status_endpoint_staff__staff_id__status_put",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "staff_id",
@@ -8777,24 +8680,6 @@
               "type": "integer",
               "title": "Staff Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -8891,6 +8776,472 @@
         }
       }
     },
+    "/staff/{staff_id}/password": {
+      "put": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Set Temporary Password Endpoint",
+        "description": "仮パスワードを設定します（新しい職員・忘れたとき）。本人は次のログインで変えます。ロックが解け、セッションは終わります。",
+        "operationId": "set_temporary_password_endpoint_staff__staff_id__password_put",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "staff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Staff Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemporaryPasswordIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/staff/{staff_id}/api-keys": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "List Api Keys Endpoint",
+        "description": "職員の API キー（取り消したものも。新しい順。キーそのものは返しません）",
+        "operationId": "list_api_keys_endpoint_staff__staff_id__api_keys_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "staff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Staff Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyResponse"
+                  },
+                  "title": "Response List Api Keys Endpoint Staff  Staff Id  Api Keys Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Issue Api Key Endpoint",
+        "description": "信号の送信（signal_sender）の職員に API キーを発行します。キーはこの応答でだけ見せます（保存されるのはハッシュ）。",
+        "operationId": "issue_api_key_endpoint_staff__staff_id__api_keys_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "staff_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Staff Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyIssuedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/staff/api-keys/{key_id}/revoke": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "summary": "Revoke Api Key Endpoint",
+        "description": "API キーを取り消します（すぐに使えなくなります）。",
+        "operationId": "revoke_api_key_endpoint_staff_api_keys__key_id__revoke_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Key Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(操作する職員が指定されていない・存在しない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/ope/orders/{order_id}": {
       "get": {
         "tags": [
@@ -8899,6 +9250,14 @@
         "summary": "Get Order Endpoint",
         "description": "オーダーと、その記録（古い順）",
         "operationId": "get_order_endpoint_ope_orders__order_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -8908,24 +9267,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -9020,6 +9361,14 @@
         "summary": "Release Order Endpoint",
         "description": "pending → ready。自動リリースの業務でも、予定より早く手動でリリースできます。",
         "operationId": "release_order_endpoint_ope_orders__order_id__release_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -9029,24 +9378,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -9158,6 +9489,14 @@
         "summary": "Pin Sop Version Endpoint",
         "description": "リリース前のオーダーに使う SOP バージョンを指定します（同じ業務の承認済みバージョン。古い・新しいどちらでも可）。",
         "operationId": "pin_sop_version_endpoint_ope_orders__order_id__pin_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -9167,24 +9506,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -9289,6 +9610,14 @@
         "summary": "Unpin Sop Version Endpoint",
         "description": "指定を外し、予定日時に有効なバージョンに戻します（リリース前のみ）。",
         "operationId": "unpin_sop_version_endpoint_ope_orders__order_id__unpin_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -9298,24 +9627,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -9427,6 +9738,14 @@
         "summary": "Approve Early Start Endpoint",
         "description": "予定日より前の開始を承認します（承認後は予定日前でも開始できます）。",
         "operationId": "approve_early_start_endpoint_ope_orders__order_id__approve_early_start_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -9436,24 +9755,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -9565,6 +9866,14 @@
         "summary": "Approve Dependency Override Endpoint",
         "description": "満たされていない hard の依存関係のまま開始することを承認します（理由必須。開始は作業者が行います）。",
         "operationId": "approve_dependency_override_endpoint_ope_orders__order_id__approve_dependency_override_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -9574,24 +9883,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -9696,6 +9987,14 @@
         "summary": "Start Order Endpoint",
         "description": "ready → in_progress。予定日（日本時間）以降のみ（それより前はリリース担当の承認が必要）。矛盾があると開始できません。\nhard の依存関係は上流のオーダーの完了が必要です（満たされていなければ、リリース担当・業務管理者の承認が必要）。",
         "operationId": "start_order_endpoint_ope_orders__order_id__start_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -9705,24 +10004,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -9834,6 +10115,14 @@
         "summary": "Hold Order Endpoint",
         "description": "pending / ready / in_progress → on_hold（理由必須。再開すると保留前の状態に戻ります）",
         "operationId": "hold_order_endpoint_ope_orders__order_id__hold_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -9843,24 +10132,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -9965,6 +10236,14 @@
         "summary": "Resume Order Endpoint",
         "description": "on_hold → 保留前の状態",
         "operationId": "resume_order_endpoint_ope_orders__order_id__resume_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -9974,24 +10253,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -10103,6 +10364,14 @@
         "summary": "Finish Order Endpoint",
         "description": "in_progress → finished（ステップの無いオーダーのみ。ステップのあるオーダーは最後の承認で自動で完了します）。\n顧客側の出来事（LIGHTWEIGHT）は ready からも完了（受領）にでき、信号で完了する業務は理由が必須です。",
         "operationId": "finish_order_endpoint_ope_orders__order_id__finish_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -10112,24 +10381,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -10241,6 +10492,14 @@
         "summary": "Cancel Order Endpoint",
         "description": "finished / canceled 以外 → canceled（理由必須）。plan の予定も取り消し、カレンダーからも消えます。",
         "operationId": "cancel_order_endpoint_ope_orders__order_id__cancel_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -10250,24 +10509,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -10372,6 +10613,14 @@
         "summary": "Resolve Conflict Endpoint",
         "description": "矛盾の解決: accept_plan（plan の新しい日時を採用）・keep（そのまま続ける）・cancel（取消。理由必須）",
         "operationId": "resolve_conflict_endpoint_ope_orders__order_id__resolve_conflict_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "order_id",
@@ -10381,24 +10630,6 @@
               "type": "integer",
               "title": "Order Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -10503,6 +10734,14 @@
         "summary": "Submit Step Endpoint",
         "description": "todo → submitted。is_blocking でなければ次のステップが開きます。",
         "operationId": "submit_step_endpoint_ope_steps__step_id__submit_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "step_id",
@@ -10512,24 +10751,6 @@
               "type": "integer",
               "title": "Step Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -10641,6 +10862,14 @@
         "summary": "Approve Step Endpoint",
         "description": "submitted → approved（提出者以外）。is_blocking なら次のステップが開き、最後の承認でオーダーが完了します。",
         "operationId": "approve_step_endpoint_ope_steps__step_id__approve_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "step_id",
@@ -10650,24 +10879,6 @@
               "type": "integer",
               "title": "Step Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -10779,6 +10990,14 @@
         "summary": "Reject Step Endpoint",
         "description": "submitted → todo（提出者以外・理由必須）。そのステップだけが戻り、後のステップはそのままです。",
         "operationId": "reject_step_endpoint_ope_steps__step_id__reject_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "step_id",
@@ -10788,24 +11007,6 @@
               "type": "integer",
               "title": "Step Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -10910,6 +11111,14 @@
         "summary": "Sop Impact Endpoint",
         "description": "その日の 0:00（日本時間）から業務の版を切り替えると、どのオーダーが新しい版を使うか。\nwill_switch = 未リリース・指定なし（新しい版を使う）、pinned = 指定した版のまま、released = リリースで固定した版のまま。",
         "operationId": "sop_impact_endpoint_ope_sop_impact_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "biz_id",
@@ -10945,24 +11154,6 @@
               "title": "Limit"
             },
             "description": "orders listed per group (totals are exact)"
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -11057,6 +11248,14 @@
         "summary": "List Signals Endpoint",
         "description": "信号の一覧（新しい順）。既定は人の対応が必要なもの（照合できず、まだ対応していない信号）だけです。",
         "operationId": "list_signals_endpoint_ope_signals_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "scope",
@@ -11120,24 +11319,6 @@
               "default": 200,
               "title": "Limit"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "responses": {
@@ -11234,24 +11415,12 @@
         "summary": "Receive Signal Endpoint",
         "description": "信号を受け取ります（信号の送信のロール）。すべて記録し、照合できればオーダーを完了にします。\nresult: matched（完了にした）/ duplicate（すでに完了）/ unmatched・ambiguous（人が対応する。result_note に理由）。",
         "operationId": "receive_signal_endpoint_ope_signals_post",
-        "parameters": [
+        "security": [
           {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
           }
         ],
         "requestBody": {
@@ -11356,6 +11525,14 @@
         "summary": "Handle Signal Endpoint",
         "description": "照合できなかった信号に対応します（order_id を指定すると、そのオーダーを完了にしてから対応済みにします）。",
         "operationId": "handle_signal_endpoint_ope_signals__signal_id__handle_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "signal_id",
@@ -11365,24 +11542,6 @@
               "type": "integer",
               "title": "Signal Id"
             }
-          },
-          {
-            "name": "x-staff-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "acting staff user id (development only, until login exists)",
-              "title": "X-Staff-Id"
-            },
-            "description": "acting staff user id (development only, until login exists)"
           }
         ],
         "requestBody": {
@@ -11510,6 +11669,174 @@
         "type": "object",
         "title": "AlwaysCondition",
         "description": "すべてのオーダーに含める（既定）"
+      },
+      "ApiKeyCreate": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "description": "what the key is for, e.g. SFTP watcher"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "title": "ApiKeyCreate"
+      },
+      "ApiKeyIssuedResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "key_prefix": {
+            "type": "string",
+            "title": "Key Prefix",
+            "description": "first characters of the key, to tell keys apart"
+          },
+          "created_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "the full key: shown only in this response, never again"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "staff_user_id",
+          "label",
+          "key_prefix",
+          "created_by_id",
+          "created_at",
+          "last_used_at",
+          "revoked_at",
+          "key"
+        ],
+        "title": "ApiKeyIssuedResponse"
+      },
+      "ApiKeyResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "staff_user_id": {
+            "type": "integer",
+            "title": "Staff User Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "key_prefix": {
+            "type": "string",
+            "title": "Key Prefix",
+            "description": "first characters of the key, to tell keys apart"
+          },
+          "created_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "staff_user_id",
+          "label",
+          "key_prefix",
+          "created_by_id",
+          "created_at",
+          "last_used_at",
+          "revoked_at"
+        ],
+        "title": "ApiKeyResponse"
       },
       "AttentionItem": {
         "properties": {
@@ -13282,6 +13609,8 @@
           "STAFF_NOT_ACTIVE",
           "INVALID_CREDENTIALS",
           "PASSWORD_EXPIRED",
+          "PASSWORD_CHANGE_REQUIRED",
+          "ACCOUNT_LOCKED",
           "NOT_FOUND",
           "RECORD_ALREADY_EXISTS",
           "INSTANCE_ALREADY_VOIDED",
@@ -13605,6 +13934,28 @@
           "one_off"
         ],
         "title": "InstanceOrigin"
+      },
+      "LoginIn": {
+        "properties": {
+          "login_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Login Id"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login_id",
+          "password"
+        ],
+        "title": "LoginIn"
       },
       "MarkerRule": {
         "properties": {
@@ -14324,6 +14675,29 @@
         ],
         "title": "OrderStepResponse",
         "description": "オーダーのステップ（リリース前はプレビュー: id と state は null）"
+      },
+      "PasswordChangeIn": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordChangeIn",
+        "description": "本人のパスワードの変更（仮パスワードからの変更も）"
       },
       "PinSopVersionIn": {
         "properties": {
@@ -16959,6 +17333,29 @@
             "type": "array",
             "title": "Roles"
           },
+          "has_password": {
+            "type": "boolean",
+            "title": "Has Password",
+            "description": "false: the person cannot log in until a system admin sets a temporary password"
+          },
+          "must_change_password": {
+            "type": "boolean",
+            "title": "Must Change Password",
+            "description": "temporary password: only /staff/me, /auth/password and /auth/logout work until changed"
+          },
+          "locked_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked Until",
+            "description": "too many failed logins: no login until then"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -16978,6 +17375,9 @@
           "email",
           "status",
           "roles",
+          "has_password",
+          "must_change_password",
+          "locked_until",
           "created_at",
           "updated_at"
         ],
@@ -17183,6 +17583,22 @@
         ],
         "title": "TemplateType"
       },
+      "TemporaryPasswordIn": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "TemporaryPasswordIn",
+        "description": "システム管理者が設定する仮パスワード（本人は次のログインで変える）"
+      },
       "UIMetadata": {
         "properties": {
           "bg_color": {
@@ -17292,6 +17708,19 @@
           "calendar_changed"
         ],
         "title": "VoidReason"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyCookie": {
+        "type": "apiKey",
+        "description": "login session (POST /auth/login sets it)",
+        "in": "cookie",
+        "name": "ops_session"
+      },
+      "HTTPBearer": {
+        "type": "http",
+        "description": "API key of a signal sender (POST /ope/signals only)",
+        "scheme": "bearer"
       }
     }
   }

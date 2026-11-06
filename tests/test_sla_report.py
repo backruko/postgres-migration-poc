@@ -7,6 +7,7 @@ SLA の集計（S.1）のテスト: 顧客 × 締切の月（日本時間）。
 
 締切・完了日時はオーダーの行に保存した値だけで計算するので、テストではそれを直接決める（2031 年の月を使い、ほかのデータと分ける）。
 """
+from tests.openapi_auth import needs_login
 from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
@@ -106,4 +107,4 @@ def test_sla_endpoint_needs_an_active_staff():
 
     op = app.openapi()["paths"]["/ops/sla"]["get"]
     params = {p["name"] for p in op.get("parameters", [])}
-    assert {"x-staff-id", "from", "to", "client_code"} <= params and {"401", "403"} <= set(op["responses"])
+    assert {"from", "to", "client_code"} <= params and needs_login(op) and {"401", "403"} <= set(op["responses"])

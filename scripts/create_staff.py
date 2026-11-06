@@ -4,17 +4,20 @@
 
     python scripts/create_staff.py <login_id> <氏名> --roles system_admin [--email someone@example.com]
 
-接続先は .env の DATABASE_URL（環境変数 DATABASE_URL が優先）。登録した職員の ID を表示します
-（ログインが入るまでは、この ID を X-Staff-Id ヘッダーで指定して操作します）。
+パスワードを 2 回たずねます（画面に出ません。LG.2）。この職員はそのパスワードでログインできます（仮パスワードではない）。
+接続先は .env の DATABASE_URL（環境変数 DATABASE_URL が優先）。
 """
 import argparse
+import getpass
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.core.exceptions import BusinessException  # noqa: E402
+from src.domain_staff import credentials  # noqa: E402
 from src.domain_staff.models import RoleCode, StaffStatus  # noqa: E402
 from src.domain_staff.schemas import StaffCreate  # noqa: E402
 from src.domain_staff.services import create_staff  # noqa: E402
@@ -31,6 +34,11 @@ def main() -> int:
     parser.add_argument("--roles", nargs="+", default=[RoleCode.SYSTEM_ADMIN.value], choices=[r.value for r in RoleCode])
     args = parser.parse_args()
 
+    password = getpass.getpass("Password: ")
+    if getpass.getpass("Password again: ") != password:
+        print("The two passwords differ.", file=sys.stderr)
+        return 1
+
     db = SessionLocal()
     try:
         staff = create_staff(
@@ -39,6 +47,8 @@ def main() -> int:
             actor=None,
             status=StaffStatus.ACTIVE,
         )
+        credentials.set_password(db, staff, password, temporary=False, now=datetime.now(timezone.utc))
+        db.commit()
         # セッションを閉じる前に（ロールは遅延読み込みのため）
         print(f"Registered staff user id={staff.id} login_id={staff.login_id} roles={[r.value for r in staff.role_codes]}")
     except BusinessException as e:

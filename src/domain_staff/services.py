@@ -1,8 +1,14 @@
+from datetime import datetime, timezone
+
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
-from src.domain_staff.models import Role, RoleCode, StaffStatus, StaffUser
+from src.core.error_codes import ErrorCode
+from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError, UnauthorizedError
+from src.domain_staff import credentials
+from src.domain_staff.credentials import NewApiKey, NewSession
+from src.domain_staff.models import Role, RoleCode, StaffApiKey, StaffStatus, StaffUser
 from src.domain_staff.schemas import StaffCreate, StaffUpdate
 from src.infrastructure.repositories import role_repo, staff_user_repo
 
@@ -102,6 +108,82 @@ def set_staff_status(db: Session, staff_id: int, status: StaffStatus, actor: Sta
     if status == StaffStatus.PENDING and staff.status != StaffStatus.PENDING:
         raise BadRequestError("An account that has been activated cannot go back to pending (suspend it instead).")
     staff.status = status
+    if status != StaffStatus.ACTIVE:
+        credentials.revoke_all_sessions(db, staff.id, now=_now())  # 停止した職員は、開いているセッションもすぐ使えなくなる
     db.commit()
     db.refresh(staff)
     return staff
+
+
+# ==========================================
+# ログイン・パスワード・API キー（LG.2）
+# ==========================================
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def login(db: Session, login_id: str, password: str) -> tuple[StaffUser, NewSession]:
+    """ログイン ID とパスワードを確かめてセッションを作ります（失敗の回数・ロックも記録する）"""
+    now = _now()
+    try:
+        staff = credentials.authenticate(db, login_id, password, now=now)
+    except Exception:
+        db.commit()  # 失敗の回数・ロックは、ログインが失敗しても残す
+        raise
+    new = credentials.create_session(db, staff, now=now)
+    db.commit()
+    db.refresh(staff)
+    return staff, new
+
+
+def logout(db: Session, token: str | None) -> None:
+    credentials.revoke_session(db, token, now=_now())
+    db.commit()
+
+
+def change_own_password(db: Session, staff: StaffUser, current_password: str, new_password: str, session_id: int | None) -> StaffUser:
+    """本人のパスワードの変更（今のセッションは残し、ほかのセッションは終える）。仮パスワードの印も外れる"""
+    if not credentials.verify_password_hash(current_password, staff.password_hash):
+        raise UnauthorizedError("The current password is wrong.", error_code=ErrorCode.INVALID_CREDENTIALS)
+    if current_password == new_password:
+        raise BadRequestError("The new password must be different from the current one.")
+    credentials.set_password(db, staff, new_password, temporary=False, now=_now(), keep_session_id=session_id)
+    db.commit()
+    db.refresh(staff)
+    return staff
+
+
+def set_temporary_password(db: Session, staff_id: int, password: str, actor: StaffUser) -> StaffUser:
+    """システム管理者が仮パスワードを設定します（本人は次のログインで変える。ロックも解ける。自分には使えない）"""
+    staff = _get_staff(db, staff_id)
+    if staff.id == actor.id:
+        raise BadRequestError("Change your own password with POST /auth/password.")
+    credentials.set_password(db, staff, password, temporary=True, now=_now())
+    db.commit()
+    db.refresh(staff)
+    return staff
+
+
+def list_api_keys(db: Session, staff_id: int) -> list[StaffApiKey]:
+    _get_staff(db, staff_id)
+    return list(db.scalars(
+        select(StaffApiKey).where(StaffApiKey.staff_user_id == staff_id).order_by(StaffApiKey.created_at.desc(), StaffApiKey.id.desc())
+    ).all())
+
+
+def issue_api_key(db: Session, staff_id: int, label: str, actor: StaffUser) -> NewApiKey:
+    staff = _get_staff(db, staff_id)
+    issued = credentials.issue_api_key(db, staff, label, actor=actor, now=_now())
+    db.commit()
+    db.refresh(issued.api_key)
+    return issued
+
+
+def revoke_api_key(db: Session, key_id: int, actor: StaffUser) -> StaffApiKey:
+    api_key = db.get(StaffApiKey, key_id)
+    if api_key is None:
+        raise NotFoundError(f"API key (id={key_id}) not found.")
+    credentials.revoke_api_key(db, api_key, actor=actor, now=_now())
+    db.commit()
+    db.refresh(api_key)
+    return api_key

@@ -9,6 +9,7 @@
 
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
+from tests.openapi_auth import needs_login
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -208,7 +209,7 @@ def test_input_validation_and_guard():
                                      payload={"x": "a" * 20_000}))
     paths = app.openapi()["paths"]
     for path in ("/ope/signals", "/ope/signals/{signal_id}/handle"):
-        assert "x-staff-id" in {p["name"] for p in paths[path]["post"].get("parameters", [])}, path
+        assert needs_login(paths[path]["post"]), path
 
 
 # ==========================================
