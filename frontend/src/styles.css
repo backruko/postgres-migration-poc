@@ -294,3 +294,8 @@ h1 .client { color: var(--accent); }
   .day, .legend-item { transition: background-color .12s, opacity .12s, border-color .12s; }
 }
 .sop-months { display: grid; grid-template-columns: repeat(6, auto); gap: 4px 12px; justify-content: start; }
+/* SOP の承認: 影響（どのオーダーが新しい版を使うか） */
+.sop-impact { display: grid; gap: 12px; max-height: 360px; overflow: auto; }
+.sop-impact-head { margin-bottom: 4px; }
+.sop-impact-list { margin: 0; padding-left: 18px; font-size: 13px; }
+.sop-impact-list li { margin: 2px 0; }

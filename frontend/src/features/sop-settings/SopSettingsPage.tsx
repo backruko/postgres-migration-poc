@@ -1,4 +1,4 @@
-import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
+import { ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, DeleteOutlined, EditOutlined, PlusOutlined, UndoOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
@@ -7,7 +7,7 @@ import { sopApi } from "../../domain/biz/api/sopApi";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import { bizOptions } from "../../domain/biz/lib/businesses";
 import {
-  canManageSop, conditionText, defaultVersion, hasNumberGaps, movedStepIds, SOP_STATE_COLOR, SOP_STATE_LABEL,
+  approveBlockedReason, canManageSop, conditionText, defaultVersion, hasNumberGaps, movedStepIds, SOP_STATE_COLOR, SOP_STATE_LABEL,
 } from "../../domain/biz/lib/sop";
 import { periodText } from "../../domain/biz/lib/sopVersions";
 import type { SopStep, SopVersion } from "../../domain/biz/types";
@@ -17,6 +17,7 @@ import { ApiError } from "../../shared/api/http";
 import { useApiQuery } from "../../shared/hooks/useApiQuery";
 import { inZone } from "../../shared/lib/datetime";
 import { ReturnLink } from "../../shared/ui/ReturnLink";
+import { ApproveModal } from "./ApproveModal";
 import { NewDraftModal } from "./NewDraftModal";
 import { RenameDraftModal } from "./RenameDraftModal";
 import { StepFormModal } from "./StepFormModal";
@@ -26,7 +27,8 @@ const formatDate = (iso: string) => inZone(iso, TIMEZONE).format("YYYY/M/D");
 /**
  * SOP（作業手順）の画面（業務ごと）。版の一覧（草稿も含む）と、選んだ版のステップ。
  * 見るのは誰でも。新しい版・草稿の削除は業務管理者だけ（バックエンドが判定する）。承認済みの版は変えられない。
- * 草稿は、この画面でタグ・ステップ（追加・編集・削除・並べ替え）を変えられる（M2.5）。承認（M2.6）はこの画面に足していく。
+ * 草稿は、この画面でタグ・ステップ（追加・編集・削除・並べ替え）を変えられる（M2.5）。
+ * 草稿の承認は発効日と影響（どのオーダーが新しい版を使うか）を見てから。予定の版は発効日の前なら取り消せる（M2.6）。
  * 選んだ業務と版は URL の ?biz= / ?version= に保持する。
  */
 export function SopSettingsPage() {
@@ -51,6 +53,7 @@ export function SopSettingsPage() {
   // ステップの追加・編集モーダル（step が null なら追加）。閉じる間の表示が切り替わらないよう、閉じても対象は残す
   const [stepEditor, setStepEditor] = useState<{ open: boolean; step: SopStep | null }>({ open: false, step: null });
   const [moving, setMoving] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
 
   const steps = detail.data?.id === versionId ? detail.data.steps : [];
 
@@ -145,6 +148,27 @@ export function SopSettingsPage() {
 
   const selected = rows.find((v) => v.id === versionId) ?? null;
   const editable = canManage && selected?.state === "draft";
+  const currentVersion = rows.find((v) => v.state === "current") ?? null;
+  const approveBlocked = selected && editable && detail.data?.id === selected.id ? approveBlockedReason(selected, rows, steps.length) : null;
+
+  const confirmCancelApproval = (v: SopVersion) =>
+    modal.confirm({
+      title: `${v.version_tag} の承認を取り消しますか？`,
+      content: "草稿に戻り、編集できるようになります。今有効な版は、終わりの無い版に戻ります。オーダーが指定している版は取り消せません。",
+      okText: "承認を取り消す",
+      okButtonProps: { danger: true },
+      cancelText: "キャンセル",
+      onOk: async () => {
+        try {
+          await sopApi.cancelApproval(bizId as number, v.id);
+          message.success(`${v.version_tag} を草稿に戻しました。`);
+        } catch (e) {
+          message.error(`取り消せませんでした: ${e instanceof ApiError ? e.message : "通信に失敗しました。"}`, 8);
+        }
+        versions.reload();
+        detail.reload();
+      },
+    });
   const columns: ColumnsType<SopStep> = editable
     ? [
         ...stepColumns,
@@ -249,12 +273,28 @@ export function SopSettingsPage() {
                         <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteDraft(selected)}>
                           草稿を削除
                         </Button>
+                        <Button
+                          size="small"
+                          type="primary"
+                          icon={<CheckOutlined />}
+                          disabled={approveBlocked !== null || detail.data?.id !== selected.id}
+                          title={approveBlocked ?? undefined}
+                          onClick={() => setApproveOpen(true)}
+                        >
+                          承認…
+                        </Button>
                       </Space>
+                    )}
+                    {canManage && selected.state === "scheduled" && (
+                      <Button size="small" danger icon={<UndoOutlined />} onClick={() => confirmCancelApproval(selected)}>
+                        予定を取り消す
+                      </Button>
                     )}
                   </div>
                   {selected.state !== "draft" && (
                     <Typography.Paragraph type="secondary">承認済みの版は変えられません。変えるときは「新しい版」で草稿を作ります。</Typography.Paragraph>
                   )}
+                  {editable && approveBlocked && <Typography.Paragraph type="secondary">承認できません: {approveBlocked}</Typography.Paragraph>}
                   {editable && hasNumberGaps(steps) && (
                     <Alert
                       type="info"
@@ -286,6 +326,17 @@ export function SopSettingsPage() {
                 step={stepEditor.step}
                 onClose={() => setStepEditor((x) => ({ ...x, open: false }))}
                 onSaved={detail.reload}
+              />
+              <ApproveModal
+                open={approveOpen}
+                bizId={bizId}
+                draft={selected}
+                current={currentVersion}
+                onClose={() => setApproveOpen(false)}
+                onApproved={() => {
+                  versions.reload();
+                  detail.reload();
+                }}
               />
               <RenameDraftModal
                 open={renameOpen}

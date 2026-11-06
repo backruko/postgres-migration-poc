@@ -140,3 +140,20 @@ export function movedStepIds(steps: readonly Pick<SopStep, "id">[], index: numbe
 
 /** 番号に抜けがあるか（削除の後など。並べ替えで 1 から振り直せる） */
 export const hasNumberGaps = (steps: readonly Pick<SopStep, "step_num">[]) => steps.some((s, i) => s.step_num !== i + 1);
+
+// ---- 承認と承認の取消（M2.6） ----
+/** 承認できない理由（なければ null）。バックエンドと同じ: ステップが 1 つ以上、予定の版が他に無いこと */
+export function approveBlockedReason(draft: SopVersion, versions: readonly SopVersion[], stepCount: number): string | null {
+  if (draft.state !== "draft") return "草稿だけ承認できます";
+  if (stepCount === 0) return "ステップが無い草稿は承認できません（ステップを追加してください）";
+  const scheduled = versions.find((v) => v.state === "scheduled");
+  if (scheduled) return `${scheduled.version_tag} が予定になっています（発効するまで待つか、その予定を取り消してください）`;
+  return null;
+}
+
+/** 発効日に選べるいちばん早い日（明日。today は画面のタイムゾーンの YYYY-MM-DD） */
+export const firstEffectiveDate = (today: string) => {
+  const [y, m, d] = today.split("-").map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  return next.toISOString().slice(0, 10);
+};

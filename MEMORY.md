@@ -29,7 +29,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
     `2729ea7` M1.1 backend · `5a619b6` M1.2a 設定 menu · `2cfb5fa` M1.2b 顧客 page · `13a7238` M1.2c 業務 page (detail in
     §2 "M1").
   - **M2 SOP** (branch `feature/sop-screens`, step plan approved 2026-11-06, see §2 "M2"; M2.1 `5b054ea`, M2.2 `ce85e39`,
-    M2.3 `2582eaa`, M2.4 `f549312`, **M2.5 built, uncommitted**): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
+    M2.3 `2582eaa`, M2.4 `f549312`, M2.5 `800061c`, **M2.6 built, uncommitted** — then merge, next: login): backend gaps (list all versions incl. drafts, version + steps, edit / delete / reorder steps in a draft,
     delete a draft, impact query) + a SOP page per business (version list, draft step editor with condition /
     is_blocking, approve dialog with effective date **and the impact list**). Approved versions read-only; 新しい版 =
     copy of the current version into a draft.
@@ -55,7 +55,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
   screens from Phases 5–7 were never clicked through either. A "slow drawer spinner" report on 2026-11-05 could not be
   reproduced: server ~25 ms, Vite proxy ~25 ms — most likely the uvicorn console paused by a text selection
   (Windows QuickEdit); advised turning QuickEdit off.
-- **DB:** latest Alembic head **`7a3c5e9b1d24`** (M2.1, SOP states; **the user must run `alembic upgrade head`**). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
+- **DB:** latest Alembic head **`7a3c5e9b1d24`** (M2.1, SOP states; **the user's dev DB is upgraded — confirmed 2026-11-06**). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
   `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) → `f9bbe9648f15` (biz
   release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657` (step template condition /
   is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at) → `2904467fd7b9`
@@ -112,7 +112,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 80 (2026-11-06, "Version states" bullet at the end of the SOP version list)** — read with `{"kind": "view", "sinceRev": 80}` to see only newer edits, and
+**Last rev written by me: 81 (2026-11-06, "Built … (M2)" sentence added to the "Version states" bullet)** — read with `{"kind": "view", "sinceRev": 81}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -775,8 +775,8 @@ approving a draft with **no steps is refused**; **no four-eyes** on SOP approval
 | M2.2 | Draft editing API (as built below) | **done** (`ce85e39`) |
 | M2.3 | `GET /ope/sop-impact` (as built below) | **done** (`2582eaa`) |
 | M2.4 | SOP page (as built below) | **done** (`f549312`) |
-| M2.5 | Draft step editor (as built below) | **built, uncommitted** |
-| M2.6 | Approve dialog (date + impact list) and 予定を取り消す | todo |
+| M2.5 | Draft step editor (as built below) | **done** (`800061c`) |
+| M2.6 | Approve dialog + 予定を取り消す (as built below) | **built, uncommitted** |
 
 **M2.1 as built** (migration `7a3c5e9b1d24`: rebuilds `sop_status_enum` as DRAFT / APPROVED — FUTURE / ACTIVE / ARCHIVED →
 APPROVED; data fix-up first: drafts lose their dates, approved without `effective_at` get now, open-ended approved
@@ -849,6 +849,17 @@ checkboxes 1–12 (`.sop-months` grid of 6) required ≥ 1 (`conditionError`), �
 `stepUpdateBody` (changed fields only, null when unchanged), `movedStepIds`, `hasNumberGaps`. `sopApi`: renameDraft,
 addStep, updateStep, deleteStep, reorderSteps. Harness 16/16 on plan_check (draft id 6 `v9.1793927904.0-http` now has 2
 steps).
+
+**M2.6 as built** (frontend only; doc rev 81). Draft (admin): 「承認…」 button, disabled with the reason
+(`approveBlockedReason`: draft only, ≥ 1 step, no other scheduled version) also shown as a line under the header.
+`ApproveModal` (`destroyOnClose`): DatePicker from tomorrow (`firstEffectiveDate(todayIn(TIMEZONE))`), text "<date> 以降
+… が <tag> を使います。現行の <tag> は <前日> までになります", impact via `sopImpactApi.get(bizId, date, 20)`
+(`domain/ope/api/sopImpactApi.ts`, types `SopImpact*`) in three sections 新しい版を使うオーダー / 指定した版のまま /
+リリース済み（固定した版のまま） with total, up to 20 orders (time, template, status tag, kept tag, #id) and 「ほか N 件」;
+approve → `sopApi.approve(bizId, id, date)`. Scheduled version (admin): 「予定を取り消す」 (confirm; backend refusal e.g.
+pinned orders shown 8 s) → `sopApi.cancelApproval`. CSS `.sop-impact*`. Harness 12/12 on plan_check (draft id 6 approved
+for tomorrow, impact read, second approval 400, cancel → draft again; current v9 open-ended again). **Not checked in a
+browser.**
 
 ### Todo pool: signal transport "B" — SFTP watcher (parked 2026-11-05, user's choice: start with A)
 **A (in use now, nothing built):** the client-file business = LIGHTWEIGHT + MANUAL completion (手で受領), automatic

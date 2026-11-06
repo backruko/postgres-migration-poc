@@ -45,6 +45,23 @@ export const sopApi = {
     return unwrap(http.PUT("/biz/versions/{version_id}/steps/order", { params: { path: { version_id: versionId } }, body: { step_ids: stepIds } }));
   },
 
+  /** 草稿を承認し、effectiveDate（YYYY-MM-DD、明日以降）の 0:00 日本時間から有効にする（POST /biz/{id}/versions/{v}/approve） */
+  approve(bizId: number, versionId: number, effectiveDate: string): Promise<SopVersion> {
+    return unwrap(
+      http.POST("/biz/{biz_id}/versions/{draft_version_id}/approve", {
+        params: { path: { biz_id: bizId, draft_version_id: versionId } },
+        body: { effective_date: effectiveDate },
+      }),
+    );
+  },
+
+  /** 予定の版の承認を取り消し、草稿に戻す（POST /biz/{id}/versions/{v}/cancel） */
+  cancelApproval(bizId: number, versionId: number): Promise<SopVersion> {
+    return unwrap(
+      http.POST("/biz/{biz_id}/versions/{future_version_id}/cancel", { params: { path: { biz_id: bizId, future_version_id: versionId } } }),
+    );
+  },
+
   /** 草稿をステップごと削除（DELETE /biz/versions/{id}） */
   deleteDraft(versionId: number): Promise<SopVersion> {
     return unwrap(http.DELETE("/biz/versions/{version_id}", { params: { path: { version_id: versionId } } }));
