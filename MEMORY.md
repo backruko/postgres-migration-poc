@@ -1,102 +1,87 @@
 # MEMORY.md — Session handoff
 
-Handoff for the next working session. Read this first, then the design doc (§2), `frontend/README.md` (frontend
-details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/` and `src/domain_staff/`
-(backend). Last updated: 2026-11-05 (evening), after the SLA report.
+Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
+`frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
+`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-06 (evening)**, after the deployment
+setup was merged and handed to the user for a test on the VM.
 
 ## 1. Current status
 
-- **Built and merged into `main`, and pushed by the user (`main` = `origin/main` = `706f166`, 2026-11-05):** all seven
-  phases of the design doc (Plan MVP + 1 daily dashboard · 2 generation job · 3 staff · 4 ope orders · 5 steps /
-  maker-checker · 6 dependencies · 7 client events / signals) plus the 2026-11-05 work below. Per-phase "as built"
-  notes, decisions and step plans are in §2. **The user pushes; I never do.** The user sometimes commits a step
-  themselves — check `git log` before committing. Working tree clean; no work in progress.
-- **2026-11-05 (one long session), all merged with `--no-ff`, each step reviewed + committed on the user's "go":**
-  | Work | Branch → merge | What (detail in §2) |
+- **`main` = `895cbe5` (local, NOT pushed; `origin/main` is still `706f166`).** The user pushes; I never do. The user
+  sometimes commits a step themselves — check `git log` before committing. Working tree: clean after the handoff commit.
+- **Built and merged into `main`:** all design-doc phases (1 daily dashboard · 2 generation job · 3 staff · 4 ope
+  orders · 5 steps / maker-checker · 6 dependencies (+ L latest-before) · 7 client events / signals · 8 deadlines / due
+  soon · 9 SLA report), the 2026-11-05 extras (UX shortcuts, admin guards, dashboard tabs, logging) and **the whole MVP
+  roadmap of 2026-11-05/06** (goal: internal network, own team only; order M1 → M2 → login → deployment):
+  | MVP step | Merge into `main` | What (detail in §2) |
   |---|---|---|
-  | UX shortcuts U.1–U.3 | `feature/ux-shortcuts` → `700350e` | calendar day double-click → dashboard; ⚙ row link → template (highlight); 「← 戻る」 links via router state; template / 業務の設定 edits = admin |
-  | Test fixes | `fix/test-client-codes` → `e666056`, `fix/test-client-codes-all` → `7ead116` | time-independent sheet-link test; **`tests/client_codes.py` `new_client_code(prefix)`** in every test file |
-  | Small debts D.1 / D.2 | `feature/small-debts` → `d6ad461` | staff names (`actor_name`) in timelines; SOP version pin / unpin in the drawer (`GET /biz/{id}/versions`) |
-  | Admin guard U.4 | `feature/admin-guard` → `f3d483e` | every `/plans` + `/biz` write = admin, except calendar occurrence changes (変更 / 取消 / 臨時 / ルールに戻す / 取消の復元) = releaser or admin; operators only view calendar / settings |
-  | Phase L "latest before due" | `feature/latest-before` → `cdd8960` | 3rd dependency rule 直前の上流 with `lookback_days` (migration `2f7614f1cb02`) |
-  | Phase N deadlines | `feature/deadlines` → `1ba7cdb` | per-template deadline (予定の終了 / 開始から / 固定の時刻) + warning lead (default 0); **stored on the order** (`deadline_at`, `warn_at`, rule snapshot, `finished_at`), fixed at release; 遅れ / まもなく from stored columns; `GET /ops/attention`; 2-min auto-refresh (migrations `d17d631f5ad2`, `c5bb40015e61`, `51d8d829a2d2`) |
-  | Dashboard tabs | `feature/dashboard-tabs` → `0c6d15e` | 日次ダッシュボード tabs 予定 / 締切・遅れ (n) / 信号 (n), `?tab=` |
-  | Logging | `fix/log-rotation` → `4cbeab2`, `44e1687` (main), `fix/sql-echo-switch` → `fb0c827` | `app.log` rotates 10 MB × 5 (`LOG_FILE` / `LOG_MAX_MB` / `LOG_BACKUPS` env vars); rotated files git-ignored; **SQL logging off by default**, `SQL_ECHO=1` (in `.env` or env) turns it on |
-  | SLA report | `feature/sla-report` → `706f166` | `GET /ops/sla` + nav 「SLA」 page `/reports/sla` (client × deadline month: 完了 / 遅れ / 期限内率 / 平均遅れ / 未完了の遅れ, CSV export) |
-- **Next: the MVP roadmap (decided by the user 2026-11-05 evening).** Goal: a small MVP online on the **internal
-  network, own team only**. Order: **M1 → M2 → login → deployment**; the pool below waits until after go-live.
-  - **M1 client + business screens: done, merged into `main` (`44c1737`, 2026-11-06, not pushed)** — commits
-    `2729ea7` M1.1 backend · `5a619b6` M1.2a 設定 menu · `2cfb5fa` M1.2b 顧客 page · `13a7238` M1.2c 業務 page (detail in
-    §2 "M1").
-  - **M2 SOP screens: done, merged into `main` (`28b94b6`, 2026-11-06, not pushed; user browser-tested OK)** —
-    commits `5b054ea` M2.1 … `17aa788` M2.6 (detail in §2 "M2").
-  - **Login** (branch `feature/login` from `main` `28b94b6`; plan approved 2026-11-06, see §2 "Login"):
-    LG.1 `3a93ffd` (migration `b4e8d2a6c913`), LG.2 `c644b4d` (backend switch), LG.3 `311c38e` (frontend).
-  - **Deployment files** `7a2e3c6` on `feature/deployment` (from `feature/login`); see §2 "Deployment".
-  - **Login + deployment merged into `main` (`895cbe5`, 2026-11-06, not pushed).** Never run in Docker yet (no Docker
-    on the office PC) — **waiting for the user's test report from the VM** before anything else.
-  - **Deployment** (user's decisions 2026-11-05, doc rev 78): **Linux VM + Docker Compose**, services `db`
-    (PostgreSQL 16, volume, daily `pg_dump`), `app` (uvicorn + production frontend build same-origin with SPA
-    fallback), **`worker`** = a loop replacing Task Scheduler: release due orders, sleep until the next release
-    moment capped at 60 s (≈1 min precision; overdue ones go out on the next pass), plus the daily plan extension at
-    00:05 (later: notifications). Chosen over per-order JIT timers (too many invalidation paths, lost on restart) and
-    over a 1-min OS cron. Worker built **in the deployment step** (order unchanged); the two local Task Scheduler
-    entries stay until then. Production `.env` outside the image; then a go-live checklist (real master data,
-    `create_orders.py`, browser checks).
-- **Pool (after go-live)**, smallest first: (1) notifications (mail / Teams / Slack)
-  for まもなく / 遅れ — needs the user's tool + webhook; (2) SFTP watcher "B" (§2 "Todo pool") — needs server access
-  and file rules; (3) SOP version screen + "impact before approval" list (no SOP UI exists yet); (4) client-limited
-  role (§2 "Planned"); (5) real login replacing `X-Staff-Id` (design doc first). Plan any of them like Phases 5–7:
-  questions first (AskUserQuestion with a recommended option), a step plan the user approves, one step at a time,
-  each left uncommitted until "go".
-- **Browser check — done by the user, all fine (confirmed 2026-11-05, late session)** for the list below. Was: not yet clicked through (only U.1–U.3 were, OK): dashboard tabs + badges, the order
-  drawer (staff names in 記録 / step lines, SOP 指定 / 解除, 締切 / 完了 lines, まもなく), the 締切 section of the template
-  form + 締切 column, まもなく / 遅れ on rows, the 2-min auto-refresh, admin-only settings (sheets / holidays / templates /
-  業務の設定) and the operator's read-only calendar, 直前の上流 in 業務の依存関係, the SLA page + CSV in Excel. Earlier
-  screens from Phases 5–7 were never clicked through either. A "slow drawer spinner" report on 2026-11-05 could not be
-  reproduced: server ~25 ms, Vite proxy ~25 ms — most likely the uvicorn console paused by a text selection
-  (Windows QuickEdit); advised turning QuickEdit off.
-- **DB:** latest Alembic head **`b4e8d2a6c913`** (LG.1, login tables; **the user must run `alembic upgrade head`** —
-  their dev DB was at `7a3c5e9b1d24`, confirmed 2026-11-06). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
+  | M1 client + business screens | `44c1737` | 顧客 / 業務 pages, 設定 dropdown, client deactivate, automatic business codes, in-use delete guard |
+  | M2 SOP screens | `28b94b6` | SOP states from dates (migration `7a3c5e9b1d24`), draft editor, impact query, approve dialog — **user browser-tested OK** |
+  | Login LG.1–LG.3 | `895cbe5` (with deployment) | passwords / sessions / API keys (migration `b4e8d2a6c913`), login for every API, X-Staff-Id removed, /login page, forced password change, 職員 page temp passwords + API keys |
+  | Deployment | `895cbe5` | `deploy/` Docker Compose (db, app, worker, web, backup), `scripts/worker.py`, nightly pg_dump |
+- **Now: waiting for the user's test report from the VM.** The Docker setup has **never been built or started**
+  (no Docker on the office PC). Expect fixes in: image builds (python:3.14-slim + `psycopg-binary`, `npm ci` in
+  node:24-alpine), nginx config, compose start-up order / healthchecks, the backup service in the postgres image.
+  Ask for `docker compose ps` / `docker compose logs <service>` output. The login frontend (LG.3) and the 顧客 / 業務
+  pages were **not** clicked through in a browser by me; the user tested M1 + M2 screens only.
+- **After the VM test: go-live checklist** (not planned in detail yet): real master data (clients, businesses,
+  templates, sheets, holidays, SOP versions, dependencies) on the server, staff accounts + temporary passwords,
+  `scripts/create_orders.py` if orders are missing, browser checks, the user's NAS sync of `deploy/backups/`.
+- **Pool (after go-live)**, smallest first: (1) notifications (mail / Teams / Slack) for まもなく / 遅れ — needs the
+  user's tool + webhook; the worker loop is the natural place; (2) SFTP watcher "B" (§2 "Todo pool") — posts
+  `POST /ope/signals` with an **API key** (built in LG.2); (3) client-limited role (§2 "Planned"); (4) SSO instead of
+  passwords (behind the same session). Plan any of them like before: questions first (AskUserQuestion with a
+  recommended option), a step plan the user approves, one step at a time, each left uncommitted until "go".
+- **User's dev setup after login (important):** their uvicorn on 8000 + Vite now need a real login. They must have run
+  `alembic upgrade head` (head `b4e8d2a6c913`) and `python scripts/set_password.py system` (staff 1, login `system`,
+  has system_admin + operator / checker / releaser but **not admin** — grant 業務管理者 to edit settings). Not yet
+  confirmed by the user. The two Task Scheduler jobs on their PC stay for the dev DB; the server uses `worker`.
+- **DB:** latest Alembic head **`b4e8d2a6c913`**. Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
   `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) → `f9bbe9648f15` (biz
   release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657` (step template condition /
   is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at) → `2904467fd7b9`
   (biz_dependency) → `cb0ae371f402` (ope_dependency) → `58425e70286d` (DEPENDENCY_OVERRIDE_APPROVED) → `6a7849dbf2ec`
-  (biz client-event settings) → `3242f180527a` (ope_signal, role signal_sender) → `2f7614f1cb02` (latest_before +
-  lookback_days, L.1) → `d17d631f5ad2` (plan_template deadline fields, N.1) → `c5bb40015e61` (ope_order deadline
-  snapshot + deadline_at / warn_at / finished_at, N.2) → `51d8d829a2d2` (attention partial indexes, N.3) → `7a3c5e9b1d24` (SOP version states from dates, M2.1) → `b4e8d2a6c913` (staff login: passwords, sessions, API keys, LG.1).
-  **The user's dev DB:** on 2026-11-05 at 16:39 their uvicorn (8000) was already reading the N.2 columns and serving
-  `/ops/attention`, so it was upgraded at least to `c5bb40015e61`; **the user confirmed it is at head `51d8d829a2d2`
-  (2026-11-05, late session)** — never
-  run alembic against `dev_db` myself. The user runs `alembic upgrade head`; their uvicorn on 8000 auto-reloads, so a
-  model change without the migration returns 500 until they upgrade. **Warn them whenever a step adds a migration.**
-  Dev DB facts: staff 1 login `system` has system_admin + operator / checker / releaser but **not admin** (needs
-  業務管理者 to edit settings since U.3 / U.4); 1 client MOCK; biz 13 / 14 in use; `app.log.1` (1.35 GB, pre-rotation)
-  can be deleted by the user.
-  **`plan_check`** (throwaway, mine) is at `b4e8d2a6c913`. Seeded: client `MOCK`, biz 1 `MOCK0001` (one approved SOP
-  version `v9.26817.0`; SOP version 1 with 3 step templates), biz 2 `MOCK0002` (LIGHTWEIGHT + AUTOMATIC
-  `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff: 1 `check-admin` (system_admin),
-  2 suspended, 3 viewer+auditor, **4 operator, 5 releaser**, 6 / 7 checkers, **8 admin**, 9 / 10 signal_sender. 14
-  open orders are past their deadline there (good for 遅れ / attention / SLA checks).
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **175 passed**,
-  ~2.5–6 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
-  and with it the biz dependency and template listeners — is registered there). **Every new test file uses
-  `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M G L N Q E
-  H J W F Y U C X Z (test_credentials / test_login use no client). Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0
-  errors. Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic
-  check` → no drift; run alembic with `export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed
-  's#/dev_db$#/plan_check#')` (`.env` points at the user's `dev_db`). Frontend: `cd frontend && npm run build` passes.
-  After backend schema changes: `python scripts/export_openapi.py` then `npm run gen:api`.
-  **Harness pattern:** uvicorn on 8001 against `plan_check` **with `LOG_FILE=app-8001.log`**, then bundle the real
-  frontend modules with esbuild (`--define:import.meta.env='{"VITE_API_BASE_URL":"http://127.0.0.1:8001",
-  "VITE_TIMEZONE":"Asia/Tokyo"}'`) and run them in node; wait for `/plans/calendars` = 200 before calling.
-- **Scheduled jobs (user's machine):** Task Scheduler `\postgres-migration-poc\PlanExtendJob` (daily 00:05,
+  (biz client-event settings) → `3242f180527a` (ope_signal, role signal_sender) → `2f7614f1cb02` (latest_before) →
+  `d17d631f5ad2` (template deadline, N.1) → `c5bb40015e61` (order deadline columns, N.2) → `51d8d829a2d2` (attention
+  indexes, N.3) → `7a3c5e9b1d24` (SOP version states from dates, M2.1) → `b4e8d2a6c913` (staff login, LG.1).
+  **Never run alembic against `dev_db` myself.** The user runs `alembic upgrade head`; their uvicorn on 8000
+  auto-reloads, so a model change without the migration returns 500 until they upgrade. **Warn them whenever a step
+  adds a migration.** On the server the `app` container migrates at start.
+  **`plan_check`** (throwaway, mine) is at `b4e8d2a6c913`. Seeded: client `MOCK` (+ test clients `Z8E4`, `YA64`), biz 1
+  `MOCK0001` (approved SOP `v9.26817.0` current; draft id 6 `v9.1793927904.0-http` with 2 steps), biz 2 `MOCK0002`
+  (LIGHTWEIGHT + AUTOMATIC `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff (every id
+  N has password **`check-pass-N`**): 1 `check-admin` (system_admin), 2 suspended, 3 viewer+auditor, 4 operator
+  `http-operator-1793324910`, 5 releaser `http-releaser-1793324911`, 6 / 7 checkers, 8 admin `http-admin-6eb1ee`, 9 / 10
+  signal_sender. Many open orders past their deadline (good for 遅れ / attention / SLA checks).
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **202 passed**,
+  ~3–8 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
+  and with it the biz dependency / template listeners and the master guards — is registered there). **Every new test
+  file uses `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M
+  G L N Q E H J W F Y U C X Z (still free: I). Auth in OpenAPI tests: `tests/openapi_auth.py` `needs_login(op)`.
+  Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
+  Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic check` → no
+  drift; run alembic with `export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed 's#/dev_db$#/plan_check#')`
+  (`.env` points at the user's `dev_db`). Frontend: `cd frontend && npm run build` (tsc + vite) passes. After backend
+  schema changes: `python scripts/export_openapi.py` then `npm run gen:api`.
+  **Harness pattern (since login):** start uvicorn on 8001 against `plan_check` with **absolute paths** (a backgrounded
+  command whose cwd drifted ran without its `cd`): `export DATABASE_URL=$(grep ^DATABASE_URL /c/p/postgres-migration-poc/.env
+  | cut -d= -f2- | sed 's#/dev_db$#/plan_check#') && export LOG_FILE=/c/p/postgres-migration-poc/app-8001.log && exec
+  /c/p/postgres-migration-poc/.venv/Scripts/python.exe -m uvicorn main:app --app-dir /c/p/postgres-migration-poc --port
+  8001`. **Log in first** (`POST /auth/login`): Python with `http.cookiejar`; node harnesses import a cookie-keeping
+  `fetch` first (pattern in §2 "Login" LG.3) and bundle the real modules with esbuild
+  (`--define:import.meta.env='{"VITE_API_BASE_URL":"http://127.0.0.1:8001","VITE_TIMEZONE":"Asia/Tokyo"}'`). Stop
+  uvicorn with TaskStop when done.
+- **Scheduled jobs (user's PC, dev DB only):** Task Scheduler `\postgres-migration-poc\PlanExtendJob` (daily 00:05,
   `scripts/extend_plans.py`) and `\postgres-migration-poc\OrderReleaseJob` (every 15 min, `scripts/release_orders.py`).
-  Any new script that changes plan must call `order_sync.register()`.
+  On the server: the `worker` service. Any new script that changes plan must call `order_sync.register()`.
 
 ### Commits by phase (newest first; full detail per step in §2)
 | Phase | Commits |
 |---|---|
+| Deployment (`feature/deployment` → `895cbe5`) | `7a2e3c6` deploy/ + worker |
+| Login (`feature/login`, merged with deployment) | `311c38e` LG.3 frontend · `c644b4d` LG.2 backend switch · `3a93ffd` LG.1 building blocks |
+| M2 SOP (`feature/sop-screens` → `28b94b6`) | `17aa788` M2.6 · `800061c` M2.5 · `f549312` M2.4 · `2582eaa` M2.3 · `ce85e39` M2.2 · `5b054ea` M2.1 |
+| M1 masters (`feature/master-screens` → `44c1737`) | `13a7238` M1.2c · `2cfb5fa` M1.2b · `5a619b6` M1.2a · `2729ea7` M1.1 |
 | SLA report (`feature/sla-report`) | `16045c6` S.2 page + CSV · `aae5c50` S.1 endpoint |
 | Dashboard tabs | `36ce2e9` |
 | N deadlines (`feature/deadlines`) | `7ab2cc3` N.4 frontend · `95c94fe` N.3 re-stamp + read side + attention · `503f3c6` N.2 order columns · `2e5228f` N.1 template fields |
@@ -114,7 +99,7 @@ details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domai
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 89 (2026-11-06, "MVP deployment" paragraph: what was built — HTTP intranet, nginx web, migrations at start, nightly backup)** — read with `{"kind": "view", "sinceRev": 89}` to see only newer edits, and
+**Last rev written by me: 90 (2026-11-06 evening: status sentence under Delivery phases updated — all phases + MVP built, deployment awaiting its first server run)** — read with `{"kind": "view", "sinceRev": 90}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
