@@ -7,7 +7,10 @@ setup was merged and handed to the user for a test on the VM.
 
 ## 1. Current status
 
-- **`main` = `origin/main` = `6390c87` (pushed by the user, 2026-11-06).** After `895cbe5` the user committed `a00b2b1`
+- **`main` = `acfedc3` (local, not pushed; `origin/main` = `6390c87`)** = merge of `feature/go-live` (G.1 `450f03e`, G.2
+  `3771751`, G.3 `4cfca4c`; §2 "Go-live"). **The user carries `packages/ops-20261106-4cfca4c.zip` (same files as
+  `acfedc3`) to the Linux server by USB; next = their first run there (README §0, §1, then GO-LIVE.md A) — fix what it
+  shows first.** Earlier: `origin/main` `6390c87` was pushed by the user 2026-11-06. After `895cbe5` the user committed `a00b2b1`
   "mvp" / `242dda6` "staging" (MEMORY.md + a `deploy_package.zip`) and `6390c87` "git" (zip removed again; it held no
   secrets). **The VM reaches only the office network (no GitHub): code goes as a zip on a USB
   drive** (user, 2026-11-06); it reaches the internet **only through a corporate HTTP/HTTPS proxy** (built for in G.3,
@@ -32,6 +35,12 @@ setup was merged and handed to the user for a test on the VM.
   node:24-alpine), nginx config, compose start-up order / healthchecks, the backup service in the postgres image.
   Ask for `docker compose ps` / `docker compose logs <service>` output. The login frontend (LG.3) and the 顧客 / 業務
   pages were **not** clicked through in a browser by me; the user tested M1 + M2 screens only.
+- **Operation manual (2026-11-10, uncommitted on `main`): `docs/OPERATION-MANUAL.md`** — Japanese, for QA testers and
+  future operations staff (my assumption; the user's request left the audience as a placeholder): overview / terms /
+  order states / roles / screens, prerequisites (login rules, cookie vs API key), per-feature steps with the matching
+  API calls, curl examples + error codes, a 16-row end-to-end QA scenario, MVP limits. Written from `openapi.json`
+  (unchanged after re-export), the schemas and frontend labels; **not checked against a running server or browser**.
+  Keep it in step when a screen label or rule changes.
 - **After the VM test: go-live checklist** (not planned in detail yet): real master data (clients, businesses,
   templates, sheets, holidays, SOP versions, dependencies) on the server, staff accounts + temporary passwords,
   `scripts/create_orders.py` if orders are missing, browser checks, the user's NAS sync of `deploy/backups/`.
