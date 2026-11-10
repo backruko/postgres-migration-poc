@@ -6,8 +6,21 @@ import type { CompletionMode, ExecutionType, ReleaseMode } from "../types";
  */
 export const canEditPlanSettings = (s: Staff | null | undefined) => s?.status === "active" && s.roles.includes("admin");
 
+/**
+ * 変更の内容を「確認」できるか（業務管理者・リリース担当）。確認は何も保存しない:
+ * テンプレートの「何が変わるか」の確認と、シートの取り込みの「取り込むと何が変わるか」の表示。
+ * リリース担当は準備に加わり、保存・作成・取り込みは業務管理者が行う（2026-11-10。下書きと承認の仕組みができるまでの形）
+ */
+export const canPreviewPlanSettings = (s: Staff | null | undefined) =>
+  s?.status === "active" && (s.roles.includes("admin") || s.roles.includes("releaser"));
+
 /** 変更できない職員に見せる案内 */
 export const PLAN_SETTINGS_ADMIN_ONLY = "変更は業務管理者だけができます";
+/** 確認だけできる職員（リリース担当）に見せる案内 */
+export const PLAN_SETTINGS_PREVIEW_ONLY = "変更は業務管理者だけができます（リリース担当は、内容の確認まで）";
+/** 確認だけの画面に出す説明 */
+export const PREVIEW_ONLY_NOTE =
+  "確認だけができます。ここで入力した内容は保存されません。この内容でよければ、業務管理者に伝えてください（保存は業務管理者が行います）。";
 
 export const RELEASE_MODE_LABEL: Record<ReleaseMode, string> = {
   manual_approval: "手動（リリース担当が承認）",

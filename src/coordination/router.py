@@ -63,8 +63,12 @@ def get_sla_report_endpoint(
 # テンプレートの変更の、保存の前の確認（何も保存しない）
 # ==========================================
 
+# 確認は何も保存しないので、リリース担当にも開く（準備に加わってもらう。保存・作成は業務管理者だけ。2026-11-10）
+PREVIEWERS = [RoleCode.RELEASER, RoleCode.ADMIN]
+
+
 @router.post("/templates/preview", response_model=TemplateCreatePreview, responses={**COMMON_ERRORS, **AUTH_ERRORS})
-@require_roles([RoleCode.ADMIN])
+@require_roles(PREVIEWERS)
 def preview_template_create_endpoint(
     template_in: PlanTemplateCreate = Body(..., openapi_examples=PLAN_TEMPLATE_CREATE_EXAMPLES),
     months: int = Query(3, ge=1, le=12, description="今日から何か月先までを確認するか（作成時に生成される範囲のほうが長ければ、そこまで）"),
@@ -73,13 +77,13 @@ def preview_template_create_endpoint(
     """
     テンプレートをこの内容（POST /plans/templates と同じ本文）で作ったらできる予定を返します。**何も保存しません。**
     実際の作成と同じ処理を試し実行して取り消すので、休日の扱い・シートの日付からのずれなども、作ったときと同じになります。
-    入力の誤りは、POST /plans/templates と同じエラーになります。業務管理者だけ。
+    入力の誤りは、POST /plans/templates と同じエラーになります。リリース担当・業務管理者（作成そのものは業務管理者だけ）。
     """
     return preview_template_create(db=db, template_in=template_in, months=months)
 
 
 @router.post("/templates/{template_id}/preview", response_model=TemplateChangePreview, responses={**COMMON_ERRORS, **AUTH_ERRORS})
-@require_roles([RoleCode.ADMIN])
+@require_roles(PREVIEWERS)
 def preview_template_update_endpoint(
     template_id: int,
     template_in: PlanTemplateUpdate,
@@ -90,6 +94,6 @@ def preview_template_update_endpoint(
     テンプレートをこの内容（PATCH /plans/templates/{id} と同じ本文）で変えたら何が起きるかを返します。**何も保存しません。**
     実際の変更と同じ処理を試し実行して取り消すので、結果は保存したときと同じです（人が変更・取消した日は残る、など）。
     予定の違い（増える・無くなる・日時が変わる）と、追従するオーダー（日時が変わる・取り消される・矛盾になる）を返します。
-    入力の誤りは、PATCH と同じエラーになります。業務管理者だけ。
+    入力の誤りは、PATCH と同じエラーになります。リリース担当・業務管理者（保存そのものは業務管理者だけ）。
     """
     return preview_template_update(db=db, template_id=template_id, template_in=template_in, months=months)

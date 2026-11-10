@@ -1110,7 +1110,7 @@ export interface paths {
          * Preview Template Create Endpoint
          * @description テンプレートをこの内容（POST /plans/templates と同じ本文）で作ったらできる予定を返します。**何も保存しません。**
          *     実際の作成と同じ処理を試し実行して取り消すので、休日の扱い・シートの日付からのずれなども、作ったときと同じになります。
-         *     入力の誤りは、POST /plans/templates と同じエラーになります。業務管理者だけ。
+         *     入力の誤りは、POST /plans/templates と同じエラーになります。リリース担当・業務管理者（作成そのものは業務管理者だけ）。
          */
         post: operations["preview_template_create_endpoint_ops_templates_preview_post"];
         delete?: never;
@@ -1133,7 +1133,7 @@ export interface paths {
          * @description テンプレートをこの内容（PATCH /plans/templates/{id} と同じ本文）で変えたら何が起きるかを返します。**何も保存しません。**
          *     実際の変更と同じ処理を試し実行して取り消すので、結果は保存したときと同じです（人が変更・取消した日は残る、など）。
          *     予定の違い（増える・無くなる・日時が変わる）と、追従するオーダー（日時が変わる・取り消される・矛盾になる）を返します。
-         *     入力の誤りは、PATCH と同じエラーになります。業務管理者だけ。
+         *     入力の誤りは、PATCH と同じエラーになります。リリース担当・業務管理者（保存そのものは業務管理者だけ）。
          */
         post: operations["preview_template_update_endpoint_ops_templates__template_id__preview_post"];
         delete?: never;
