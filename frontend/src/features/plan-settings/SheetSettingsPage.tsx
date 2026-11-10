@@ -3,7 +3,12 @@ import { Alert, App, Button, Empty, Radio, Select, Space, Table, Tag, Typography
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { canEditPlanSettings, PLAN_SETTINGS_ADMIN_ONLY } from "../../domain/biz/lib/settings";
+import {
+  canEditPlanSettings,
+  canPreviewPlanSettings,
+  PLAN_SETTINGS_ADMIN_ONLY,
+  PLAN_SETTINGS_PREVIEW_ONLY,
+} from "../../domain/biz/lib/settings";
 import { useClients } from "../../domain/client/hooks/useClients";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { sheetApi } from "../../domain/plan/api";
@@ -34,6 +39,9 @@ export function SheetSettingsPage() {
   // マーカー・日付の変更は業務管理者だけ（見るのは誰でも）
   const me = useCurrentStaff();
   const canEdit = canEditPlanSettings(me.data);
+  // リリース担当は、取り込みの画面でファイルを選んで「取り込むと何が変わるか」を見るまで（取り込みはできない）
+  const canPreview = canPreviewPlanSettings(me.data);
+  const adminOnly = canPreview ? PLAN_SETTINGS_PREVIEW_ONLY : PLAN_SETTINGS_ADMIN_ONLY;
 
   const clients = useClients();
   const calendars = useBusinessCalendars();
@@ -199,9 +207,9 @@ export function SheetSettingsPage() {
           <div className="eyebrow">事前設定</div>
           <h1>年間計画シート</h1>
         </div>
-        {canEdit && clientCode !== null && (
+        {(canEdit || canPreview) && clientCode !== null && (
           <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)} disabled={sheets.data === null || sheets.data === undefined}>
-            シートを取り込む
+            {canEdit ? "シートを取り込む" : "取り込みの内容を確認"}
           </Button>
         )}
       </header>
@@ -235,7 +243,7 @@ export function SheetSettingsPage() {
           description={
             canEdit
               ? "この顧客には年間計画シートがありません。「シートを取り込む」から JSON ファイルを取り込んでください"
-              : `この顧客には年間計画シートがありません（${PLAN_SETTINGS_ADMIN_ONLY}）`
+              : `この顧客には年間計画シートがありません（${adminOnly}）`
           }
         />
       ) : (
@@ -246,7 +254,7 @@ export function SheetSettingsPage() {
                 <Typography.Text strong>{sheet.name}</Typography.Text>{" "}
                 <Typography.Text type="secondary" className="mono">
                   {sheet.period_start}〜{sheet.period_end}・マーカー {sheet.markers.length} 件
-                  {!canEdit && `・${PLAN_SETTINGS_ADMIN_ONLY}`}
+                  {!canEdit && `・${adminOnly}`}
                 </Typography.Text>
               </div>
               {canEdit && (
@@ -276,6 +284,7 @@ export function SheetSettingsPage() {
       {clientCode !== null && (
         <SheetImportModal
           open={importOpen}
+          canImport={canEdit}
           clientCode={clientCode}
           sheets={sheets.data ?? []}
           onClose={() => setImportOpen(false)}

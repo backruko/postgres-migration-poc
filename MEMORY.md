@@ -15,6 +15,8 @@ setup was merged and handed to the user for a test on the VM.
 - **USB zip rebuilt 2026-11-10 from the head of `main`** (`python scripts/make_package.py` → the newest
   `packages/ops-20261110-<sha>.zip`; `packages/` is git-ignored). It replaces `ops-20261106-4cfca4c.zip`, which has
   none of the 2026-11-10 work. The user still has to copy it to the USB drive. Rebuild again after any later commit.
+- **Branch `feature/releaser-preview` (from `main` `75d6755`, 2026-11-10):** releasers can preview, admins save — §2
+  "Safer changes" → "Releasers preview (Option B)". The user asked to rebuild the USB package once it is merged.
 - **Next: nothing open to build.** Waiting for the server (first run postponed for IP configuration) and the pilot;
   Level 2 (drafts + approval with finer permissions) only after the pilot. Not confirmed as browser-checked: the sheet
   import window. The user's dev DB still has the orphan row from the test (template 8, 11/26 11:00, no order).
@@ -143,7 +145,7 @@ setup was merged and handed to the user for a test on the VM.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 103 (2026-11-10: revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 103}` to see only newer edits, and
+**Last rev written by me: 104 (2026-11-10: rev 104 adds "Who can use it" (releasers preview, admins save; import summary for releasers) to the Level 1 item; revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 104}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -1187,6 +1189,25 @@ reconcile, orders follow); templates have no status and no who-changed-what; `sr
   result; month grids; 12-month range; nothing saved). **Not opened in a browser by me.**
   P.3 committed `d7539fe`. **P.4:** `docs/OPERATION-MANUAL.md` 3.7 got 「保存の前の確認」 (steps, a table of what each
   summary line means, the things to know, both preview API calls); design doc rev 101.
+- **Releasers preview (Option B, user's decision 2026-11-10; branch `feature/releaser-preview`).** The user expected
+  releasers to do the "pre-editing"; both features were admin-only. Offered A (template preview only) / B (A + see the
+  import summary, no import) / C (A + import directly, no approval); **chosen: B** — releasers are involved in
+  preparation "without bypassing the admin approval principle"; save / create / import stay admin-only until Level 2
+  brings saved drafts + approval.
+  - Backend: `/ops/templates/preview` and `/ops/templates/{id}/preview` → `PREVIEWERS = [RELEASER, ADMIN]`
+    (`src/coordination/router.py`). Nothing else changed; template writes and `POST /plans/sheets/import` stay ADMIN
+    (asserted in `test_preview_endpoints_need_a_login_and_releaser_or_admin_while_saving_stays_admin_only`).
+  - Frontend: `canPreviewPlanSettings` (active + admin or releaser), `PLAN_SETTINGS_PREVIEW_ONLY`, `PREVIEW_ONLY_NOTE`
+    in `domain/biz/lib/settings.ts`. `TemplateFormModal` got `canSave`: false → titles say 保存はできません, footer is
+    閉じる + 変更を確認 / 予定を確認, an info note, the preview window has only 戻る, an edit always opens the preview
+    (even when no date changes), `save()` returns early. `PlanSettingsPage`: releasers see 「変更を確認」 per row and
+    「新しいテンプレートの予定を確認」. `SheetImportModal` got `canImport`: false → title 取り込みを確認（取り込みは
+    できません）, only 閉じる, info note; the summary / mode radio / preview are browser-side, nothing is sent.
+    `SheetSettingsPage`: releasers see 「取り込みの内容を確認」.
+  - Limit told to the user: no saved drafts, so the releaser passes the content to the admin outside the system.
+  - Checked: build, pyright, harness `releaser_harness.py` on `plan_check` 16/16 (releaser staff 5: both previews 200,
+    sheets GET 200; PATCH / POST / DELETE template and both import modes 403; operator previews 403; admin 200; nothing
+    changed). **Not opened in a browser by me.**
 - **Started work keeps its occurrence (2026-11-10, branch `fix/started-slot-not-regenerated`).** The user's browser
   test: template 8 不定期テスト (sheet-based, dev DB) 9:00 → 11:00; the 11/26 row then showed the new time, no order
   ("—"), no release / cancel. Cause (read-only SELECTs on dev_db, with the user's OK for that one template): order 888

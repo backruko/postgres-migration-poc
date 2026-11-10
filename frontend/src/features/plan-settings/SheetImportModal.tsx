@@ -1,6 +1,7 @@
 import { InboxOutlined } from "@ant-design/icons";
 import { Alert, Button, Descriptions, Modal, Radio, Result, Space, Typography, Upload } from "antd";
 import { useEffect, useMemo, useState } from "react";
+import { PREVIEW_ONLY_NOTE } from "../../domain/biz/lib/settings";
 import { sheetApi } from "../../domain/plan/api";
 import type { ReferenceSheet, SheetImportInput, SheetImportResult } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
@@ -8,6 +9,11 @@ import { parseImportFile, previewImport } from "./sheetImport";
 
 interface Props {
   open: boolean;
+  /**
+   * 取り込めるか（業務管理者）。false（リリース担当）のときは「確認だけ」: ファイルを選んで、取り込むと何が変わるかを見られるが、
+   * 取り込みのボタンは出ない。ここまでの表示はブラウザの中の計算で、サーバーには何も送らない（バックエンドも取り込みを拒否する）
+   */
+  canImport: boolean;
   /** 選択中の顧客（ファイルの顧客コードと違う場合は取り込ませない） */
   clientCode: string;
   /** 選択中の顧客の今のシート（取り込むと何が変わるかを数えるのに使う） */
@@ -25,7 +31,7 @@ const MAX_FILE_BYTES = 4 * 1024 * 1024;
  * ファイルは利用者の側で用意する（元の表からの変換はシステムの外で行う）。ここではファイルを選び、
  * 「追加だけ」か「ファイルに合わせる」かを選んで、何が変わるかを確認してから取り込む。結果の件数は取り込み後に表示する。
  */
-export function SheetImportModal({ open, clientCode, sheets, onClose, onImported }: Props) {
+export function SheetImportModal({ open, canImport, clientCode, sheets, onClose, onImported }: Props) {
   const [fileName, setFileName] = useState<string | null>(null);
   const [input, setInput] = useState<SheetImportInput | null>(null);
   const [fileProblems, setFileProblems] = useState<string[]>([]);
@@ -69,7 +75,7 @@ export function SheetImportModal({ open, clientCode, sheets, onClose, onImported
   };
 
   const submit = async () => {
-    if (!preview) return;
+    if (!preview || !canImport) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -89,13 +95,13 @@ export function SheetImportModal({ open, clientCode, sheets, onClose, onImported
   return (
     <Modal
       open={open}
-      title="年間計画シートを取り込む"
+      title={canImport ? "年間計画シートを取り込む" : "年間計画シートの取り込みを確認（取り込みはできません）"}
       width={640}
       onCancel={onClose}
       maskClosable={!submitting}
       footer={
-        result ? (
-          <Button type="primary" onClick={onClose}>
+        result || !canImport ? (
+          <Button type={canImport ? "primary" : "default"} onClick={onClose}>
             閉じる
           </Button>
         ) : (
@@ -133,6 +139,7 @@ export function SheetImportModal({ open, clientCode, sheets, onClose, onImported
         />
       ) : (
         <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          {!canImport && <Alert type="info" showIcon message={PREVIEW_ONLY_NOTE} />}
           <Typography.Paragraph type="secondary" className="modal-note" style={{ marginBottom: 0 }}>
             決まった形の JSON ファイル（顧客コード・シート名・期間・マーカー・日付）を取り込みます。顧客コードとシート名が同じシートがあれば更新し、
             無ければ新しく作ります。途中でエラーになった場合は、何も反映されません。

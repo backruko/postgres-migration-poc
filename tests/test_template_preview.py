@@ -340,7 +340,7 @@ def test_create_preview_errors_are_the_same_as_the_real_creation(db, biz_id):
     assert counts(biz_id) == (0, 0)
 
 
-def test_preview_endpoints_need_a_login_and_admin():
+def test_preview_endpoints_need_a_login_and_releaser_or_admin_while_saving_stays_admin_only():
     from fastapi.routing import APIRoute
 
     from main import app
@@ -352,8 +352,22 @@ def test_preview_endpoints_need_a_login_and_admin():
         assert needs_login(op) and {"401", "403"} <= set(op["responses"]), path
     routes = [r for r in router.routes if isinstance(r, APIRoute) and r.path.endswith("/preview")]
     assert len(routes) == 2
+    # 確認は何も保存しないので、リリース担当にも開く（2026-11-10）
     for route in routes:
-        assert set(getattr(route.endpoint, "__required_roles__")) == {RoleCode.ADMIN}, route.path
+        assert set(getattr(route.endpoint, "__required_roles__")) == {RoleCode.RELEASER, RoleCode.ADMIN}, route.path
+
+    # 保存・作成・取り込みは、業務管理者だけのまま
+    from src.domain_plan.router import router as plan_router
+
+    admin_only = {("/plans/templates", "POST"), ("/plans/templates/{template_id}", "PATCH"), ("/plans/sheets/import", "POST")}
+    seen = set()
+    for route in plan_router.routes:
+        if isinstance(route, APIRoute):
+            for method in route.methods or ():
+                if (route.path, method) in admin_only:
+                    seen.add((route.path, method))
+                    assert set(getattr(route.endpoint, "__required_roles__")) == {RoleCode.ADMIN}, route.path
+    assert seen == admin_only
 
 
 # ==========================================

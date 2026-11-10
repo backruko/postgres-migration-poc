@@ -1,4 +1,4 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
@@ -6,7 +6,12 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import { bizOptions } from "../../domain/biz/lib/businesses";
 import { BizSettingsPanel } from "./BizSettingsPanel";
-import { canEditPlanSettings, PLAN_SETTINGS_ADMIN_ONLY } from "../../domain/biz/lib/settings";
+import {
+  canEditPlanSettings,
+  canPreviewPlanSettings,
+  PLAN_SETTINGS_ADMIN_ONLY,
+  PLAN_SETTINGS_PREVIEW_ONLY,
+} from "../../domain/biz/lib/settings";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { templateApi } from "../../domain/plan/api";
 import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
@@ -93,6 +98,8 @@ export function PlanSettingsPage() {
   // 作成・編集・削除と業務の設定の編集は業務管理者だけ（見るのは誰でも）
   const me = useCurrentStaff();
   const canEdit = canEditPlanSettings(me.data);
+  // リリース担当は、フォームを開いて「何が変わるか」の確認まで（保存はできない）
+  const canPreview = canPreviewPlanSettings(me.data);
 
   const bizes = useBizMasters();
   const options = useMemo(() => bizOptions(bizes.data ?? []), [bizes.data]);
@@ -131,37 +138,49 @@ export function PlanSettingsPage() {
       },
     });
 
-  const tableColumns: ColumnsType<PlanTemplate> = !canEdit ? columns : [
+  const tableColumns: ColumnsType<PlanTemplate> = !canEdit && !canPreview ? columns : [
     ...columns,
     {
       title: "操作",
       key: "actions",
       width: 160,
       fixed: "right",
-      render: (_, t) => (
-        <Space size={0}>
+      render: (_, t) =>
+        canEdit ? (
+          <Space size={0}>
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => openEditor(t)}
+              disabled={!selectedBiz}
+              aria-label={`「${t.name}」を編集`}
+            >
+              編集
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => confirmDelete(t)}
+              aria-label={`「${t.name}」を削除`}
+            >
+              削除
+            </Button>
+          </Space>
+        ) : (
           <Button
             type="link"
             size="small"
-            icon={<EditOutlined />}
+            icon={<EyeOutlined />}
             onClick={() => openEditor(t)}
             disabled={!selectedBiz}
-            aria-label={`「${t.name}」を編集`}
+            aria-label={`「${t.name}」の変更を確認`}
           >
-            編集
+            変更を確認
           </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => confirmDelete(t)}
-            aria-label={`「${t.name}」を削除`}
-          >
-            削除
-          </Button>
-        </Space>
-      ),
+        ),
     },
   ];
 
@@ -226,12 +245,17 @@ export function PlanSettingsPage() {
             <Typography.Text type="secondary">
               {selectedBiz ? `${selectedBiz.business_code} ${selectedBiz.name}` : `業務ID ${bizId}`} のテンプレート
               {data ? ` ${data.length} 件` : ""}
-              {!canEdit && ` ・ ${PLAN_SETTINGS_ADMIN_ONLY}`}
+              {!canEdit && ` ・ ${canPreview ? PLAN_SETTINGS_PREVIEW_ONLY : PLAN_SETTINGS_ADMIN_ONLY}`}
             </Typography.Text>
             {/* 作成先は選択中の業務（一覧に無い業務IDの場合は作成・編集できない） */}
             {canEdit && (
               <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(null)} disabled={!selectedBiz}>
                 新規作成
+              </Button>
+            )}
+            {!canEdit && canPreview && (
+              <Button icon={<EyeOutlined />} onClick={() => openEditor(null)} disabled={!selectedBiz}>
+                新しいテンプレートの予定を確認
               </Button>
             )}
           </div>
@@ -248,9 +272,10 @@ export function PlanSettingsPage() {
           />
         </>
       )}
-      {selectedBiz && canEdit && (
+      {selectedBiz && (canEdit || canPreview) && (
         <TemplateFormModal
           open={editor.open}
+          canSave={canEdit}
           biz={selectedBiz}
           template={editor.template}
           onClose={() => setEditor((s) => ({ ...s, open: false }))}

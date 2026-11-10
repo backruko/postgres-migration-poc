@@ -18,6 +18,7 @@ import {
   Typography,
 } from "antd";
 import { useEffect, useState } from "react";
+import { PREVIEW_ONLY_NOTE } from "../../domain/biz/lib/settings";
 import type { BizMaster } from "../../domain/biz/types";
 import { templateApi } from "../../domain/plan/api";
 import { useBusinessCalendars } from "../../domain/plan/hooks/useClientCalendar";
@@ -57,6 +58,11 @@ type PreviewState =
 
 interface Props {
   open: boolean;
+  /**
+   * 保存・作成できるか（業務管理者）。false（リリース担当）のときは「確認だけ」: 内容を入力して何が変わるかを見られるが、
+   * 保存のボタンは出ない（バックエンドも保存を拒否する）
+   */
+  canSave: boolean;
   /** テンプレートの業務（ページのドロップダウンで選択中のもの） */
   biz: BizMaster;
   /** 編集するテンプレート。null なら新規作成 */
@@ -71,7 +77,7 @@ interface Props {
  * 保存の前の確認（Level 1）: 編集で日付に関わる項目を変えたときは、保存の前に必ず「何が変わるか」（予定の違いとオーダーへの影響）を
  * 見せ、そこで保存を確定する。名前・締切・表示だけの変更は、これまでどおりそのまま保存する。新規作成では「予定を確認」で見られる（任意）。
  */
-export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Props) {
+export function TemplateFormModal({ open, canSave, biz, template, onClose, onSaved }: Props) {
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
@@ -135,18 +141,19 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
 
   /** 保存を押したとき。編集は、日付に関わる変更があれば先に確認を見せる（確認の取得に失敗したら保存しない） */
   const onFinish = async (v: FormValues) => {
-    if (!current) return save(v);
+    if (!current) return canSave ? save(v) : previewCreate();
     setSubmitting(true);
     setError(null);
     let data: TemplateChangePreview;
     try {
       data = await templateApi.previewUpdate(current.id, toUpdateInput(v, current), months);
     } catch (e) {
-      setError({ title: "保存できませんでした", detail: failure(e, "変更の内容を確認できませんでした。") });
+      setError({ title: canSave ? "保存できませんでした" : "確認できませんでした", detail: failure(e, "変更の内容を確認できませんでした。") });
       setSubmitting(false);
       return;
     }
-    if (!data.generation_changed) return save(v); // 名前・締切・表示だけ: 予定は変わらないので、そのまま保存
+    // 名前・締切・表示だけ: 予定は変わらないので、そのまま保存（確認だけの人には「予定は変わりません」を見せる）
+    if (!data.generation_changed && canSave) return save(v);
     setPreview({ mode: "update", values: v, base: current, data });
     setSubmitting(false);
   };
@@ -191,6 +198,7 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
   };
 
   const save = async (v: FormValues) => {
+    if (!canSave) return; // 確認だけの人は保存しない（ボタンも出していない）
     setSubmitting(true);
     setError(null);
     let wrote = false;
@@ -228,26 +236,40 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
   return (
     <Modal
       open={open}
-      title={isEdit ? "予定テンプレートを編集" : "予定テンプレートを新規作成"}
+      title={
+        canSave
+          ? isEdit ? "予定テンプレートを編集" : "予定テンプレートを新規作成"
+          : isEdit ? "予定テンプレートの変更を確認（保存はできません）" : "新しい予定テンプレートを確認（作成はできません）"
+      }
       onCancel={onClose}
       width={640}
       forceRender
       footer={
-        <Space>
-          <Button onClick={onClose} disabled={submitting}>
-            キャンセル
-          </Button>
-          {!isEdit && (
-            <Button onClick={previewCreate} loading={checking && preview === null} disabled={submitting}>
-              予定を確認
+        canSave ? (
+          <Space>
+            <Button onClick={onClose} disabled={submitting}>
+              キャンセル
             </Button>
-          )}
-          <Button type="primary" onClick={() => form.submit()} loading={submitting && preview === null} disabled={checking}>
-            {isEdit ? "保存する" : "作成する"}
-          </Button>
-        </Space>
+            {!isEdit && (
+              <Button onClick={previewCreate} loading={checking && preview === null} disabled={submitting}>
+                予定を確認
+              </Button>
+            )}
+            <Button type="primary" onClick={() => form.submit()} loading={submitting && preview === null} disabled={checking}>
+              {isEdit ? "保存する" : "作成する"}
+            </Button>
+          </Space>
+        ) : (
+          <Space>
+            <Button onClick={onClose}>閉じる</Button>
+            <Button type="primary" onClick={() => form.submit()} loading={(submitting || checking) && preview === null}>
+              {isEdit ? "変更を確認" : "予定を確認"}
+            </Button>
+          </Space>
+        )
       }
     >
+      {!canSave && <Alert type="info" showIcon message={PREVIEW_ONLY_NOTE} className="modal-alert" />}
       <Typography.Paragraph type="secondary" className="modal-note">
         業務: <span className="mono">{biz.business_code}</span> {biz.name}（顧客 {biz.client_code}）
         {template && (
@@ -493,21 +515,30 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
 
       <Modal
         open={preview !== null}
-        title={preview?.mode === "update" ? "保存の前の確認: この変更で変わること" : "作成の前の確認: できる予定"}
+        title={
+          canSave
+            ? preview?.mode === "update" ? "保存の前の確認: この変更で変わること" : "作成の前の確認: できる予定"
+            : preview?.mode === "update" ? "確認: この変更で変わること（保存はできません）" : "確認: できる予定（作成はできません）"
+        }
         width={860}
         onCancel={() => setPreview(null)}
         maskClosable={!submitting}
         footer={
-          <Space>
-            <Button onClick={() => setPreview(null)} disabled={submitting}>
-              戻って直す
-            </Button>
-            <Button type="primary" loading={submitting} disabled={checking} onClick={() => preview && save(preview.values)}>
-              {preview?.mode === "update" ? "この内容で保存する" : "この内容で作成する"}
-            </Button>
-          </Space>
+          canSave ? (
+            <Space>
+              <Button onClick={() => setPreview(null)} disabled={submitting}>
+                戻って直す
+              </Button>
+              <Button type="primary" loading={submitting} disabled={checking} onClick={() => preview && save(preview.values)}>
+                {preview?.mode === "update" ? "この内容で保存する" : "この内容で作成する"}
+              </Button>
+            </Space>
+          ) : (
+            <Button onClick={() => setPreview(null)}>戻る</Button>
+          )
         }
       >
+        {!canSave && <Alert type="info" showIcon message={PREVIEW_ONLY_NOTE} className="modal-alert" />}
         {preview?.mode === "create" && (
           <TemplatePreviewPanel
             mode="create"
