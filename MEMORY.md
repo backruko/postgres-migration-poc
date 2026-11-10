@@ -7,8 +7,8 @@ setup was merged and handed to the user for a test on the VM.
 
 ## 1. Current status
 
-- **`main` = `acfedc3` (local, not pushed; `origin/main` = `6390c87`)** = merge of `feature/go-live` (G.1 `450f03e`, G.2
-  `3771751`, G.3 `4cfca4c`; §2 "Go-live"). **The user carries `packages/ops-20261106-4cfca4c.zip` (same files as
+- **`main` = `c59aec4` (local, not pushed; `origin/main` = `6390c87`)** = `acfedc3` (merge of `feature/go-live`: G.1
+  `450f03e`, G.2 `3771751`, G.3 `4cfca4c`; §2 "Go-live") + the operation manual `docs/OPERATION-MANUAL.md`. **The user carries `packages/ops-20261106-4cfca4c.zip` (same files as
   `acfedc3`) to the Linux server by USB; next = their first run there (README §0, §1, then GO-LIVE.md A) — fix what it
   shows first.** Earlier: `origin/main` `6390c87` was pushed by the user 2026-11-06. After `895cbe5` the user committed `a00b2b1`
   "mvp" / `242dda6` "staging" (MEMORY.md + a `deploy_package.zip`) and `6390c87` "git" (zip removed again; it held no
@@ -121,7 +121,7 @@ setup was merged and handed to the user for a test on the VM.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 92 (2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 92}` to see only newer edits, and
+**Last rev written by me: 93 (2026-11-10: open question "Finer permissions for settings" added at the end of the open-questions list; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 93}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -1066,7 +1066,18 @@ drawer next to 受領 (the person knows where to look; B's watcher reads the sam
 ### Open questions (in the doc)
 **Still open:** client-limited role details
 (name, one or several client codes per user, read-only or also its own client events) · signal transports beyond HTTP
-(file arrival, another database) — the matching key is decided (type + client + rule date).
+(file arrival, another database) — the matching key is decided (type + client + rule date) · **finer permissions for
+settings** (raised by the operations team 2026-11-10, NOT for the MVP; doc rev 93, last item of the open-questions
+list): flat team, frequent small changes to release times and SOP steps would pile up on a few admins. Idea 1:
+releasers create / edit SOP drafts, admin only approves — draft and approve are already separate endpoints in
+`src/domain_biz/router.py` (all `@require_roles([RoleCode.ADMIN])`), so mostly decorators + showing the SOP editor to
+releasers without the approve button; but `SOPVersion` has no drafted-by / approved-by columns (migration if approval
+should be a real control). Idea 2: clients + calendars stay admin; release settings (`RELEASE_FIELDS` = release_mode,
+release_time, release_days_before) are part of the single `PATCH /biz/{id}` → recommended a separate endpoint for
+those three fields + a change history for biz settings (none today). To decide with the team: is admin for 2–3 leads
+enough; are the release-time changes permanent or one-day (releasers already override / cancel / restore one day);
+may the drafter approve their own draft; new role ("operational lead") or wider releaser. My proposal: go live as is
+with 2–3 admins, count real changes during the pilot, then build both as one phase.
 **Decided** (ticked in the doc): early start only with a releaser's approval; releaser + admin release / pin /
 force-start (now: approve a dependency override) / resolve conflicts; automatic release default 03:00 JST; rejecting
 a step resets only that step (2026-10-30); dependencies same client only (2026-11-04); client event = per business
