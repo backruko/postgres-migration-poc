@@ -1,4 +1,4 @@
-import { EditOutlined, PlusOutlined, StopOutlined } from "@ant-design/icons";
+import { EditOutlined, PlusOutlined, StopOutlined, UploadOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Radio, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useState } from "react";
@@ -16,6 +16,7 @@ import { TIMEZONE } from "../../shared/config";
 import { dayjs, todayIn } from "../../shared/lib/datetime";
 import { MarkerDates } from "./MarkerDates";
 import { MarkerFormModal } from "./MarkerFormModal";
+import { SheetImportModal } from "./SheetImportModal";
 import { activeDates, futureManualDates, manualCounts, upcomingDates } from "./markerForm";
 
 const shortDate = (d: string) => dayjs(d, "YYYY-MM-DD").format("M/D(dd)");
@@ -24,7 +25,7 @@ const shortDate = (d: string) => dayjs(d, "YYYY-MM-DD").format("M/D(dd)");
  * 年間計画シートの設定（事前設定）画面。
  * 顧客を選択して、その顧客のシートとマーカー（基準日）を一覧する。ルールで日付を作るマーカー（例: 振込日 = 毎月27日）を追加・編集でき、
  * 行を開くと日付ごとに変更・削除・ルールに戻す・追加ができる（今日より前の日付は実績のため読み取り専用）。
- * シートの取り込みは未対応。選択した顧客は URL の ?client= に保持する。
+ * 業務管理者は、シートを JSON ファイルから取り込める（新しいシートを作る・今あるシートを更新する）。選択した顧客は URL の ?client= に保持する。
  */
 export function SheetSettingsPage() {
   const { message, modal } = App.useApp();
@@ -47,6 +48,8 @@ export function SheetSettingsPage() {
     marker: null,
   });
   const openEditor = (sheet: ReferenceSheet, marker: ReferenceSheetMarker | null) => setEditor({ open: true, sheet, marker });
+
+  const [importOpen, setImportOpen] = useState(false);
 
   // 日付の一覧を開いているマーカー（マーカーの id はシートをまたいで一意）
   const [expanded, setExpanded] = useState<number[]>([]);
@@ -196,6 +199,11 @@ export function SheetSettingsPage() {
           <div className="eyebrow">事前設定</div>
           <h1>年間計画シート</h1>
         </div>
+        {canEdit && clientCode !== null && (
+          <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)} disabled={sheets.data === null || sheets.data === undefined}>
+            シートを取り込む
+          </Button>
+        )}
       </header>
 
       <label className="field">
@@ -223,7 +231,13 @@ export function SheetSettingsPage() {
       {clientCode === null ? (
         <Empty description="顧客を選択してください" />
       ) : sheets.data?.length === 0 ? (
-        <Empty description="この顧客には年間計画シートがありません（シートの取り込みは未対応です）" />
+        <Empty
+          description={
+            canEdit
+              ? "この顧客には年間計画シートがありません。「シートを取り込む」から JSON ファイルを取り込んでください"
+              : `この顧客には年間計画シートがありません（${PLAN_SETTINGS_ADMIN_ONLY}）`
+          }
+        />
       ) : (
         (sheets.data ?? []).map((sheet) => (
           <section key={sheet.id} className="sheet-block" aria-label={`シート ${sheet.name}`}>
@@ -257,6 +271,16 @@ export function SheetSettingsPage() {
             />
           </section>
         ))
+      )}
+
+      {clientCode !== null && (
+        <SheetImportModal
+          open={importOpen}
+          clientCode={clientCode}
+          sheets={sheets.data ?? []}
+          onClose={() => setImportOpen(false)}
+          onImported={sheets.reload}
+        />
       )}
 
       {editor.sheet && (

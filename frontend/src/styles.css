@@ -220,6 +220,7 @@ h1 .client { color: var(--accent); }
 /* ---------------- modals ---------------- */
 .modal-alert { margin-bottom: 16px; }
 .modal-note { color: var(--muted); font-size: 13px; }
+.plain-list { margin: 0; padding-left: 18px; }
 .range-sep { line-height: 32px; color: var(--muted); }
 
 /* ---------------- agenda（狭い画面） ---------------- */

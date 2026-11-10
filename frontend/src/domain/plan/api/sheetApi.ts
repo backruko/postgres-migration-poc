@@ -1,5 +1,13 @@
 import { http, unwrap } from "../../../shared/api/http";
-import type { CreateMarkerInput, ReferenceSheet, ReferenceSheetEvent, ReferenceSheetMarker, UpdateMarkerInput } from "../types";
+import type {
+  CreateMarkerInput,
+  ReferenceSheet,
+  ReferenceSheetEvent,
+  ReferenceSheetMarker,
+  SheetImportInput,
+  SheetImportResult,
+  UpdateMarkerInput,
+} from "../types";
 
 /**
  * 年間計画シート（参照と、マーカー・日付の追加・変更）。
@@ -9,6 +17,15 @@ export const sheetApi = {
   /** 顧客のシート一覧（マーカーと日付を含む）（GET /plans/sheets?client_code=） */
   listByClient(clientCode: string, signal?: AbortSignal): Promise<ReferenceSheet[]> {
     return unwrap(http.GET("/plans/sheets", { params: { query: { client_code: clientCode } }, signal }));
+  },
+
+  /**
+   * シート（マーカーと日付）を一括で取り込む（POST /plans/sheets/import）。顧客コード + シート名が同じシートがあれば更新、無ければ作る。
+   * replaceEvents が true なら、ファイルに無い日付を削除してシートをファイルに合わせる（人が変更・追加・取消した日付は残る）。
+   * 全件が 1 つのまとまりで、エラーのときは何も反映されない。
+   */
+  importSheet(input: SheetImportInput, replaceEvents: boolean): Promise<SheetImportResult> {
+    return unwrap(http.POST("/plans/sheets/import", { params: { query: { replace_events: replaceEvents } }, body: input }));
   },
 
   /**
