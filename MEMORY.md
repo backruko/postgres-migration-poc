@@ -7,11 +7,14 @@ setup was merged and handed to the user for a test on the VM.
 
 ## 1. Current status
 
-- **Branch `feature/sheet-import` (from `main` `357c81a`, 2026-11-10; NOT merged, not pushed)** — sheet import
-  screen S.1 `ec5c23f`, then S.2–S.4 (checklist, manual, records); §2 "Sheet import". **Reference sheets are now IN the
+- **`main` = `d8a8f9e` (local, not pushed; `origin/main` = `6390c87`)** = merge of `feature/sheet-import` (2026-11-10):
+  sheet import screen S.1 `ec5c23f`, S.2–S.4 `f381c28` (checklist, manual, records); §2 "Sheet import". The USB zip
+  `ops-20261106-4cfca4c.zip` is older than this — rebuild with `python scripts/make_package.py` before the install.
+  **Next (agreed 2026-11-10): "Level 1" preview before saving a template** — §2 "Safer changes"; questions and a step
+  plan come first. **Reference sheets are now IN the
   go-live scope** (user, 2026-11-10: "inseparable core feature"; reverses the 2026-11-06 decision). **The first server
   run is postponed (2026-11-10) because of IP configuration issues on the server.**
-- **`main` = `357c81a` (local, not pushed; `origin/main` = `6390c87`)** = `c59aec4` + the open-question record; `c59aec4` = `acfedc3` (merge of `feature/go-live`: G.1
+- Before that: `357c81a` = `c59aec4` + the open-question record; `c59aec4` = `acfedc3` (merge of `feature/go-live`: G.1
   `450f03e`, G.2 `3771751`, G.3 `4cfca4c`; §2 "Go-live") + the operation manual `docs/OPERATION-MANUAL.md`. **The user carries `packages/ops-20261106-4cfca4c.zip` (same files as
   `acfedc3`) to the Linux server by USB; next = their first run there (README §0, §1, then GO-LIVE.md A) — fix what it
   shows first.** Earlier: `origin/main` `6390c87` was pushed by the user 2026-11-06. After `895cbe5` the user committed `a00b2b1`
@@ -127,7 +130,7 @@ setup was merged and handed to the user for a test on the VM.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 95 (2026-11-10: rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 95}` to see only newer edits, and
+**Last rev written by me: 99 (2026-11-10: rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 99}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -1099,6 +1102,54 @@ A "patch mode" for the import (remove entries applied to rule markers as cancel 
   next year's file with 追加だけ, match-mode warning) + the 年間計画シート template type. **S.3**
   `docs/OPERATION-MANUAL.md` 3.8 rewritten (import procedure, mode table, rules, JSON format + limits, API difference
   about the period, editing on screen); limits table: raw tables are not read, no sheet delete.
+
+### Safer changes to businesses and templates (strategy agreed with the user 2026-11-10; doc rev 96; nothing built)
+Goal: less burden and risk on the admin. Today `update_template` applies at once (`_regenerate` → revision + future
+reconcile, orders follow); templates have no status and no who-changed-what; `src/domain_plan/engine.py` is pure
+(expand_rrule / expand_explicit_dates / expand_sheet_events), so a dry run is cheap.
+- **Level 1 — NEXT:** preview before saving in the template create / edit forms: the calendar the template would
+  produce; for an edit the diff (dates added / removed / moved) and the affected orders (how many released / started).
+  No data model change. Same idea as the SOP impact list.
+- **Level 2 — after the pilot, one phase with "finer permissions":** saved drafts + approval. User's rules: releaser
+  drafts, **only admin approves**; a non-admin drafter cannot approve their own draft; an admin may approve their own
+  draft or apply directly; approval applies **immediately** (no effective date); **a pending draft blocks other edits
+  to the same live template** (one draft per template); record drafted-by / approved-by. No draft state on the
+  business itself (a business with only draft templates generates nothing; release settings → affected-orders preview
+  + change history). **Open:** what four-eyes means for a person holding both releaser and admin (flat team, most
+  people have several roles) — I raised it, not answered yet.
+- **Dropped for good (user, 2026-11-10): effective-dated / scheduled template versions ("Level 3").** The user called
+  it superfluous and asked to remove it from plans and the design doc (removed in rev 99). **Do not propose it again.**
+- **Step plan approved 2026-11-10, branch `feature/template-preview` from `main` `d8a8f9e`.** User's answers: templates
+  only (business release settings later); preview **required when dates change** on an edit (name / deadline edits save
+  as today; for a new template the preview is a button); default **3 months, extendable to 12**; the preview runs the
+  **real recalculation and discards it** (user agreed explicitly). P.1 backend preview of an edit · P.2 backend preview
+  of a new template · P.3 frontend · P.4 manual + doc + MEMORY.
+- **P.1 as built (no migration):**
+  - `src/infrastructure/dry_run.py`: `with dry_run(db):` → rollback on exit; a `before_commit` listener raises
+    `RuntimeError` while the flag is set, so a committing function called by mistake saves nothing.
+  - `slot_events.publish_pending(session)` (extracted from the `before_commit` hook) lets a dry run hand the pending
+    slot changes to the listeners (order sync) without committing.
+  - `plan services`: `update_template` = `_apply_template_update` (no commit; returns `(template, generation_changed)`)
+    + commit. New public, non-committing `dry_run_materialize(db, id, since, until)` → `(occurrences, effective_until)`
+    (effective end = later of `until` and `materialized_until`, because a real change reconciles the whole generated
+    range) and `dry_run_update(db, id, body, since, until)` → `(occurrences, generation_changed)`; both return
+    `DryRunOccurrence` values (slot kind/ref, occurrence_date, start, end, manual).
+  - `src/coordination/template_preview.py` `preview_template_update(db, id, body, months=3)`: baseline (materialize to
+    the range end, publish, snapshot orders) → apply the change (publish, snapshot orders) → rollback → diff by slot:
+    `added` / `removed` / `moved`; `manual_unchanged`; `orders_total`, `orders_created`, `order_effects`
+    (`rescheduled` / `canceled` / `conflict`, with the status before). A rule change (e.g. BYDAY MO → TU) is
+    removed + added, not moved (different slots — the real system cancels and creates orders the same way).
+  - **`POST /ops/templates/{template_id}/preview?months=1..12`**, body = `PlanTemplateUpdate`, admin only; errors are
+    the same as the real PATCH. Explicit-date add / remove (`/dates` endpoints) is not previewed.
+  - Tests `tests/test_template_preview.py` (7; client prefix **`"I"`** — no free prefix letter is left; next file must
+    share one or widen `new_client_code`). Harness `preview_harness.py` on `plan_check`: 114/114 over all 19 templates
+    (preview 200, template + instances unchanged after, name-only change touches nothing, 401 / 403 / 404 / 422, a real
+    save still works). OpenAPI re-exported + `npm run gen:api`.
+  - **Found while testing (existing behaviour, NOT changed, told the user):** moving a template's time later on a day
+    whose old time has already passed leaves **two live occurrences in the same slot today** (the past one is never
+    touched, a new one is generated at the new time); the order stays on the old one. The preview shows the new one
+    under `added` for today.
+  - Side effect to know: a dry run consumes sequence values (ids of instances / orders skip numbers).
 
 ### Open questions (in the doc)
 **Still open:** client-limited role details

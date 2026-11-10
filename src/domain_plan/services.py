@@ -1,4 +1,5 @@
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -1037,6 +1038,17 @@ def _check_deadline(template: PlanTemplate) -> None:
 
 
 def update_template(db: Session, template_id: int, template_in: PlanTemplateUpdate) -> PlanTemplate:
+    template, _ = _apply_template_update(db, template_id, template_in)
+    _commit(db, "PlanTemplate could not be updated due to a conflicting record.")
+    db.refresh(template)
+    return _with_next_occurrence(db, [template])[0]
+
+
+def _apply_template_update(db: Session, template_id: int, template_in: PlanTemplateUpdate) -> tuple[PlanTemplate, bool]:
+    """
+    テンプレートの変更を当てはめます（コミットしない）。戻り値の 2 つ目は、生成に影響する変更（日付の作り直し）があったか。
+    本物の保存（update_template）と、保存の前の確認（dry_run_update）の両方がこれを使うので、2 つの結果は同じになります。
+    """
     template = _get_locked_template(db, template_id)
     update_data = template_in.model_dump(exclude_unset=True, exclude={"ui_metadata"})
     ui_changed = "ui_metadata" in template_in.model_fields_set
@@ -1094,10 +1106,60 @@ def update_template(db: Session, template_id: int, template_in: PlanTemplateUpda
     if deadline_changed:
         db.flush()
         template_events.notify_deadline_changed(db, template)
+    return template, generation_changed
 
-    _commit(db, "PlanTemplate could not be updated due to a conflicting record.")
-    db.refresh(template)
-    return _with_next_occurrence(db, [template])[0]
+
+# ==========================================
+# 保存の前の確認（試し実行）。コミットしない: 呼び出し側が infrastructure.dry_run の中で呼び、最後にロールバックする
+# ==========================================
+@dataclass(frozen=True)
+class DryRunOccurrence:
+    """試し実行の時点で有効な予定 1 件（ORM のオブジェクトではなく値。ロールバックの後も読める）"""
+    slot: tuple[str, str]      # 発生枠（slot_events.SlotKey の kind と ref）。変更の前後で同じ枠を突き合わせる
+    occurrence_date: date
+    scheduled_start: datetime
+    scheduled_end: datetime
+    manual: bool               # 人が変更した・臨時に追加した予定（ルールを変えても動かない）
+
+
+def _dry_run_occurrences(db: Session, template: PlanTemplate, since: datetime, until: datetime) -> list[DryRunOccurrence]:
+    db.flush()
+    slot_events.publish_pending(db)  # 受け手（オーダーの追従）にも、ここまでの変更を反映してもらう
+    db.flush()
+    result = []
+    for i in plan_instance_repo.get_live_in_window(db, template_id=template.id, lower=since, upper=until):
+        key = slot_events.slot_key_of(db, i)
+        result.append(DryRunOccurrence(
+            slot=(key.kind, str(key.ref)), occurrence_date=i.occurrence_date, scheduled_start=i.scheduled_start,
+            scheduled_end=i.scheduled_end, manual=i.origin != InstanceOrigin.GENERATED,
+        ))
+    return sorted(result, key=lambda o: (o.scheduled_start, o.slot))
+
+
+def dry_run_materialize(
+    db: Session, template_id: int, since: datetime, until: datetime
+) -> tuple[list[DryRunOccurrence], datetime]:
+    """
+    【コミットしない】今の設定のまま until まで予定を生成し、[since, 範囲の終わり) の有効な予定（変更の前の姿）と、
+    範囲の終わりを返します。変更の前と後を同じ範囲で比べるためのものです。
+    範囲の終わりは until と生成済みの終わりの遅いほう（変更は生成済みの範囲すべてを作り直すので、それより短くは見せない）。
+    """
+    template = _get_locked_template(db, template_id)
+    if template.materialized_until is not None and template.materialized_until > until:
+        until = template.materialized_until
+    _ensure_materialized(db, template, until)
+    return _dry_run_occurrences(db, template, since, until), until
+
+
+def dry_run_update(
+    db: Session, template_id: int, template_in: PlanTemplateUpdate, since: datetime, until: datetime
+) -> tuple[list[DryRunOccurrence], bool]:
+    """
+    【コミットしない】変更を当てはめて、[since, until) の有効な予定（変更の後の姿）と、日付の作り直しがあったかを返します。
+    当てはめ方は update_template と同じ（人が変更・取消した日はそのまま残る）。入力の誤りは update_template と同じ例外になります。
+    """
+    template, generation_changed = _apply_template_update(db, template_id, template_in)
+    return _dry_run_occurrences(db, template, since, until), generation_changed
 
 
 def delete_template(db: Session, template_id: int) -> PlanTemplate:

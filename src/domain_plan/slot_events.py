@@ -128,8 +128,12 @@ def mark_person_change(db: Session, actor_staff_id: int | None, note: str | None
 # ==========================================
 # 通知（コミットの直前に、同じトランザクションで受け手を呼ぶ）
 # ==========================================
-@event.listens_for(Session, "before_commit")
-def _publish(session: Session) -> None:
+def publish_pending(session: Session) -> None:
+    """
+    記録した発生枠の変更を、いま受け手に渡します（渡した記録は消える）。
+    ふだんはコミットの直前に自動で呼ばれます。コミットしない試し実行（dry run）では、受け手の結果（オーダーへの影響）を
+    見るために、呼び出し側が flush の後に自分で呼びます。
+    """
     pending: dict[SlotKey, list[VoidReason]] | None = session.info.pop(_CHANGES_KEY, None)
     person = session.info.pop(_PERSON_KEY, None)
     if not pending or not _listeners:
@@ -141,6 +145,11 @@ def _publish(session: Session) -> None:
     ]
     for listener in _listeners:
         listener(session, changes)
+
+
+@event.listens_for(Session, "before_commit")
+def _publish(session: Session) -> None:
+    publish_pending(session)
 
 
 @event.listens_for(Session, "after_rollback")

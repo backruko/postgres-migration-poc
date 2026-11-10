@@ -4,10 +4,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
-from src.domain_staff.auth import require_active
+from src.domain_plan.schemas import PlanTemplateUpdate
+from src.domain_staff.auth import require_active, require_roles
+from src.domain_staff.models import RoleCode
 from src.infrastructure.database import get_db
-from src.coordination.schemas import AttentionResponse, DailyDashboardResponse, SlaResponse
+from src.coordination.schemas import AttentionResponse, DailyDashboardResponse, SlaResponse, TemplateChangePreview
 from src.coordination.services import get_attention, get_daily_dashboard, get_sla_report
+from src.coordination.template_preview import preview_template_update
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 
@@ -54,3 +57,24 @@ def get_sla_report_endpoint(
     取消したオーダーは数えない。期間は最大 36 か月。有効な職員なら誰でも。
     """
     return get_sla_report(db=db, from_month=from_month, to_month=to_month, client_code=client_code)
+
+
+# ==========================================
+# テンプレートの変更の、保存の前の確認（何も保存しない）
+# ==========================================
+
+@router.post("/templates/{template_id}/preview", response_model=TemplateChangePreview, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+def preview_template_update_endpoint(
+    template_id: int,
+    template_in: PlanTemplateUpdate,
+    months: int = Query(3, ge=1, le=12, description="今日から何か月先までを確認するか（生成済みの範囲のほうが長ければ、そこまで）"),
+    db: Session = Depends(get_db),
+):
+    """
+    テンプレートをこの内容（PATCH /plans/templates/{id} と同じ本文）で変えたら何が起きるかを返します。**何も保存しません。**
+    実際の変更と同じ処理を試し実行して取り消すので、結果は保存したときと同じです（人が変更・取消した日は残る、など）。
+    予定の違い（増える・無くなる・日時が変わる）と、追従するオーダー（日時が変わる・取り消される・矛盾になる）を返します。
+    入力の誤りは、PATCH と同じエラーになります。業務管理者だけ。
+    """
+    return preview_template_update(db=db, template_id=template_id, template_in=template_in, months=months)

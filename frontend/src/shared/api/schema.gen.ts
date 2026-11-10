@@ -1097,6 +1097,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ops/templates/{template_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Template Update Endpoint
+         * @description テンプレートをこの内容（PATCH /plans/templates/{id} と同じ本文）で変えたら何が起きるかを返します。**何も保存しません。**
+         *     実際の変更と同じ処理を試し実行して取り消すので、結果は保存したときと同じです（人が変更・取消した日は残る、など）。
+         *     予定の違い（増える・無くなる・日時が変わる）と、追従するオーダー（日時が変わる・取り消される・矛盾になる）を返します。
+         *     入力の誤りは、PATCH と同じエラーになります。業務管理者だけ。
+         */
+        post: operations["preview_template_update_endpoint_ops_templates__template_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/staff/me": {
         parameters: {
             query?: never;
@@ -3332,6 +3355,90 @@ export interface components {
             /** Warn Before Minutes */
             warn_before_minutes?: number | null;
         };
+        /**
+         * PreviewMove
+         * @description 同じ発生枠で、日時が変わる予定
+         */
+        PreviewMove: {
+            /**
+             * Occurrence Date
+             * Format: date
+             */
+            occurrence_date: string;
+            /**
+             * Before Start
+             * Format: date-time
+             */
+            before_start: string;
+            /**
+             * Before End
+             * Format: date-time
+             */
+            before_end: string;
+            /**
+             * After Start
+             * Format: date-time
+             */
+            after_start: string;
+            /**
+             * After End
+             * Format: date-time
+             */
+            after_end: string;
+        };
+        /** PreviewOccurrence */
+        PreviewOccurrence: {
+            /**
+             * Occurrence Date
+             * Format: date
+             * @description the rule date of the slot (local)
+             */
+            occurrence_date: string;
+            /**
+             * Scheduled Start
+             * Format: date-time
+             */
+            scheduled_start: string;
+            /**
+             * Scheduled End
+             * Format: date-time
+             */
+            scheduled_end: string;
+            /**
+             * Manual
+             * @description changed or added by a person; a template change does not move it
+             */
+            manual: boolean;
+        };
+        /** PreviewOrderEffect */
+        PreviewOrderEffect: {
+            /** Order Id */
+            order_id: number;
+            /**
+             * Effect
+             * @description rescheduled: follows the plan; canceled: its slot disappears; conflict: left as is and flagged for a person
+             * @enum {string}
+             */
+            effect: "rescheduled" | "canceled" | "conflict";
+            /** @description status now (before the change) */
+            status: components["schemas"]["OrderStatus"];
+            /**
+             * Scheduled Start
+             * Format: date-time
+             * @description scheduled start now (before the change)
+             */
+            scheduled_start: string;
+            /**
+             * New Scheduled Start
+             * @description rescheduled only
+             */
+            new_scheduled_start: string | null;
+            /**
+             * Reason
+             * @description conflict only: the reason that would be recorded
+             */
+            reason: string | null;
+        };
         /** RRuleTemplateCreate */
         RRuleTemplateCreate: {
             /**
@@ -4239,6 +4346,62 @@ export interface components {
          * @enum {string}
          */
         StepState: "locked" | "todo" | "submitted" | "approved";
+        /**
+         * TemplateChangePreview
+         * @description テンプレートをこの内容で変えたら何が起きるか（何も保存されていない）
+         */
+        TemplateChangePreview: {
+            /** Template Id */
+            template_id: number;
+            /**
+             * Range Start
+             * Format: date-time
+             * @description now
+             */
+            range_start: string;
+            /**
+             * Range End
+             * Format: date-time
+             * @description end of the previewed range (the requested months, or the generated range if longer)
+             */
+            range_end: string;
+            /**
+             * Generation Changed
+             * @description false: the change does not touch dates (name, deadline, display only)
+             */
+            generation_changed: boolean;
+            /**
+             * Occurrences
+             * @description live occurrences in the range after the change
+             */
+            occurrences: components["schemas"]["PreviewOccurrence"][];
+            /** Added */
+            added: components["schemas"]["PreviewOccurrence"][];
+            /** Removed */
+            removed: components["schemas"]["PreviewOccurrence"][];
+            /** Moved */
+            moved: components["schemas"]["PreviewMove"][];
+            /**
+             * Manual Unchanged
+             * @description occurrences in the range that a person changed or added (kept as they are)
+             */
+            manual_unchanged: number;
+            /**
+             * Orders Total
+             * @description orders of this template that are not finished or canceled, before the change
+             */
+            orders_total: number;
+            /**
+             * Orders Created
+             * @description new orders the change would create
+             */
+            orders_created: number;
+            /**
+             * Order Effects
+             * @description existing orders the change would touch
+             */
+            order_effects: components["schemas"]["PreviewOrderEffect"][];
+        };
         /**
          * TemplateType
          * @enum {string}
@@ -9941,6 +10104,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SlaResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_template_update_endpoint_ops_templates__template_id__preview_post: {
+        parameters: {
+            query?: {
+                /** @description 今日から何か月先までを確認するか（生成済みの範囲のほうが長ければ、そこまで） */
+                months?: number;
+            };
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanTemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateChangePreview"];
                 };
             };
             /** @description Bad Request(リクエスト不正) */
