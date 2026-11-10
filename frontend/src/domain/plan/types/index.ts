@@ -45,6 +45,9 @@ export type MarkerRule = Schemas["MarkerRule"];
 export type CreateMarkerInput = Schemas["ReferenceSheetMarkerCreate"];
 /** rule: 指定で置き換えて再生成、null で生成をやめる、省略で変更しない */
 export type UpdateMarkerInput = Schemas["ReferenceSheetMarkerUpdate"];
+/** シートの一括取り込み（JSON ファイルの中身そのまま） */
+export type SheetImportInput = Schemas["ReferenceSheetImport"];
+export type SheetImportResult = Schemas["ReferenceSheetImportResult"];
 
 // ---- インスタンスの手動操作 ----
 export type PlanInstance = Schemas["PlanInstanceResponse"];
