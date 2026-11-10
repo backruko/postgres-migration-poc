@@ -7,11 +7,14 @@ setup was merged and handed to the user for a test on the VM.
 
 ## 1. Current status
 
+- **Branch `feature/template-preview` (from `main` `d8a8f9e`, 2026-11-10; NOT merged, not pushed):** "Level 1" preview
+  before saving a template — P.1 `595f5f8` (backend, edit), P.2 `707e1f8` (backend, create), P.3 `d7539fe` (form),
+  P.4 manual + doc + this file; §2 "Safer changes". **Tests now 214**; no migration. The user has not browser-checked
+  the preview window or the sheet import window that I know of. Waiting for "merge".
 - **`main` = `d8a8f9e` (local, not pushed; `origin/main` = `6390c87`)** = merge of `feature/sheet-import` (2026-11-10):
   sheet import screen S.1 `ec5c23f`, S.2–S.4 `f381c28` (checklist, manual, records); §2 "Sheet import". The USB zip
   `ops-20261106-4cfca4c.zip` is older than this — rebuild with `python scripts/make_package.py` before the install.
-  **Next (agreed 2026-11-10): "Level 1" preview before saving a template** — §2 "Safer changes"; questions and a step
-  plan come first. **Reference sheets are now IN the
+  After the template preview: Level 2 (drafts + approval, with finer permissions) only after the pilot. **Reference sheets are now IN the
   go-live scope** (user, 2026-11-10: "inseparable core feature"; reverses the 2026-11-06 decision). **The first server
   run is postponed (2026-11-10) because of IP configuration issues on the server.**
 - Before that: `357c81a` = `c59aec4` + the open-question record; `c59aec4` = `acfedc3` (merge of `feature/go-live`: G.1
@@ -84,11 +87,11 @@ setup was merged and handed to the user for a test on the VM.
   N has password **`check-pass-N`**): 1 `check-admin` (system_admin), 2 suspended, 3 viewer+auditor, 4 operator
   `http-operator-1793324910`, 5 releaser `http-releaser-1793324911`, 6 / 7 checkers, 8 admin `http-admin-6eb1ee`, 9 / 10
   signal_sender. Many open orders past their deadline (good for 遅れ / attention / SLA checks).
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **204 passed**,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **214 passed**,
   ~3–8 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
   and with it the biz dependency / template listeners and the master guards — is registered there). **Every new test
   file uses `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M
-  G L N Q E H J W F Y U C X Z (still free: I). Auth in OpenAPI tests: `tests/openapi_auth.py` `needs_login(op)`.
+  G L N Q E H J W F Y U C X Z I (none free: the next test file shares a letter or `new_client_code` is widened). Auth in OpenAPI tests: `tests/openapi_auth.py` `needs_login(op)`.
   Type check: `npx pyright@1.1.400 --pythonpath .venv/Scripts/python.exe src main.py tests scripts` → 0 errors.
   Migration check (on `plan_check`): `alembic upgrade head` / `downgrade -1` / `upgrade head` / `alembic check` → no
   drift; run alembic with `export DATABASE_URL=$(grep ^DATABASE_URL .env | cut -d= -f2- | sed 's#/dev_db$#/plan_check#')`
@@ -130,7 +133,7 @@ setup was merged and handed to the user for a test on the VM.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 99 (2026-11-10: rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 99}` to see only newer edits, and
+**Last rev written by me: 101 (2026-11-10: revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 101}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -1172,6 +1175,8 @@ reconcile, orders follow); templates have no status and no who-changed-what; `sr
   `preview_ui_harness.ts` of the real modules on `plan_check` — 659/659 over all 19 templates (**an unchanged form
   never triggers the confirmation**, name-only neither, a time change does; marks and order counts equal the API
   result; month grids; 12-month range; nothing saved). **Not opened in a browser by me.**
+  P.3 committed `d7539fe`. **P.4:** `docs/OPERATION-MANUAL.md` 3.7 got 「保存の前の確認」 (steps, a table of what each
+  summary line means, the things to know, both preview API calls); design doc rev 101.
   **Decided by the user 2026-11-10: the "two occurrences today" behaviour stays as it is** (no logic to skip today;
   the preview shows it and a person can cancel one of the two; simple and predictable for the MVP).
 
