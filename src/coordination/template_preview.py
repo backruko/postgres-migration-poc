@@ -13,7 +13,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.coordination.schemas import (
@@ -21,10 +21,11 @@ from src.coordination.schemas import (
     PreviewOccurrence,
     PreviewOrderEffect,
     TemplateChangePreview,
+    TemplateCreatePreview,
 )
 from src.domain_ope.models import OpeOrder, OrderStatus
 from src.domain_plan import services as plan_services
-from src.domain_plan.schemas import PlanTemplateUpdate
+from src.domain_plan.schemas import PlanTemplateCreate, PlanTemplateUpdate
 from src.domain_plan.services import DryRunOccurrence
 from src.infrastructure.dry_run import dry_run
 
@@ -127,4 +128,19 @@ def preview_template_update(
         orders_total=sum(1 for status, *_ in orders_before.values() if status not in FINAL),
         orders_created=len(orders_after.keys() - orders_before.keys()),
         order_effects=_order_effects(orders_before, orders_after),
+    )
+
+
+def preview_template_create(db: Session, template_in: PlanTemplateCreate, months: int = 3) -> TemplateCreatePreview:
+    """
+    テンプレートをこの内容で作ったらできる予定を返します（何も保存しません）。
+    範囲: 今から months か月後まで（作成時に生成される範囲のほうが長ければ、そこまで。年 1 回の業務では次の予定まで）。
+    入力の誤りは、実際の作成と同じエラーになります。
+    """
+    now = _now()
+    with dry_run(db):
+        template_id, occurrences, until = plan_services.dry_run_create(db, template_in, since=now, until=_range_end(now, months))
+        orders_created = db.scalar(select(func.count()).select_from(OpeOrder).where(OpeOrder.template_id == template_id)) or 0
+    return TemplateCreatePreview(
+        range_start=now, range_end=until, occurrences=[_out(o) for o in occurrences], orders_created=orders_created
     )

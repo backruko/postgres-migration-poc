@@ -1097,6 +1097,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ops/templates/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Template Create Endpoint
+         * @description テンプレートをこの内容（POST /plans/templates と同じ本文）で作ったらできる予定を返します。**何も保存しません。**
+         *     実際の作成と同じ処理を試し実行して取り消すので、休日の扱い・シートの日付からのずれなども、作ったときと同じになります。
+         *     入力の誤りは、POST /plans/templates と同じエラーになります。業務管理者だけ。
+         */
+        post: operations["preview_template_create_endpoint_ops_templates_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ops/templates/{template_id}/preview": {
         parameters: {
             query?: never;
@@ -4401,6 +4423,31 @@ export interface components {
              * @description existing orders the change would touch
              */
             order_effects: components["schemas"]["PreviewOrderEffect"][];
+        };
+        /**
+         * TemplateCreatePreview
+         * @description テンプレートをこの内容で作ったらできる予定（何も保存されていない）
+         */
+        TemplateCreatePreview: {
+            /**
+             * Range Start
+             * Format: date-time
+             * @description now
+             */
+            range_start: string;
+            /**
+             * Range End
+             * Format: date-time
+             * @description end of the previewed range (the requested months, or what creation generates if longer)
+             */
+            range_end: string;
+            /** Occurrences */
+            occurrences: components["schemas"]["PreviewOccurrence"][];
+            /**
+             * Orders Created
+             * @description orders that would be created for these occurrences
+             */
+            orders_created: number;
         };
         /**
          * TemplateType
@@ -10104,6 +10151,96 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SlaResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_template_create_endpoint_ops_templates_preview_post: {
+        parameters: {
+            query?: {
+                /** @description 今日から何か月先までを確認するか（作成時に生成される範囲のほうが長ければ、そこまで） */
+                months?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RRuleTemplateCreate"] | components["schemas"]["ExplicitDatesTemplateCreate"] | components["schemas"]["ReferenceSheetTemplateCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateCreatePreview"];
                 };
             };
             /** @description Bad Request(リクエスト不正) */

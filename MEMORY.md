@@ -1150,6 +1150,16 @@ reconcile, orders follow); templates have no status and no who-changed-what; `sr
     touched, a new one is generated at the new time); the order stays on the old one. The preview shows the new one
     under `added` for today.
   - Side effect to know: a dry run consumes sequence values (ids of instances / orders skip numbers).
+- **P.1 committed `595f5f8`. P.2 as built (no migration):** `create_template` = `_apply_template_create` (no commit)
+  + commit; `plan_services.dry_run_create(db, body, since, until)` → `(temporary template id, occurrences, effective
+  until)`; `preview_template_create(db, body, months=3)` → `TemplateCreatePreview` (range, occurrences,
+  `orders_created`); **`POST /ops/templates/preview?months=1..12`**, body = `PlanTemplateCreate` (all three types),
+  admin only, same errors as the real POST. The range reaches what creation generates if that is longer (90 days, or
+  the next occurrence of a yearly job). Tests: `tests/test_template_preview.py` now 10. Harness
+  `preview_create_harness.py` on `plan_check` 21/21 (a copy of an existing rrule / explicit-dates / sheet template
+  previews the same dates as the original; nothing created; 401 / 403 / 404 / 422; a real create still works).
+  **Decided by the user 2026-11-10: the "two occurrences today" behaviour stays as it is** (no logic to skip today;
+  the preview shows it and a person can cancel one of the two; simple and predictable for the MVP).
 
 ### Open questions (in the doc)
 **Still open:** client-limited role details

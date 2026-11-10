@@ -1,16 +1,16 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy.orm import Session
 
 from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
-from src.domain_plan.schemas import PlanTemplateUpdate
+from src.domain_plan.schemas import PLAN_TEMPLATE_CREATE_EXAMPLES, PlanTemplateCreate, PlanTemplateUpdate
 from src.domain_staff.auth import require_active, require_roles
 from src.domain_staff.models import RoleCode
 from src.infrastructure.database import get_db
-from src.coordination.schemas import AttentionResponse, DailyDashboardResponse, SlaResponse, TemplateChangePreview
+from src.coordination.schemas import AttentionResponse, DailyDashboardResponse, SlaResponse, TemplateChangePreview, TemplateCreatePreview
 from src.coordination.services import get_attention, get_daily_dashboard, get_sla_report
-from src.coordination.template_preview import preview_template_update
+from src.coordination.template_preview import preview_template_create, preview_template_update
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 
@@ -62,6 +62,21 @@ def get_sla_report_endpoint(
 # ==========================================
 # テンプレートの変更の、保存の前の確認（何も保存しない）
 # ==========================================
+
+@router.post("/templates/preview", response_model=TemplateCreatePreview, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+def preview_template_create_endpoint(
+    template_in: PlanTemplateCreate = Body(..., openapi_examples=PLAN_TEMPLATE_CREATE_EXAMPLES),
+    months: int = Query(3, ge=1, le=12, description="今日から何か月先までを確認するか（作成時に生成される範囲のほうが長ければ、そこまで）"),
+    db: Session = Depends(get_db),
+):
+    """
+    テンプレートをこの内容（POST /plans/templates と同じ本文）で作ったらできる予定を返します。**何も保存しません。**
+    実際の作成と同じ処理を試し実行して取り消すので、休日の扱い・シートの日付からのずれなども、作ったときと同じになります。
+    入力の誤りは、POST /plans/templates と同じエラーになります。業務管理者だけ。
+    """
+    return preview_template_create(db=db, template_in=template_in, months=months)
+
 
 @router.post("/templates/{template_id}/preview", response_model=TemplateChangePreview, responses={**COMMON_ERRORS, **AUTH_ERRORS})
 @require_roles([RoleCode.ADMIN])

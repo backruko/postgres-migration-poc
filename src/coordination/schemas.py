@@ -191,3 +191,11 @@ class TemplateChangePreview(BaseModel):
     orders_total: int = Field(description="orders of this template that are not finished or canceled, before the change")
     orders_created: int = Field(description="new orders the change would create")
     order_effects: list[PreviewOrderEffect] = Field(description="existing orders the change would touch")
+
+
+class TemplateCreatePreview(BaseModel):
+    """テンプレートをこの内容で作ったらできる予定（何も保存されていない）"""
+    range_start: datetime = Field(description="now")
+    range_end: datetime = Field(description="end of the previewed range (the requested months, or what creation generates if longer)")
+    occurrences: list[PreviewOccurrence]
+    orders_created: int = Field(description="orders that would be created for these occurrences")

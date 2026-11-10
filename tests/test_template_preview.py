@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 
 from tests.client_codes import new_client_code
 from tests.openapi_auth import needs_login
-from src.coordination.template_preview import preview_template_update
+from src.coordination.template_preview import preview_template_create, preview_template_update
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
@@ -282,13 +282,71 @@ def test_dry_run_refuses_a_commit_and_rolls_back(db, biz_id):
     db.commit()  # 抜けた後はコミットできる
 
 
-def test_preview_endpoint_needs_a_login_and_admin():
+# ==========================================
+# 新しいテンプレートの確認（P.2）
+# ==========================================
+def new_template(biz_id, **kwargs) -> RRuleTemplateCreate:
+    data = dict(
+        biz_master_id=biz_id, name="New", template_type=TemplateType.RRULE, timezone="Asia/Tokyo",
+        start_time=time(9, 0), duration_minutes=60, anchor_date=date(2026, 1, 1), rrule="FREQ=DAILY",
+    )
+    data.update(kwargs)
+    return RRuleTemplateCreate.model_validate(data)
+
+
+def counts(biz_id):
+    with SessionLocal() as s:
+        return (
+            s.scalar(select(func.count()).select_from(PlanTemplate).where(PlanTemplate.biz_master_id == biz_id)),
+            s.scalar(select(func.count()).select_from(OpeOrder).where(OpeOrder.biz_master_id == biz_id)),
+        )
+
+
+def test_create_preview_matches_the_real_creation_and_saves_nothing(db, biz_id):
+    body = new_template(biz_id, rrule="FREQ=WEEKLY;BYDAY=MO,TH")
+    p = preview_template_create(db, body, months=3)
+    assert counts(biz_id) == (0, 0)  # テンプレートもオーダーもできていない
+    assert len(p.occurrences) >= 24 and {o.occurrence_date.isoweekday() for o in p.occurrences} == {1, 4}
+    assert all(o.scheduled_start.astimezone(JST).hour == 9 and not o.manual for o in p.occurrences)
+    assert p.orders_created == len(p.occurrences)
+
+    # 実際に作ると、生成される範囲（90 日先）までは同じ予定になる
+    t = plan_services.create_template(db, body)
+    generated_until = plan_services.get_template(db, t.id).materialized_until
+    assert generated_until is not None
+    real = live(db, t.id)
+    assert [o.scheduled_start for o in p.occurrences if o.scheduled_start < generated_until] == [i.scheduled_start for i in real]
+    assert counts(biz_id) == (1, len(real))
+
+
+def test_create_preview_reaches_the_next_occurrence_of_a_yearly_job(db, biz_id):
+    # 年 1 回（7 月 1 日）: 3 か月の範囲には無くても、作成時に次の予定まで生成されるので、そこまで見せる
+    body = new_template(biz_id, rrule="FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=1", start_time=time(23, 59))
+    p = preview_template_create(db, body, months=1)
+    assert len(p.occurrences) == 1 and (p.occurrences[0].occurrence_date.month, p.occurrences[0].occurrence_date.day) == (7, 1)
+    assert p.range_end > p.occurrences[0].scheduled_start and p.orders_created == 1
+    assert counts(biz_id) == (0, 0)
+
+
+def test_create_preview_errors_are_the_same_as_the_real_creation(db, biz_id):
+    with pytest.raises(NotFoundError):
+        preview_template_create(db, new_template(999_999_999))
+    with pytest.raises(NotFoundError):  # 無い営業日カレンダー
+        preview_template_create(db, new_template(biz_id, holiday_policy="following", business_calendar_id=999_999_999))
+    assert counts(biz_id) == (0, 0)
+
+
+def test_preview_endpoints_need_a_login_and_admin():
     from fastapi.routing import APIRoute
 
     from main import app
     from src.coordination.router import router
 
-    op = app.openapi()["paths"]["/ops/templates/{template_id}/preview"]["post"]
-    assert needs_login(op) and {"401", "403"} <= set(op["responses"])
-    [route] = [r for r in router.routes if isinstance(r, APIRoute) and r.path.endswith("/preview")]
-    assert set(getattr(route.endpoint, "__required_roles__")) == {RoleCode.ADMIN}
+    paths = app.openapi()["paths"]
+    for path in ("/ops/templates/{template_id}/preview", "/ops/templates/preview"):
+        op = paths[path]["post"]
+        assert needs_login(op) and {"401", "403"} <= set(op["responses"]), path
+    routes = [r for r in router.routes if isinstance(r, APIRoute) and r.path.endswith("/preview")]
+    assert len(routes) == 2
+    for route in routes:
+        assert set(getattr(route.endpoint, "__required_roles__")) == {RoleCode.ADMIN}, route.path

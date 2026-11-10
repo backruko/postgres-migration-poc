@@ -978,6 +978,17 @@ def _get_locked_template(db: Session, template_id: int) -> PlanTemplate:
 
 
 def create_template(db: Session, template_in: PlanTemplateCreate) -> PlanTemplate:
+    template = _apply_template_create(db, template_in)
+    _commit(db, "PlanTemplate could not be created due to a conflicting record.")
+    db.refresh(template)
+    return _with_next_occurrence(db, [template])[0]
+
+
+def _apply_template_create(db: Session, template_in: PlanTemplateCreate) -> PlanTemplate:
+    """
+    テンプレートを作り、最初の予定を生成します（コミットしない）。
+    本物の保存（create_template）と、保存の前の確認（dry_run_create）の両方がこれを使います。
+    """
     biz = _get_biz(db, template_in.biz_master_id)
     if isinstance(template_in, ReferenceSheetTemplateCreate):
         _validate_sheet_reference(db, biz, template_in.reference_sheet_id, template_in.reference_event_marker)
@@ -992,9 +1003,7 @@ def create_template(db: Session, template_in: PlanTemplateCreate) -> PlanTemplat
     db.flush()
 
     _ensure_next_occurrence(db, template)
-    _commit(db, "PlanTemplate could not be created due to a conflicting record.")
-    db.refresh(template)
-    return _with_next_occurrence(db, [template])[0]
+    return template
 
 
 def get_template(db: Session, template_id: int) -> PlanTemplate:
@@ -1149,6 +1158,21 @@ def dry_run_materialize(
         until = template.materialized_until
     _ensure_materialized(db, template, until)
     return _dry_run_occurrences(db, template, since, until), until
+
+
+def dry_run_create(
+    db: Session, template_in: PlanTemplateCreate, since: datetime, until: datetime
+) -> tuple[int, list[DryRunOccurrence], datetime]:
+    """
+    【コミットしない】テンプレートを作って until まで予定を生成し、（仮の）テンプレート ID、[since, 範囲の終わり) の予定、
+    範囲の終わりを返します。作り方は create_template と同じ（入力の誤りも同じ例外）。
+    範囲の終わりは until と、作成時に生成される範囲（90 日先、または次の予定まで）の遅いほう。
+    """
+    template = _apply_template_create(db, template_in)
+    if template.materialized_until is not None and template.materialized_until > until:
+        until = template.materialized_until
+    _ensure_materialized(db, template, until)
+    return template.id, _dry_run_occurrences(db, template, since, until), until
 
 
 def dry_run_update(
