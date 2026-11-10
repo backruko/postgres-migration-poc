@@ -7,7 +7,11 @@ setup was merged and handed to the user for a test on the VM.
 
 ## 1. Current status
 
-- **`main` = `c59aec4` (local, not pushed; `origin/main` = `6390c87`)** = `acfedc3` (merge of `feature/go-live`: G.1
+- **Branch `feature/sheet-import` (from `main` `357c81a`, 2026-11-10; NOT merged, not pushed)** — sheet import
+  screen S.1 `ec5c23f`, then S.2–S.4 (checklist, manual, records); §2 "Sheet import". **Reference sheets are now IN the
+  go-live scope** (user, 2026-11-10: "inseparable core feature"; reverses the 2026-11-06 decision). **The first server
+  run is postponed (2026-11-10) because of IP configuration issues on the server.**
+- **`main` = `357c81a` (local, not pushed; `origin/main` = `6390c87`)** = `c59aec4` + the open-question record; `c59aec4` = `acfedc3` (merge of `feature/go-live`: G.1
   `450f03e`, G.2 `3771751`, G.3 `4cfca4c`; §2 "Go-live") + the operation manual `docs/OPERATION-MANUAL.md`. **The user carries `packages/ops-20261106-4cfca4c.zip` (same files as
   `acfedc3`) to the Linux server by USB; next = their first run there (README §0, §1, then GO-LIVE.md A) — fix what it
   shows first.** Earlier: `origin/main` `6390c87` was pushed by the user 2026-11-06. After `895cbe5` the user committed `a00b2b1`
@@ -46,7 +50,9 @@ setup was merged and handed to the user for a test on the VM.
   `scripts/create_orders.py` if orders are missing, browser checks, the user's NAS sync of `deploy/backups/`.
   **Go-live decisions (2026-11-06, all as I recommended):** master data **typed in the screens** on the server (dev DB
   not copied); the API-only gap (a fresh DB has **no business calendar**; calendar / sheet creation have no screen) is
-  filled by a **one-time setup script**; **no reference sheets at go-live** (Excel-vs-JSON stays open); **pilot one
+  filled by a **one-time setup script**; ~~no reference sheets at go-live~~ **changed 2026-11-10: sheets are in scope**,
+  the team converts the client tables to JSON themselves (confidentiality) and an admin imports the JSON on the sheet
+  page (§2 "Sheet import"); **pilot one
   client first**, the rest after a few days. Python stays **3.14** (dev venv 3.14.2; change only if a wheel is missing).
   Step plan approved 2026-11-06, branch **`feature/go-live`** from `main` `6390c87`; detail in §2 "Go-live".
 - **Pool (after go-live)**, smallest first: (1) notifications (mail / Teams / Slack) for まもなく / 遅れ — needs the
@@ -121,7 +127,7 @@ setup was merged and handed to the user for a test on the VM.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 93 (2026-11-10: open question "Finer permissions for settings" added at the end of the open-questions list; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 93}` to see only newer edits, and
+**Last rev written by me: 95 (2026-11-10: rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 95}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -1063,6 +1069,37 @@ timestamp (arrival day JST?), whether files stay after download, how to avoid re
 Possible first step for both A and B: store the expected SFTP path + file pattern on the business and show it in the
 drawer next to 受領 (the person knows where to look; B's watcher reads the same config).
 
+### Sheet import (branch `feature/sheet-import` from `main` `357c81a`, 2026-11-10; doc rev 95)
+User's decisions 2026-11-10: annual plan sheets are a core feature from day one; **the system never parses the client's
+raw files** (confidentiality) — the team converts Excel → JSON outside and the system only accepts the final JSON;
+import path = **an import screen** (chosen over a server script / the converter calling the API); in "add only" the
+screen **widens the period** so a file with only the new year can be added (user's scenario: one file per year,
+non-overlapping). Irregular tables (JCB year-end with × days): the team computes "rule dates minus × plus ○" outside
+and imports the result as a plain marker — the file has no "×", a date is removed by being absent in match mode.
+A "patch mode" for the import (remove entries applied to rule markers as cancel records) was discussed, NOT built.
+- **S.1 `ec5c23f` — frontend only, no backend change, no migration.** 年間計画シート page: 「シートを取り込む」 (admin +
+  client selected) → `SheetImportModal.tsx`: `Upload.Dragger` (not sent; `file.text()`), summary, modes 追加だけ /
+  ファイルに合わせる (`?replace_events=true`, red button), preview alert, result counts. Pure logic in
+  `features/plan-settings/sheetImport.ts`: `parseImportFile` (BOM stripped, shape problems all listed, trims, drops
+  extra keys) and `previewImport` (same rules as backend `import_sheet`: adds skip dates a person moved / cancelled;
+  match mode deletes non-manual dates incl. every date of a non-rule marker absent from the file → `emptied` warning;
+  blockers: file client ≠ selected client (screen-only rule), rule marker with dates in the file; `effective` = the
+  input actually sent, period = union with the existing sheet in add-only). `sheetApi.importSheet`. 4 MB limit in the
+  screen (nginx 5m; 20,000 dates ≈ 1 MB).
+- **Backend facts confirmed by the harness:** the file's period REPLACES the sheet's; add-only with existing dates
+  outside the new period → 400 "outside the new period" (so API callers must keep `period_start` and only extend
+  `period_end` — the widening is in the screen, not the API); rule markers regenerate over a changed period (extended
+  to the new end); a bad file → 422 with all problems, nothing written. No API deletes a sheet.
+- Checked: `npm run build`; esbuild harness of the real modules against uvicorn 8001 on `plan_check`, admin staff 8
+  logged in — **97/97** (preview counts = server counts in every case, mock file twice = no change, yearly 2026 → 2027
+  file, match mode, person edits kept, rule marker untouched). Left test sheets `HARNESS_IMPORT_…` / `HARNESS_YEARLY_…`
+  on client `MOCK` in `plan_check`. **The modal was not opened in a browser by me**; the user said "go" after saying
+  they would check it.
+- **S.2** `deploy/GO-LIVE.md` C: sheet step before the templates (import, compare with the source table, rule markers,
+  next year's file with 追加だけ, match-mode warning) + the 年間計画シート template type. **S.3**
+  `docs/OPERATION-MANUAL.md` 3.8 rewritten (import procedure, mode table, rules, JSON format + limits, API difference
+  about the period, editing on screen); limits table: raw tables are not read, no sheet delete.
+
 ### Open questions (in the doc)
 **Still open:** client-limited role details
 (name, one or several client codes per user, read-only or also its own client events) · signal transports beyond HTTP
@@ -1193,7 +1230,7 @@ use `.execution_options(include_deleted=True)` to bypass. Domains in `src/`: `do
 `reference_sheet` → `reference_sheet_marker` → `reference_sheet_event`. Real workflow: one baseline marker per client
 (e.g. 振込日 = 27th, next business day) with several jobs offset from it (3 business days before, …). Every date change
 cascades to all templates referencing the marker (`_propagate_sheet_change`).
-- **Markers:** imported (`POST /plans/sheets/import`, JSON format of `mock_data/desensitized_mock_data.json`; import cannot
+- **Markers:** imported (`POST /plans/sheets/import`, or the import screen since 2026-11-10 — §2 "Sheet import"; JSON format of `mock_data/desensitized_mock_data.json`; import cannot
   create rule markers) or **rule-generated** (`POST /plans/sheets/{id}/markers` with `rule`; `PATCH …/markers/{marker}`
   changes the rule, `rule: null` stops generating).
 - **Stopping a rule** = freeze by default: dates and dependent jobs stay, but holidays no longer move them. With
