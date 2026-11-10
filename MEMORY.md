@@ -1158,6 +1158,20 @@ reconcile, orders follow); templates have no status and no who-changed-what; `sr
   the next occurrence of a yearly job). Tests: `tests/test_template_preview.py` now 10. Harness
   `preview_create_harness.py` on `plan_check` 21/21 (a copy of an existing rrule / explicit-dates / sheet template
   previews the same dates as the original; nothing created; 401 / 403 / 404 / 422; a real create still works).
+  P.2 committed `707e1f8`.
+- **P.3 as built (frontend only):** `templateApi.previewCreate / previewUpdate`; pure logic
+  `features/plan-settings/templatePreview.ts` (`marksOfCreate` / `marksOfChange` → day marks same / added / removed /
+  moved / moved_from / manual; `monthsToShow`, `monthCells` Sunday-first, `orderImpact` with released counts);
+  `TemplatePreviewPanel.tsx` (range + 3 / 6 / 12 か月 switch, summary alert, legend, mini month grids `.pv-*` in
+  `styles.css`, Collapse with date lists and the affected-orders table — opened by default when a non-pending order is
+  touched). `TemplateFormModal.tsx`: **edit** → 保存する first calls `previewUpdate`; `generation_changed` false (name /
+  deadline / display) saves as before; true opens a second modal 「保存の前の確認」 with 戻って直す / この内容で保存する
+  (saves the values captured at preview time). **Create** → new footer button 「予定を確認」 (optional) opens the same
+  modal with この内容で作成する. A preview error blocks the save and is shown as the save error. Explicit-date add /
+  remove is not in the preview (the panel says so when dates are pending). Checked: `npm run build`; esbuild harness
+  `preview_ui_harness.ts` of the real modules on `plan_check` — 659/659 over all 19 templates (**an unchanged form
+  never triggers the confirmation**, name-only neither, a time change does; marks and order counts equal the API
+  result; month grids; 12-month range; nothing saved). **Not opened in a browser by me.**
   **Decided by the user 2026-11-10: the "two occurrences today" behaviour stays as it is** (no logic to skip today;
   the preview shows it and a person can cancel one of the two; simple and predictable for the MVP).
 

@@ -2,6 +2,7 @@ import {
   Alert,
   App,
   AutoComplete,
+  Button,
   ColorPicker,
   DatePicker,
   Divider,
@@ -24,8 +25,16 @@ import { useReferenceSheets } from "../../domain/plan/hooks/useReferenceSheets";
 import { CATEGORY_LABEL, TEMPLATE_CATEGORIES } from "../../domain/plan/lib/category";
 import { DAY_OFFSET_OPTIONS, DEADLINE_MODE_HELP, DEADLINE_MODE_LABEL } from "../../domain/plan/lib/deadline";
 import { describeRrule, describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
-import type { DeadlineMode, HolidayPolicy, PlanTemplate, TemplateType } from "../../domain/plan/types";
+import type {
+  DeadlineMode,
+  HolidayPolicy,
+  PlanTemplate,
+  TemplateChangePreview,
+  TemplateCreatePreview,
+  TemplateType,
+} from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
+import { TIMEZONE } from "../../shared/config";
 import { COLOR_PRESETS, hexFromColorPicker } from "../../shared/ui/color";
 import { Icon, ICON_NAMES } from "../calendar/components/Icon";
 import {
@@ -38,6 +47,13 @@ import {
   toUpdateInput,
   type FormValues,
 } from "./templateForm";
+import { DEFAULT_PREVIEW_MONTHS } from "./templatePreview";
+import { TemplatePreviewPanel } from "./TemplatePreviewPanel";
+
+/** 保存の前の確認（確認したときのフォームの値を持ち、「この内容で保存」はその値を送る） */
+type PreviewState =
+  | { mode: "create"; values: FormValues; data: TemplateCreatePreview }
+  | { mode: "update"; values: FormValues; base: PlanTemplate; data: TemplateChangePreview };
 
 interface Props {
   open: boolean;
@@ -50,7 +66,11 @@ interface Props {
   onSaved: () => void;
 }
 
-/** 予定テンプレートの新規作成・編集（削除は未対応）。種類と業務は作成後に変更できない */
+/**
+ * 予定テンプレートの新規作成・編集（削除は未対応）。種類と業務は作成後に変更できない。
+ * 保存の前の確認（Level 1）: 編集で日付に関わる項目を変えたときは、保存の前に必ず「何が変わるか」（予定の違いとオーダーへの影響）を
+ * 見せ、そこで保存を確定する。名前・締切・表示だけの変更は、これまでどおりそのまま保存する。新規作成では「予定を確認」で見られる（任意）。
+ */
 export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Props) {
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
@@ -59,6 +79,9 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
   // 編集の差分を取る基準（サーバー上の最新）。複数の API 呼び出しの途中で失敗した場合は、保存できた所まで進める
   const [current, setCurrent] = useState<PlanTemplate | null>(template);
   const isEdit = template !== null;
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [months, setMonths] = useState<number>(DEFAULT_PREVIEW_MONTHS);
+  const [checking, setChecking] = useState(false); // 確認を取りに行っている間（新規の「予定を確認」・範囲の変更）
 
   const templateType = Form.useWatch("template_type", form);
   const holidayPolicy = Form.useWatch("holiday_policy", form);
@@ -81,6 +104,8 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
       form.setFieldsValue(template ? fromTemplate(template) : initialValues());
       setCurrent(template);
       setError(null);
+      setPreview(null);
+      setMonths(DEFAULT_PREVIEW_MONTHS);
     }
   }, [open, template, form]);
 
@@ -106,7 +131,66 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
     return saved;
   };
 
+  const failure = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
+
+  /** 保存を押したとき。編集は、日付に関わる変更があれば先に確認を見せる（確認の取得に失敗したら保存しない） */
   const onFinish = async (v: FormValues) => {
+    if (!current) return save(v);
+    setSubmitting(true);
+    setError(null);
+    let data: TemplateChangePreview;
+    try {
+      data = await templateApi.previewUpdate(current.id, toUpdateInput(v, current), months);
+    } catch (e) {
+      setError({ title: "保存できませんでした", detail: failure(e, "変更の内容を確認できませんでした。") });
+      setSubmitting(false);
+      return;
+    }
+    if (!data.generation_changed) return save(v); // 名前・締切・表示だけ: 予定は変わらないので、そのまま保存
+    setPreview({ mode: "update", values: v, base: current, data });
+    setSubmitting(false);
+  };
+
+  /** 新規作成の「予定を確認」: 入力を検証してから、できる予定を見せる */
+  const previewCreate = async () => {
+    let v: FormValues;
+    try {
+      v = await form.validateFields();
+    } catch {
+      return; // 入力の誤りはフォームに表示される
+    }
+    setChecking(true);
+    setError(null);
+    try {
+      setPreview({ mode: "create", values: v, data: await templateApi.previewCreate(toCreateInput(v, biz.id), months) });
+    } catch (e) {
+      setError({ title: "予定を確認できませんでした", detail: failure(e, "予定を確認できませんでした。") });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  /** 確認の範囲（か月）を変えて取り直す */
+  const changeMonths = async (next: number) => {
+    setMonths(next);
+    if (!preview) return;
+    setChecking(true);
+    try {
+      if (preview.mode === "create") {
+        const data = await templateApi.previewCreate(toCreateInput(preview.values, biz.id), next);
+        setPreview({ ...preview, data });
+      } else {
+        const data = await templateApi.previewUpdate(preview.base.id, toUpdateInput(preview.values, preview.base), next);
+        setPreview({ ...preview, data });
+      }
+    } catch (e) {
+      message.error(`確認を取り直せませんでした: ${failure(e, "通信に失敗しました。")}`);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const save = async (v: FormValues) => {
     setSubmitting(true);
     setError(null);
     let wrote = false;
@@ -123,10 +207,12 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
         message.success(`「${created.name}」を作成しました`);
       }
       form.resetFields();
+      setPreview(null);
       onClose();
       onSaved();
     } catch (e) {
-      const detail = e instanceof ApiError ? e.message : `テンプレートを${isEdit ? "保存" : "作成"}できませんでした。`;
+      const detail = failure(e, `テンプレートを${isEdit ? "保存" : "作成"}できませんでした。`);
+      setPreview(null); // エラーはフォームの上に出す
       if (wrote) {
         // 本体の更新後（指定日の追加・削除の途中）で失敗した: 保存できた分を一覧に反映し、残りは再度の保存で送る
         setError({ title: "一部の変更だけ保存されました", detail: `${detail}（もう一度保存すると、残りの変更を反映します）` });
@@ -143,13 +229,24 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
     <Modal
       open={open}
       title={isEdit ? "予定テンプレートを編集" : "予定テンプレートを新規作成"}
-      okText={isEdit ? "保存する" : "作成する"}
-      cancelText="キャンセル"
-      onOk={() => form.submit()}
       onCancel={onClose}
-      confirmLoading={submitting}
       width={640}
       forceRender
+      footer={
+        <Space>
+          <Button onClick={onClose} disabled={submitting}>
+            キャンセル
+          </Button>
+          {!isEdit && (
+            <Button onClick={previewCreate} loading={checking && preview === null} disabled={submitting}>
+              予定を確認
+            </Button>
+          )}
+          <Button type="primary" onClick={() => form.submit()} loading={submitting && preview === null} disabled={checking}>
+            {isEdit ? "保存する" : "作成する"}
+          </Button>
+        </Space>
+      }
     >
       <Typography.Paragraph type="secondary" className="modal-note">
         業務: <span className="mono">{biz.business_code}</span> {biz.name}（顧客 {biz.client_code}）
@@ -158,6 +255,7 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
             <br />
             テンプレートID <span className="mono">{template.id}</span>・改訂 <span className="mono">{template.revision}</span>。
             時刻・ルール・休日の扱いなどを変えると、未来の予定が作り直されます（過去の予定と、手動で変更した予定はそのまま）。
+            その場合は、保存の前に「何が変わるか」の確認が出ます。
           </>
         )}
       </Typography.Paragraph>
@@ -391,6 +489,50 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
           </Form.Item>
         </Space>
       </Form>
+
+      <Modal
+        open={preview !== null}
+        title={preview?.mode === "update" ? "保存の前の確認: この変更で変わること" : "作成の前の確認: できる予定"}
+        width={860}
+        onCancel={() => setPreview(null)}
+        maskClosable={!submitting}
+        footer={
+          <Space>
+            <Button onClick={() => setPreview(null)} disabled={submitting}>
+              戻って直す
+            </Button>
+            <Button type="primary" loading={submitting} disabled={checking} onClick={() => preview && save(preview.values)}>
+              {preview?.mode === "update" ? "この内容で保存する" : "この内容で作成する"}
+            </Button>
+          </Space>
+        }
+      >
+        {preview?.mode === "create" && (
+          <TemplatePreviewPanel
+            mode="create"
+            preview={preview.data}
+            tz={preview.values.timezone?.trim() || TIMEZONE}
+            months={months}
+            onMonthsChange={changeMonths}
+            loading={checking}
+          />
+        )}
+        {preview?.mode === "update" && (
+          <TemplatePreviewPanel
+            mode="update"
+            preview={preview.data}
+            pendingDates={
+              preview.base.template_type === "explicit_dates"
+                ? { added: diffDates(preview.values, preview.base).added.length, removed: diffDates(preview.values, preview.base).removed.length }
+                : undefined
+            }
+            tz={preview.values.timezone?.trim() || TIMEZONE}
+            months={months}
+            onMonthsChange={changeMonths}
+            loading={checking}
+          />
+        )}
+      </Modal>
     </Modal>
   );
 }

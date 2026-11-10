@@ -36,6 +36,13 @@ export type CreatePlanTemplateInput =
 /** テンプレート更新の入力（部分更新。種類と業務は変更不可、種類に合わない項目は送れない） */
 export type UpdatePlanTemplateInput = Schemas["PlanTemplateUpdate"];
 
+// ---- 保存の前の確認（何も保存しない試し実行の結果） ----
+export type PreviewOccurrence = Schemas["PreviewOccurrence"];
+/** テンプレートをこの内容で変えたら何が起きるか（予定の違いと、オーダーへの影響） */
+export type TemplateChangePreview = Schemas["TemplateChangePreview"];
+/** テンプレートをこの内容で作ったらできる予定 */
+export type TemplateCreatePreview = Schemas["TemplateCreatePreview"];
+
 // ---- 年間計画シート ----
 export type ReferenceSheet = Schemas["ReferenceSheetResponse"];
 export type ReferenceSheetMarker = Schemas["ReferenceSheetMarkerResponse"];

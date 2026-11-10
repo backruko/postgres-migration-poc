@@ -1,5 +1,11 @@
 import { http, unwrap } from "../../../shared/api/http";
-import type { CreatePlanTemplateInput, PlanTemplate, UpdatePlanTemplateInput } from "../types";
+import type {
+  CreatePlanTemplateInput,
+  PlanTemplate,
+  TemplateChangePreview,
+  TemplateCreatePreview,
+  UpdatePlanTemplateInput,
+} from "../types";
 
 /** 予定テンプレート（事前設定）。参照・作成・編集・削除 */
 export const templateApi = {
@@ -23,6 +29,27 @@ export const templateApi = {
   update(templateId: number, input: UpdatePlanTemplateInput): Promise<PlanTemplate> {
     return unwrap(
       http.PATCH("/plans/templates/{template_id}", { params: { path: { template_id: templateId } }, body: input }),
+    );
+  },
+
+  /**
+   * この内容で作ったらできる予定を確かめる（POST /ops/templates/preview）。何も保存されない。
+   * バックエンドが実際の作成を試し実行して取り消すので、休日の扱いなども作ったときと同じになる。入力の誤りは作成と同じエラー。
+   */
+  previewCreate(input: CreatePlanTemplateInput, months: number): Promise<TemplateCreatePreview> {
+    return unwrap(http.POST("/ops/templates/preview", { params: { query: { months } }, body: input }));
+  },
+
+  /**
+   * この内容で変えたら何が起きるかを確かめる（POST /ops/templates/{id}/preview）。何も保存されない。
+   * 予定の違い（増える・無くなる・日時が変わる）と、追従するオーダー（日時が変わる・取消・矛盾）が返る。入力の誤りは更新と同じエラー。
+   */
+  previewUpdate(templateId: number, input: UpdatePlanTemplateInput, months: number): Promise<TemplateChangePreview> {
+    return unwrap(
+      http.POST("/ops/templates/{template_id}/preview", {
+        params: { path: { template_id: templateId }, query: { months } },
+        body: input,
+      }),
     );
   },
 
