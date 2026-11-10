@@ -7,10 +7,18 @@ setup was merged and handed to the user for a test on the VM.
 
 ## 1. Current status
 
-- **Branch `fix/started-slot-not-regenerated` (from `main` `2395544`, 2026-11-10; uncommitted work, not merged):** a
-  recalculation leaves an occurrence alone when its work has started — §2 "Safer changes" → "Started work keeps its
-  occurrence". Found by the user's browser test on their dev DB. No migration.
-- **`main` = `2395544` (local, not pushed)** = merge of `feature/template-preview` ("Level 1" preview before saving a
+- **`main` = merge `1dff126` + one MEMORY.md commit on top (local, NOT pushed; `origin/main` = `6390c87`).** `1dff126` =
+  merge of `fix/started-slot-not-regenerated` (`97c7fdc`, 2026-11-10): a recalculation leaves an occurrence alone when
+  its work has started — §2 "Safer changes" → "Started work keeps its occurrence". Found by the user's browser test on
+  their dev DB; merged on the user's word ("I trust your changes") without a second browser check. **Tests 217**,
+  pyright 0, no migration. **Everything of 2026-11-10 is merged: sheet import, template preview, this fix.**
+- **USB zip rebuilt 2026-11-10 from the head of `main`** (`python scripts/make_package.py` → the newest
+  `packages/ops-20261110-<sha>.zip`; `packages/` is git-ignored). It replaces `ops-20261106-4cfca4c.zip`, which has
+  none of the 2026-11-10 work. The user still has to copy it to the USB drive. Rebuild again after any later commit.
+- **Next: nothing open to build.** Waiting for the server (first run postponed for IP configuration) and the pilot;
+  Level 2 (drafts + approval with finer permissions) only after the pilot. Not confirmed as browser-checked: the sheet
+  import window. The user's dev DB still has the orphan row from the test (template 8, 11/26 11:00, no order).
+- Before that: `2395544` = merge of `feature/template-preview` ("Level 1" preview before saving a
   template: P.1 `595f5f8`, P.2 `707e1f8`, P.3 `d7539fe`, P.4 `8b2f62f`; §2 "Safer changes"). The user browser-tested the
   preview on their dev DB (Vite 5173) on 2026-11-10; the sheet import window is not confirmed as browser-checked.
 - **`main` = `d8a8f9e` (local, not pushed; `origin/main` = `6390c87`)** = merge of `feature/sheet-import` (2026-11-10):
