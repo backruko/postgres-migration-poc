@@ -244,31 +244,62 @@ def _manual_slots(db: Session, template: PlanTemplate) -> set[tuple[str, date | 
     return slots
 
 
+def _started_slots(
+    db: Session, template: PlanTemplate, lower: datetime, occurrences: list[engine.Occurrence]
+) -> set[tuple[str, date | int]]:
+    """occurrences の発生枠のうち、lower より前に始まった有効な予定がもうある枠"""
+    started = plan_instance_repo.get_live_started(
+        db,
+        template_id=template.id,
+        before=lower,
+        occurrence_dates=sorted({o.occurrence_date for o in occurrences if o.source_sheet_event_id is None}),
+        sheet_event_ids=sorted({o.source_sheet_event_id for o in occurrences if o.source_sheet_event_id is not None}),
+    )
+    return {_slot(i.occurrence_date, i.source_sheet_event_id) for i in started}
+
+
 def _reconcile(db: Session, template: PlanTemplate, lower: datetime, upper: datetime, reason: VoidReason) -> None:
     """
     [lower, upper) の範囲で「あるべきインスタンス」と「現在有効なインスタンス」を突き合わせます。
     - 変わっていないもの: そのまま残す（不変）
     - 不要になったもの: 無効化(void)し、キャッシュから除外
     - 新しく必要なもの: 現在のリビジョンで生成し、キャッシュに追加
+    次の発生枠は触らない: 人が変更・取消した枠、もう始まった枠（過去に有効な予定がある）、作業が始まった・終わった枠（確認役が答える）
     """
     if upper <= lower:
         return
 
     # 手動で変更・取消された発生枠はルールから再生成しない（手動オーバーライド自体も照合対象外）
     manual_slots = _manual_slots(db, template)
-    desired = {
-        o.key: o
-        for o in _expand(db, template, lower, upper)
-        if _slot(o.occurrence_date, o.source_sheet_event_id) not in manual_slots
-    }
+    expanded = [
+        o for o in _expand(db, template, lower, upper) if _slot(o.occurrence_date, o.source_sheet_event_id) not in manual_slots
+    ]
+    # もう始まった発生枠（lower より前に始まった有効な予定がある枠）も作らない。
+    # 例: 今日 9:00 の予定が過ぎた後に、テンプレートの時刻を 14:00 に変える。過去の予定は変えないので 9:00 の予定は残り、
+    # ここで除かないと今日に 14:00 の予定がもう 1 件できる（オーダーは 9:00 の側に付いたままで、14:00 の側はリリースも取消もできない）
+    started_slots = _started_slots(db, template, lower, expanded)
     existing = {
         (i.scheduled_start, i.scheduled_end, i.source_sheet_event_id): i
         for i in plan_instance_repo.get_live_in_window(
             db, template_id=template.id, lower=lower, upper=upper, generated_only=True
         )
     }
+    # 作業がもう始まった・終わった発生枠（確認役 = coordination が答える。オーダーが完了・作業中）は、今の予定のまま残す:
+    # 無効にしないし、新しい日時で作り直しもしない。動かすと、完了したオーダーが古い予定に残り、新しい予定にはオーダーが無くなる
+    protected = slot_events.protected_slots(db, template.id, lower, upper, reason)
+    kept_slots = {
+        _slot(i.occurrence_date, i.source_sheet_event_id)
+        for i in existing.values()
+        if _slot(i.occurrence_date, i.source_sheet_event_id) in protected
+    }
+    skip = started_slots | kept_slots
+    desired = {o.key: o for o in expanded if _slot(o.occurrence_date, o.source_sheet_event_id) not in skip}
 
-    to_void = [i.id for key, i in existing.items() if key not in desired]
+    to_void = [
+        i.id
+        for key, i in existing.items()
+        if key not in desired and _slot(i.occurrence_date, i.source_sheet_event_id) not in kept_slots
+    ]
     to_add = [o for key, o in desired.items() if key not in existing]
 
     if to_void:

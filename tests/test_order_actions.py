@@ -198,6 +198,11 @@ def test_conflict_blocks_start_and_can_be_resolved(db, setup, monkeypatch):
     # 作業中に plan の時刻が変わる → 保留中のオーダーは追従、作業中なら矛盾（ここでは作業中に戻して矛盾を作る）
     for o in (keep, accept, cancel):
         ope.resume_order(db, o.id, s["operator"])
+    # 2026-11-10 から、テンプレートの変更では作業中のオーダーの予定を動かさない（矛盾にならない）。
+    # 作業中に予定が動く矛盾は、休日・シートの日付の変更で起きる。ここは矛盾の「解決」のテストなので、
+    # 「動かさない枠」の確認役を外して、システムが作業中の予定を動かした状態を作る
+    from src.domain_plan import slot_events
+    monkeypatch.setattr(slot_events, "_guards", [])
     plan_services.update_template(db, s["template_id"], PlanTemplateUpdate(start_time=time(15, 0)))
     db.expire_all()
     for o in (keep, accept, cancel):

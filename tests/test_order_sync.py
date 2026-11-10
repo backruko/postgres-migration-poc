@@ -207,10 +207,11 @@ def test_system_move_follows_or_flags_in_progress(db, biz_id):
     assert (rec.detail or {})["plan_reasons"] == ["template_revised"]
     # 保留中は追従して保留のまま
     assert held.status == OrderStatus.ON_HOLD and held.scheduled_start.astimezone(timezone(timedelta(hours=9))).hour == 14
-    # 作業中は動かさず、矛盾として残す
+    # 作業中: テンプレートの変更では予定ごと動かさない（矛盾にもしない。2026-11-10 の決定）。
+    # 休日の追加など別の理由で枠が動いたときの矛盾は tests/test_template_preview.py、枠が消えたときは次のテスト
     assert working.status == OrderStatus.IN_PROGRESS and working.scheduled_start == working_start
-    assert working.conflict and "作業中" in (working.conflict_reason or "")
-    assert events(db, working)[-1].event_type == OrderEventType.CONFLICT_RAISED
+    assert not working.conflict and working.current_instance_id == inst[5].id
+    assert events(db, working)[-1].event_type != OrderEventType.CONFLICT_RAISED
 
 
 def test_slot_disappears_cancels_pending_and_flags_held_and_working(db, biz_id):

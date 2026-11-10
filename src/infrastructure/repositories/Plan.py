@@ -9,7 +9,7 @@ from datetime import date, datetime
 from typing import Any, Iterable, Sequence
 
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.orm import Session, aliased
 
 from src.core.error_codes import ErrorCode
@@ -236,6 +236,24 @@ class PlanInstanceRepository(CRUDBase[PlanInstance, BaseModel, BaseModel]):
         )
         if generated_only:
             stmt = stmt.where(PlanInstance.origin == InstanceOrigin.GENERATED)
+        return list(db.scalars(stmt).all())
+
+    def get_live_started(
+        self, db: Session, *, template_id: int, before: datetime, occurrence_dates: list[date], sheet_event_ids: list[int]
+    ) -> list[PlanInstance]:
+        """
+        before より前に始まった有効なインスタンスのうち、指定した発生枠（ルール上の日付、またはシート日付の行）のもの。
+        もう始まった発生枠を、再照合でもう一度作らないために使います。
+        """
+        if not occurrence_dates and not sheet_event_ids:
+            return []
+        stmt = self._live_stmt(template_id).where(
+            PlanInstance.scheduled_start < before,
+            or_(
+                and_(PlanInstance.source_sheet_event_id.is_(None), PlanInstance.occurrence_date.in_(occurrence_dates)),
+                PlanInstance.source_sheet_event_id.in_(sheet_event_ids),
+            ),
+        )
         return list(db.scalars(stmt).all())
 
     def get_with_void(self, db: Session, *, id: int) -> tuple[PlanInstance, PlanInstanceVoid | None] | None:

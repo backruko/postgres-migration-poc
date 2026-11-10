@@ -7,7 +7,7 @@ plan はインスタンスを作る・無効化するたびに、その発生枠
 plan は受け手が何をするか（オーダーのこと）を知りません。受け手は起動時に register_slot_listener で登録します。
 """
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Callable, Literal
 
 from sqlalchemy import event, select
@@ -63,6 +63,33 @@ def register_slot_listener(listener: SlotListener) -> None:
     """発生枠の変更の受け手を登録します（同じ受け手を2回登録しても1回だけ呼ばれる）。"""
     if listener not in _listeners:
         _listeners.append(listener)
+
+
+# ==========================================
+# 動かしてはいけない発生枠（plan ← 登録された確認役）
+# ==========================================
+# 発生枠の簡単なキー（services._slot と同じ）: ("sheet_event", シート日付の行の ID) または ("date", ルール上のローカル日付)
+SimpleSlot = tuple[str, date | int]
+# (db, template_id, 範囲の始まり, 範囲の終わり, 再照合の理由) → その範囲で、今の予定のまま残す発生枠
+SlotGuard = Callable[[Session, int, datetime, datetime, VoidReason], set[SimpleSlot]]
+_guards: list[SlotGuard] = []
+
+
+def register_slot_guard(guard: SlotGuard) -> None:
+    """
+    再照合で動かしてはいけない発生枠を答える確認役を登録します（同じ確認役は 1 回だけ）。
+    plan は理由（オーダーが完了している・作業中である）を知りません。確認役（coordination）が答えた枠は、
+    今ある予定を無効にせず、作り直しもしません。
+    """
+    if guard not in _guards:
+        _guards.append(guard)
+
+
+def protected_slots(db: Session, template_id: int, lower: datetime, upper: datetime, reason: VoidReason) -> set[SimpleSlot]:
+    slots: set[SimpleSlot] = set()
+    for guard in _guards:
+        slots |= guard(db, template_id, lower, upper, reason)
+    return slots
 
 
 def _chain_root(db: Session, instance: PlanInstance) -> PlanInstance:

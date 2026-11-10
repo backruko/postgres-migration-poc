@@ -196,7 +196,7 @@ function ChangeSummary({ preview, pendingDates }: Extract<Props, { mode: "update
               {impact.conflict > 0 && (
                 <li>
                   <b>オーダー {impact.conflict} 件が「矛盾」になります。</b>
-                  作業中・保留中のオーダーは自動では動かさず、人の判断を待ちます。
+                  保留中のオーダーの予定が無くなるときなどは、自動では決めず、人の判断を待ちます。
                 </li>
               )}
               {impact.created > 0 && <li>オーダーが新しく {impact.created} 件できます。</li>}
@@ -209,6 +209,7 @@ function ChangeSummary({ preview, pendingDates }: Extract<Props, { mode: "update
               指定日の追加 {pendingDates.added} 件・削除 {pendingDates.removed} 件は、この確認には含まれません（保存のときに反映されます）。
             </li>
           )}
+          <li className="muted">オーダーが完了・作業中の予定は、今の日時のまま残ります（上の件数には入りません）。</li>
           <li className="muted">まだ何も保存されていません。</li>
         </ul>
       }

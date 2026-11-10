@@ -159,14 +159,16 @@ def test_preview_matches_the_real_change_and_saves_nothing(db, biz_id, staff):
     assert all(m.after_start.astimezone(JST).hour == 14 and m.before_start.astimezone(JST).hour == 9 for m in p.moved)
     moved_dates = {m.occurrence_date for m in p.moved}
     assert inst[10].occurrence_date not in moved_dates and inst[12].occurrence_date not in moved_dates
+    assert inst[5].occurrence_date not in moved_dates  # 作業中のオーダーの予定は動かさない
     manual = [o for o in p.occurrences if o.manual]
     assert [o.scheduled_start for o in manual] == [moved_by_person.scheduled_start]
     assert inst[12].occurrence_date not in {o.occurrence_date for o in p.occurrences}
 
-    # オーダー: 作業中は矛盾、それ以外（リリース済み・保留中も）は追従
+    # オーダー: 作業中は予定ごとそのまま（矛盾にもならない）、それ以外（リリース済み・保留中も）は追従
     effect = {e.order_id: e for e in p.order_effects}
-    assert effect[working.id].effect == "conflict" and effect[working.id].status == OrderStatus.IN_PROGRESS
-    assert "作業中" in (effect[working.id].reason or "")
+    assert working.id not in effect and not [e for e in p.order_effects if e.effect == "conflict"]
+    [kept] = [o for o in p.occurrences if o.occurrence_date == inst[5].occurrence_date]
+    assert kept.scheduled_start == inst[5].scheduled_start
     assert effect[ready.id].effect == "rescheduled" and effect[ready.id].status == OrderStatus.READY
     new_start = effect[ready.id].new_scheduled_start
     assert new_start is not None and new_start.astimezone(JST).hour == 14
@@ -211,16 +213,17 @@ def test_rule_change_removes_and_adds_slots_and_cancels_their_orders(db, biz_id)
     p = preview_template_update(db, t.id, change, months=3)
     assert stored(t.id) == before
 
-    # 月曜の枠が無くなり、火曜の枠が増える（別の発生枠なので「日時が変わる」ではない）
+    # 月曜の枠が無くなり、火曜の枠が増える（別の発生枠なので「日時が変わる」ではない）。作業中のオーダーの月曜だけは残る
     assert p.generation_changed and not p.moved
-    assert len(p.removed) >= 12 and all(o.occurrence_date.isoweekday() == 1 for o in p.removed)
+    assert len(p.removed) >= 11 and all(o.occurrence_date.isoweekday() == 1 for o in p.removed)
     assert len(p.added) >= 12 and all(o.occurrence_date.isoweekday() == 2 for o in p.added)
-    assert [o.occurrence_date.isoweekday() for o in p.occurrences] == [2] * len(p.occurrences)
-    # 月曜のオーダーは取消（作業中だけは矛盾）、火曜の分は新しくできる
+    assert inst[2].occurrence_date not in {o.occurrence_date for o in p.removed}
+    assert sorted(o.occurrence_date for o in p.occurrences if o.occurrence_date.isoweekday() == 1) == [inst[2].occurrence_date]
+    # 月曜のオーダーは取消（作業中のものは、予定ごとそのまま）、火曜の分は新しくできる
     effects = {e.order_id: e.effect for e in p.order_effects}
-    assert effects[working.id] == "conflict"
-    assert sorted(effects.values()).count("canceled") == len(p.removed) - 1
-    assert p.orders_total == len(p.removed) and p.orders_created == len(p.added)
+    assert working.id not in effects and set(effects.values()) == {"canceled"}
+    assert len(effects) == len(p.removed)
+    assert p.orders_total == len(p.removed) + 1 and p.orders_created == len(p.added)
 
     # 実際の保存でも同じ
     plan_services.update_template(db, t.id, change)
@@ -231,7 +234,8 @@ def test_rule_change_removes_and_adds_slots_and_cancels_their_orders(db, biz_id)
         o.id for o in db.scalars(select(OpeOrder).where(OpeOrder.template_id == t.id, OpeOrder.status == OrderStatus.CANCELED))
     }
     assert {e.order_id for e in p.order_effects if e.effect == "canceled"} & {row.id for row in before[7]} == canceled
-    assert db.get(OpeOrder, working.id).conflict
+    still_working = db.get(OpeOrder, working.id)
+    assert still_working is not None and not still_working.conflict and still_working.current_instance_id == inst[2].id
 
 
 def test_name_and_deadline_changes_touch_no_dates(db, biz_id):
@@ -350,3 +354,116 @@ def test_preview_endpoints_need_a_login_and_admin():
     assert len(routes) == 2
     for route in routes:
         assert set(getattr(route.endpoint, "__required_roles__")) == {RoleCode.ADMIN}, route.path
+
+
+# ==========================================
+# もう始まった発生枠は、テンプレートを変えてももう一度作らない
+# ==========================================
+def test_a_slot_that_already_started_today_is_not_generated_again(db, biz_id, monkeypatch):
+    from src.coordination import order_sync
+
+    # 昨日の時点で作る → 今日 0:05 の予定（もう過ぎている）とそのオーダーがある
+    real = datetime.now(UTC)
+    monkeypatch.setattr(plan_services, "_now", lambda: real - timedelta(days=1))
+    monkeypatch.setattr(order_sync, "_now", lambda: real - timedelta(days=1))
+    t = template(db, biz_id, start_time=time(0, 5))
+    monkeypatch.undo()
+
+    def todays():
+        db.expire_all()
+        return [i for i in live(db, t.id) if i.occurrence_date == today()]
+
+    [old] = todays()
+    order = order_of(db, old.id)
+
+    # 時刻を今日のこれから（23:55）に変える: 今日の分は増えない（確認にも出ない）。明日以降は動く
+    change = PlanTemplateUpdate(start_time=time(23, 55))
+    p = preview_template_update(db, t.id, change, months=1)
+    assert not p.added and len(p.moved) > 25
+    # 範囲の最後の日だけは「無くなる」に出ることがある（新しい時刻が生成済みの範囲の外に出る。範囲が延びるとまた作られる）
+    assert all(o.occurrence_date > today() + timedelta(days=60) for o in p.removed) and len(p.removed) <= 1
+    assert today() not in {o.occurrence_date for o in p.occurrences}
+
+    plan_services.update_template(db, t.id, change)
+    [still] = todays()
+    assert still.id == old.id and still.scheduled_start == old.scheduled_start
+    order = db.get(OpeOrder, order.id)
+    assert order is not None and order.current_instance_id == old.id and order.status == OrderStatus.PENDING
+    tomorrow = next(i for i in live(db, t.id) if i.occurrence_date == today() + timedelta(days=1))
+    assert tomorrow.scheduled_start.astimezone(JST).strftime("%H:%M") == "23:55"
+
+
+# ==========================================
+# 作業が終わった・始まった発生枠は、テンプレートを変えても動かさない（2026-11-10）
+# ==========================================
+def finish(db, order):
+    order = db.get(OpeOrder, order.id)
+    order.released_at = order.finished_at = datetime.now(UTC)
+    order.status = OrderStatus.FINISHED
+    db.commit()
+    return order
+
+
+def test_a_finished_order_keeps_its_occurrence_when_the_template_changes(db, biz_id):
+    # 例: 毎月 26 日 9:00。今月分のオーダーは先に完了している。時刻を 11:00 に変える
+    t = template(db, biz_id, rrule="FREQ=MONTHLY;BYMONTHDAY=26", name="Monthly 26")
+    first, second, third = live(db, t.id)[:3]
+    done = finish(db, order_of(db, first.id))
+
+    change = PlanTemplateUpdate(start_time=time(11, 0))
+    p = preview_template_update(db, t.id, change, months=3)
+    # 確認: 動くのは 2 件だけ。完了した分は、今の時刻のまま予定の一覧に残る
+    assert [m.occurrence_date for m in p.moved] == [second.occurrence_date, third.occurrence_date]
+    assert not p.added and not p.removed
+    assert p.occurrences[0].scheduled_start == first.scheduled_start
+    assert {e.order_id for e in p.order_effects} == {order_of(db, second.id).id, order_of(db, third.id).id}
+
+    plan_services.update_template(db, t.id, change)
+    db.expire_all()
+    now_first, now_second = live(db, t.id)[:2]
+    # 完了した分の予定は同じインスタンスのまま（オーダーとつながったまま）。次の分は 11:00 に動いた
+    assert now_first.id == first.id and now_first.scheduled_start == first.scheduled_start
+    assert now_second.id != second.id and now_second.scheduled_start.astimezone(JST).hour == 11
+    done = db.get(OpeOrder, done.id)
+    assert done is not None and done.status == OrderStatus.FINISHED and done.current_instance_id == now_first.id
+    assert order_of(db, now_first.id).id == done.id  # 日次ダッシュボードは、この行に完了のオーダーを出せる
+
+
+def test_started_work_stays_but_a_holiday_still_flags_work_in_progress(db, biz_id):
+    """
+    テンプレートの変更では、作業中のオーダーの予定は動かさない（矛盾にもしない）。
+    休日の追加（システムが枠を動かす別の理由）では、これまでどおり予定は動き、作業中のオーダーは矛盾になる。完了した分はどちらでも動かない
+    """
+    from src.domain_plan.schemas import BusinessCalendarCreate, HolidayIn, HolidaysAdd
+
+    calendar = plan_services.create_calendar(
+        db, BusinessCalendarCreate(code="T_PV_" + uuid.uuid4().hex[:8].upper(), name="preview test", weekend_days=[])
+    )
+    t = template(db, biz_id, business_calendar_id=calendar.id, holiday_policy="following")
+    inst = live(db, t.id)
+    working = set_status(db, order_of(db, inst[5].id), OrderStatus.IN_PROGRESS)
+    done = finish(db, order_of(db, inst[8].id))
+
+    # テンプレートの変更: どちらの予定もそのまま
+    plan_services.update_template(db, t.id, PlanTemplateUpdate(start_time=time(14, 0)))
+    db.expire_all()
+    working, done = db.get(OpeOrder, working.id), db.get(OpeOrder, done.id)
+    assert working is not None and done is not None
+    assert not working.conflict and working.current_instance_id == inst[5].id and working.scheduled_start == inst[5].scheduled_start
+    assert done.current_instance_id == inst[8].id
+    by_date = {i.occurrence_date: i for i in live(db, t.id)}
+    assert by_date[inst[5].occurrence_date].id == inst[5].id and by_date[inst[8].occurrence_date].id == inst[8].id
+    assert by_date[inst[6].occurrence_date].scheduled_start.astimezone(JST).hour == 14
+
+    # 休日の追加: 作業中の分は予定が翌日へ動き、オーダーは矛盾。完了した分は動かない
+    plan_services.add_holidays(db, calendar.id, HolidaysAdd(holidays=[
+        HolidayIn(holiday_date=inst[5].occurrence_date, name="test"), HolidayIn(holiday_date=inst[8].occurrence_date, name="test"),
+    ]))
+    db.expire_all()
+    working, done = db.get(OpeOrder, working.id), db.get(OpeOrder, done.id)
+    assert working is not None and done is not None
+    assert working.conflict and working.status == OrderStatus.IN_PROGRESS
+    assert not done.conflict and done.status == OrderStatus.FINISHED
+    live_ids = {i.id for i in live(db, t.id)}
+    assert inst[5].id not in live_ids  # 休日になった日の予定は無くなった（翌営業日の予定と重なるため 1 件にまとまる）
+    assert inst[8].id in live_ids      # 完了した分は、休日になってもそのまま
