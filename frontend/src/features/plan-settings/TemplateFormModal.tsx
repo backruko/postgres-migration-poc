@@ -254,7 +254,8 @@ export function TemplateFormModal({ open, biz, template, onClose, onSaved }: Pro
           <>
             <br />
             テンプレートID <span className="mono">{template.id}</span>・改訂 <span className="mono">{template.revision}</span>。
-            時刻・ルール・休日の扱いなどを変えると、未来の予定が作り直されます（過去の予定と、手動で変更した予定はそのまま）。
+            時刻・ルール・休日の扱いなどを変えると、未来の予定が作り直されます（過去の予定、手動で変更した予定、
+            オーダーが完了・作業中の予定はそのまま）。
             その場合は、保存の前に「何が変わるか」の確認が出ます。
           </>
         )}

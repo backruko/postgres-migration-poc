@@ -8,10 +8,12 @@ plan がコミットする直前に、変更された発生枠の一覧を受け
 |-------------------------|-----------------|----------------|------------------------|-------------|
 | 人が日時を変更           | 追従            | 追従（保留のまま）| 拒否（plan の変更ごと） | 影響なし    |
 | 人が取消                 | 取消（理由付き） | 取消           | 拒否                   | 影響なし    |
-| システムが枠を動かした    | 追従            | 追従           | そのまま + 矛盾フラグ   | 影響なし    |
+| システムが枠を動かした    | 追従            | 追従           | そのまま + 矛盾フラグ（※）| 影響なし（※）|
 | 枠が消えた（システム）    | システムが取消   | 矛盾フラグ      | 矛盾フラグ             | 影響なし    |
 | 新しい枠                 | 新しい pending オーダー（今以降の予定のみ）                                  |
 
+※ 2026-11-10: 完了したオーダーの枠は、plan の側でも動かさない（予定ごと今のまま残す）。作業中のオーダーの枠は、
+テンプレートの変更では動かさず矛盾フラグも立てない（work_started_slots。休日・シートの日付の変更ではこの表のとおり）。
 取消されたオーダーは履歴として残り、同じ枠が戻ったときは新しいオーダーを作ります。
 オーダーの作成・取消・ルール上の日付の変更のたびに、業務間の依存関係の定義からオーダー同士のつながりを直します
 （domain_ope/links.py）。定義の作成・削除も受け取ります（biz の dependency_events）。
@@ -36,7 +38,7 @@ from src.domain_ope.steps import LOCAL_TIMEZONE, StepSetChange, scheduled_day, s
 from src.domain_plan import template_events
 from src.domain_plan.models import PlanInstance, PlanOccurrenceCache, PlanTemplate, VoidReason
 from src.domain_plan.slot_events import (
-    SlotChange, SlotKey, live_instance_for_slot, register_slot_listener, slot_key_of,
+    SimpleSlot, SlotChange, SlotKey, live_instance_for_slot, register_slot_guard, register_slot_listener, slot_key_of,
 )
 from src.infrastructure.repositories import ope_order_repo
 
@@ -54,9 +56,35 @@ def register() -> None:
     登録します（何度呼んでも1回だけ登録される）。
     """
     register_slot_listener(apply_slot_changes)
+    register_slot_guard(work_started_slots)
     dependency_events.register_dependency_listener(apply_dependency_change)
     template_events.register_template_listener(apply_template_deadline_change)
     master_guards.register()
+
+
+def work_started_slots(db: Session, template_id: int, lower: datetime, upper: datetime, reason: VoidReason) -> set[SimpleSlot]:
+    """
+    plan の再照合で、今の予定のまま残す発生枠（2026-11-10 の決定）:
+    - オーダーが完了している枠: どの理由の再照合でも残す。終わった作業の予定は動かさない
+      （動かすと、完了したオーダーが古い予定に残り、動いた先の予定にはオーダーが付かず、リリースも取消もできない行になる）
+    - オーダーが作業中の枠: テンプレートの変更のときは残す（矛盾フラグも立てない。そのオーダーにとっては何も変わらないため）。
+      休日・シートの日付の変更では、これまでどおり予定は動き、オーダーに矛盾フラグが立って人の判断を待つ
+    臨時の予定（one_off）は再照合の対象ではないので含めない。
+    """
+    statuses = [OrderStatus.FINISHED]
+    if reason == VoidReason.TEMPLATE_REVISED:
+        statuses.append(OrderStatus.IN_PROGRESS)
+    stmt = select(OpeOrder.occurrence_date, OpeOrder.source_sheet_event_id).where(
+        OpeOrder.template_id == template_id,
+        OpeOrder.status.in_(statuses),
+        OpeOrder.one_off_instance_id.is_(None),
+        OpeOrder.scheduled_start >= lower,
+        OpeOrder.scheduled_start < upper,
+    )
+    return {
+        ("sheet_event", row.source_sheet_event_id) if row.source_sheet_event_id is not None else ("date", row.occurrence_date)
+        for row in db.execute(stmt)
+    }
 
 
 def apply_template_deadline_change(db: Session, template: PlanTemplate) -> None:

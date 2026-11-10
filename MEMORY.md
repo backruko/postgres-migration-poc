@@ -7,10 +7,12 @@ setup was merged and handed to the user for a test on the VM.
 
 ## 1. Current status
 
-- **Branch `feature/template-preview` (from `main` `d8a8f9e`, 2026-11-10; NOT merged, not pushed):** "Level 1" preview
-  before saving a template — P.1 `595f5f8` (backend, edit), P.2 `707e1f8` (backend, create), P.3 `d7539fe` (form),
-  P.4 manual + doc + this file; §2 "Safer changes". **Tests now 214**; no migration. The user has not browser-checked
-  the preview window or the sheet import window that I know of. Waiting for "merge".
+- **Branch `fix/started-slot-not-regenerated` (from `main` `2395544`, 2026-11-10; uncommitted work, not merged):** a
+  recalculation leaves an occurrence alone when its work has started — §2 "Safer changes" → "Started work keeps its
+  occurrence". Found by the user's browser test on their dev DB. No migration.
+- **`main` = `2395544` (local, not pushed)** = merge of `feature/template-preview` ("Level 1" preview before saving a
+  template: P.1 `595f5f8`, P.2 `707e1f8`, P.3 `d7539fe`, P.4 `8b2f62f`; §2 "Safer changes"). The user browser-tested the
+  preview on their dev DB (Vite 5173) on 2026-11-10; the sheet import window is not confirmed as browser-checked.
 - **`main` = `d8a8f9e` (local, not pushed; `origin/main` = `6390c87`)** = merge of `feature/sheet-import` (2026-11-10):
   sheet import screen S.1 `ec5c23f`, S.2–S.4 `f381c28` (checklist, manual, records); §2 "Sheet import". The USB zip
   `ops-20261106-4cfca4c.zip` is older than this — rebuild with `python scripts/make_package.py` before the install.
@@ -133,7 +135,7 @@ setup was merged and handed to the user for a test on the VM.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 101 (2026-11-10: revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 101}` to see only newer edits, and
+**Last rev written by me: 103 (2026-11-10: revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 103}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -1177,7 +1179,36 @@ reconcile, orders follow); templates have no status and no who-changed-what; `sr
   result; month grids; 12-month range; nothing saved). **Not opened in a browser by me.**
   P.3 committed `d7539fe`. **P.4:** `docs/OPERATION-MANUAL.md` 3.7 got 「保存の前の確認」 (steps, a table of what each
   summary line means, the things to know, both preview API calls); design doc rev 101.
-  **Decided by the user 2026-11-10: the "two occurrences today" behaviour stays as it is** (no logic to skip today;
+- **Started work keeps its occurrence (2026-11-10, branch `fix/started-slot-not-regenerated`).** The user's browser
+  test: template 8 不定期テスト (sheet-based, dev DB) 9:00 → 11:00; the 11/26 row then showed the new time, no order
+  ("—"), no release / cancel. Cause (read-only SELECTs on dev_db, with the user's OK for that one template): order 888
+  was FINISHED on 11/05; the edit voided instance 948 and created 1162; the finished order stayed on 948 and the
+  dashboard joins rows to orders by `current_instance_id`. **User's decisions:** an occurrence whose order is finished
+  **stays** (not "move and keep the link"); an occurrence whose order is in progress **stays with no 矛盾 flag** on a
+  template edit; and (this reverses the earlier "leave it" decision, the user said "go" for it) a slot that already
+  started today is not generated a second time.
+  - `slot_events.register_slot_guard` / `protected_slots(db, template_id, lower, upper, reason)`; plan asks, coordination
+    answers: `order_sync.work_started_slots` → slots of orders FINISHED (every reason) or IN_PROGRESS (only
+    `VoidReason.TEMPLATE_REVISED`), `scheduled_start` in the window, no one-offs. **My judgment, told to the user:**
+    finished is protected for holiday / sheet-date recalculations too (same orphan otherwise); in progress keeps the old
+    rule there (occurrence moves, order gets 矛盾).
+  - `_reconcile`: a protected slot that has a live generated instance in the window is neither voided nor re-created
+    (`kept_slots`); a slot with a live instance that started before the window is not created again
+    (`_started_slots`, repo `get_live_started`). A protected slot with no live generated instance (e.g. after a revert)
+    is treated as before.
+  - Tests: `test_template_preview.py` now 13 (finished keeps its occurrence — the user's case with a monthly-26th
+    template; started work stays on a template edit but a holiday still flags work in progress and leaves finished
+    alone; today's started slot not generated again); `test_order_sync.py`
+    `test_system_move_follows_or_flags_in_progress` now expects no conflict for in progress on a template edit.
+    Screen texts (form note, preview summary) and manual 3.7 updated; design doc rev 103.
+  - **The user's dev row is not repaired by the fix:** instance 1162 (11/26 11:00, live, no order) and order 888 on the
+    voided 948 stay as they are; I do not write to dev_db.
+  - Also seen, NOT changed: (1) moving a time earlier than "now" on a day whose old time is still ahead removes
+    today's occurrence (the new time is past, the old one is voided) and cancels its pending order; (2) at the end of
+    the generated range a slot can drop out when its new time falls past the range end, and comes back when the
+    daily job extends the range (its pending order is cancelled and a new one is created later).
+  **Superseded:** the "two occurrences today" behaviour was first left as it is (user, 2026-11-10), then fixed the
+  same day (above) after the user saw a row that could not be released or cancelled. Original note: the behaviour stays as it is (no logic to skip today;
   the preview shows it and a person can cancel one of the two; simple and predictable for the MVP).
 
 ### Open questions (in the doc)
