@@ -7922,6 +7922,338 @@
         }
       }
     },
+    "/ops/templates/preview": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Preview Template Create Endpoint",
+        "description": "テンプレートをこの内容（POST /plans/templates と同じ本文）で作ったらできる予定を返します。**何も保存しません。**\n実際の作成と同じ処理を試し実行して取り消すので、休日の扱い・シートの日付からのずれなども、作ったときと同じになります。\n入力の誤りは、POST /plans/templates と同じエラーになります。業務管理者だけ。",
+        "operationId": "preview_template_create_endpoint_ops_templates_preview_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 12,
+              "minimum": 1,
+              "description": "今日から何か月先までを確認するか（作成時に生成される範囲のほうが長ければ、そこまで）",
+              "default": 3,
+              "title": "Months"
+            },
+            "description": "今日から何か月先までを確認するか（作成時に生成される範囲のほうが長ければ、そこまで）"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RRuleTemplateCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ExplicitDatesTemplateCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ReferenceSheetTemplateCreate"
+                  }
+                ],
+                "title": "Template In"
+              },
+              "examples": {
+                "rrule": {
+                  "summary": "RRULE: 毎週月曜 9:00（祝日は翌営業日）",
+                  "value": {
+                    "biz_master_id": 1,
+                    "name": "週次レポート",
+                    "template_type": "rrule",
+                    "timezone": "Asia/Tokyo",
+                    "start_time": "09:00:00",
+                    "duration_minutes": 60,
+                    "anchor_date": "2026-01-05",
+                    "rrule": "FREQ=WEEKLY;BYDAY=MO",
+                    "business_calendar_id": 1,
+                    "holiday_policy": "following",
+                    "ui_metadata": {
+                      "bg_color": "#1E88E5",
+                      "text_color": "#FFFFFF",
+                      "icon": "report"
+                    }
+                  }
+                },
+                "explicit_dates": {
+                  "summary": "EXPLICIT_DATES: 顧客指定日",
+                  "value": {
+                    "biz_master_id": 1,
+                    "name": "顧客指定の照合作業",
+                    "template_type": "explicit_dates",
+                    "timezone": "Asia/Tokyo",
+                    "start_time": "14:00:00",
+                    "duration_minutes": 30,
+                    "dates": [
+                      "2026-11-10",
+                      "2026-11-25"
+                    ]
+                  }
+                },
+                "reference_sheet_based": {
+                  "summary": "REFERENCE_SHEET_BASED: 本締の3営業日前 9:00",
+                  "value": {
+                    "biz_master_id": 1,
+                    "name": "本締前の準備",
+                    "template_type": "reference_sheet_based",
+                    "timezone": "Asia/Tokyo",
+                    "start_time": "09:00:00",
+                    "duration_minutes": 60,
+                    "reference_sheet_id": 1,
+                    "reference_event_marker": "本締",
+                    "offset_days": -3,
+                    "offset_day_unit": "business",
+                    "offset_minutes": 0,
+                    "business_calendar_id": 1,
+                    "holiday_policy": "as_is",
+                    "ui_metadata": {
+                      "bg_color": "#FF0000",
+                      "icon": "money-bag",
+                      "is_bold": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateCreatePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/templates/{template_id}/preview": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Preview Template Update Endpoint",
+        "description": "テンプレートをこの内容（PATCH /plans/templates/{id} と同じ本文）で変えたら何が起きるかを返します。**何も保存しません。**\n実際の変更と同じ処理を試し実行して取り消すので、結果は保存したときと同じです（人が変更・取消した日は残る、など）。\n予定の違い（増える・無くなる・日時が変わる）と、追従するオーダー（日時が変わる・取り消される・矛盾になる）を返します。\n入力の誤りは、PATCH と同じエラーになります。業務管理者だけ。",
+        "operationId": "preview_template_update_endpoint_ops_templates__template_id__preview_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 12,
+              "minimum": 1,
+              "description": "今日から何か月先までを確認するか（生成済みの範囲のほうが長ければ、そこまで）",
+              "default": 3,
+              "title": "Months"
+            },
+            "description": "今日から何か月先までを確認するか（生成済みの範囲のほうが長ければ、そこまで）"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanTemplateUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateChangePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/staff/me": {
       "get": {
         "tags": [
@@ -15560,6 +15892,141 @@
         "type": "object",
         "title": "PlanTemplateUpdate"
       },
+      "PreviewMove": {
+        "properties": {
+          "occurrence_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Occurrence Date"
+          },
+          "before_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Before Start"
+          },
+          "before_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Before End"
+          },
+          "after_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "After Start"
+          },
+          "after_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "After End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurrence_date",
+          "before_start",
+          "before_end",
+          "after_start",
+          "after_end"
+        ],
+        "title": "PreviewMove",
+        "description": "同じ発生枠で、日時が変わる予定"
+      },
+      "PreviewOccurrence": {
+        "properties": {
+          "occurrence_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Occurrence Date",
+            "description": "the rule date of the slot (local)"
+          },
+          "scheduled_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled Start"
+          },
+          "scheduled_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled End"
+          },
+          "manual": {
+            "type": "boolean",
+            "title": "Manual",
+            "description": "changed or added by a person; a template change does not move it"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurrence_date",
+          "scheduled_start",
+          "scheduled_end",
+          "manual"
+        ],
+        "title": "PreviewOccurrence"
+      },
+      "PreviewOrderEffect": {
+        "properties": {
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "rescheduled",
+              "canceled",
+              "conflict"
+            ],
+            "title": "Effect",
+            "description": "rescheduled: follows the plan; canceled: its slot disappears; conflict: left as is and flagged for a person"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus",
+            "description": "status now (before the change)"
+          },
+          "scheduled_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scheduled Start",
+            "description": "scheduled start now (before the change)"
+          },
+          "new_scheduled_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Scheduled Start",
+            "description": "rescheduled only"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "conflict only: the reason that would be recorded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "effect",
+          "status",
+          "scheduled_start",
+          "new_scheduled_start",
+          "reason"
+        ],
+        "title": "PreviewOrderEffect"
+      },
       "RRuleTemplateCreate": {
         "properties": {
           "deadline_mode": {
@@ -17573,6 +18040,137 @@
         ],
         "title": "StepState",
         "description": "ステップの状態。approved が最終状態（差し戻しは submitted → todo）"
+      },
+      "TemplateChangePreview": {
+        "properties": {
+          "template_id": {
+            "type": "integer",
+            "title": "Template Id"
+          },
+          "range_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Range Start",
+            "description": "now"
+          },
+          "range_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Range End",
+            "description": "end of the previewed range (the requested months, or the generated range if longer)"
+          },
+          "generation_changed": {
+            "type": "boolean",
+            "title": "Generation Changed",
+            "description": "false: the change does not touch dates (name, deadline, display only)"
+          },
+          "occurrences": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewOccurrence"
+            },
+            "type": "array",
+            "title": "Occurrences",
+            "description": "live occurrences in the range after the change"
+          },
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewOccurrence"
+            },
+            "type": "array",
+            "title": "Added"
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewOccurrence"
+            },
+            "type": "array",
+            "title": "Removed"
+          },
+          "moved": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMove"
+            },
+            "type": "array",
+            "title": "Moved"
+          },
+          "manual_unchanged": {
+            "type": "integer",
+            "title": "Manual Unchanged",
+            "description": "occurrences in the range that a person changed or added (kept as they are)"
+          },
+          "orders_total": {
+            "type": "integer",
+            "title": "Orders Total",
+            "description": "orders of this template that are not finished or canceled, before the change"
+          },
+          "orders_created": {
+            "type": "integer",
+            "title": "Orders Created",
+            "description": "new orders the change would create"
+          },
+          "order_effects": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewOrderEffect"
+            },
+            "type": "array",
+            "title": "Order Effects",
+            "description": "existing orders the change would touch"
+          }
+        },
+        "type": "object",
+        "required": [
+          "template_id",
+          "range_start",
+          "range_end",
+          "generation_changed",
+          "occurrences",
+          "added",
+          "removed",
+          "moved",
+          "manual_unchanged",
+          "orders_total",
+          "orders_created",
+          "order_effects"
+        ],
+        "title": "TemplateChangePreview",
+        "description": "テンプレートをこの内容で変えたら何が起きるか（何も保存されていない）"
+      },
+      "TemplateCreatePreview": {
+        "properties": {
+          "range_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Range Start",
+            "description": "now"
+          },
+          "range_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Range End",
+            "description": "end of the previewed range (the requested months, or what creation generates if longer)"
+          },
+          "occurrences": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewOccurrence"
+            },
+            "type": "array",
+            "title": "Occurrences"
+          },
+          "orders_created": {
+            "type": "integer",
+            "title": "Orders Created",
+            "description": "orders that would be created for these occurrences"
+          }
+        },
+        "type": "object",
+        "required": [
+          "range_start",
+          "range_end",
+          "occurrences",
+          "orders_created"
+        ],
+        "title": "TemplateCreatePreview",
+        "description": "テンプレートをこの内容で作ったらできる予定（何も保存されていない）"
       },
       "TemplateType": {
         "type": "string",

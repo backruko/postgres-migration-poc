@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -145,3 +145,57 @@ class DailyDashboardResponse(BaseModel):
     total: int = Field(description="number of live occurrences on this day across all clients")
     calendars: list[DailyCalendarStatus] = Field(description="every business calendar, with the day's holiday status")
     clients: list[DailyClient] = Field(description="clients with something on this day, by client code")
+
+
+# ==========================================
+# テンプレートの変更の、保存の前の確認（POST /ops/templates/{id}/preview）
+# ==========================================
+class PreviewOccurrence(BaseModel):
+    occurrence_date: date = Field(description="the rule date of the slot (local)")
+    scheduled_start: datetime
+    scheduled_end: datetime
+    manual: bool = Field(description="changed or added by a person; a template change does not move it")
+
+
+class PreviewMove(BaseModel):
+    """同じ発生枠で、日時が変わる予定"""
+    occurrence_date: date
+    before_start: datetime
+    before_end: datetime
+    after_start: datetime
+    after_end: datetime
+
+
+class PreviewOrderEffect(BaseModel):
+    order_id: int
+    effect: Literal["rescheduled", "canceled", "conflict"] = Field(
+        description="rescheduled: follows the plan; canceled: its slot disappears; conflict: left as is and flagged for a person"
+    )
+    status: OrderStatus = Field(description="status now (before the change)")
+    scheduled_start: datetime = Field(description="scheduled start now (before the change)")
+    new_scheduled_start: datetime | None = Field(description="rescheduled only")
+    reason: str | None = Field(description="conflict only: the reason that would be recorded")
+
+
+class TemplateChangePreview(BaseModel):
+    """テンプレートをこの内容で変えたら何が起きるか（何も保存されていない）"""
+    template_id: int
+    range_start: datetime = Field(description="now")
+    range_end: datetime = Field(description="end of the previewed range (the requested months, or the generated range if longer)")
+    generation_changed: bool = Field(description="false: the change does not touch dates (name, deadline, display only)")
+    occurrences: list[PreviewOccurrence] = Field(description="live occurrences in the range after the change")
+    added: list[PreviewOccurrence]
+    removed: list[PreviewOccurrence]
+    moved: list[PreviewMove]
+    manual_unchanged: int = Field(description="occurrences in the range that a person changed or added (kept as they are)")
+    orders_total: int = Field(description="orders of this template that are not finished or canceled, before the change")
+    orders_created: int = Field(description="new orders the change would create")
+    order_effects: list[PreviewOrderEffect] = Field(description="existing orders the change would touch")
+
+
+class TemplateCreatePreview(BaseModel):
+    """テンプレートをこの内容で作ったらできる予定（何も保存されていない）"""
+    range_start: datetime = Field(description="now")
+    range_end: datetime = Field(description="end of the previewed range (the requested months, or what creation generates if longer)")
+    occurrences: list[PreviewOccurrence]
+    orders_created: int = Field(description="orders that would be created for these occurrences")
