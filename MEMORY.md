@@ -2,12 +2,61 @@
 
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
-`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-06 (evening)**, after the deployment
-setup was merged and handed to the user for a test on the VM.
+`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-10 (end of day)** — milestone and
+handoff: sheet import, template preview, "started work keeps its occurrence" and the releaser check-only mode are all
+merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the first block of §1).
 
 ## 1. Current status
 
-- **`main` = merge `1dff126` + one MEMORY.md commit on top (local, NOT pushed; `origin/main` = `6390c87`).** `1dff126` =
+### Handoff 2026-11-10 — start here
+
+- **`main` = merge `61f796f` + one handoff commit on top (local, NOT pushed; `origin/main` = `6390c87` — the user
+  pushes).** Working tree clean, no open branch. **Tests 217**, pyright 0, frontend build passes, **no migration since
+  `b4e8d2a6c913`** (nothing for the user to upgrade). Merged on 2026-11-10, oldest first: `d8a8f9e` sheet import ·
+  `2395544` template preview (Level 1) · `1dff126` started work keeps its occurrence · `61f796f` releasers preview,
+  admins save (`6b8f653`).
+- **The user's decisions at the end of the day (2026-11-10):**
+  - **The MVP pilot is postponed.** (The first server run was already postponed for IP configuration.) No go-live
+    work is expected next session unless the user says so.
+  - **Next phase, primary goal = "Level 2": a Draft → Approve → Active lifecycle for the core settings that have no
+    version control — templates AND sheet imports — "just like SOPs".** The user wants to "spare no effort" on this
+    architectural gap. Start the next session with questions (with a recommended option) and a step plan, as always.
+- **Level 2: what is already decided** (§2 "Safer changes"; design doc rev 107, open-questions item "Safer changes to
+  businesses and templates"): releaser drafts, **only admin approves**; a non-admin drafter cannot approve their own
+  draft; an admin may approve their own draft or apply directly; approval applies **immediately**; **one pending draft
+  per live template, and it blocks other edits** to that template; record drafted-by / approved-by; design it together
+  with the "finer permissions" question (same list in the doc).
+  **Do NOT propose effective-dated / scheduled versions for templates** — the user dropped that for good on
+  2026-11-10 ("superfluous"). "Like SOPs" means the draft → approve → active states, not the SOP effective date; if
+  the user now wants a start date after all, they must say so — ask, do not assume.
+- **Level 2: open questions to bring to the user first:**
+  1. Four-eyes when one person holds both releaser and admin (most of the flat team has several roles).
+  2. What a **draft of a sheet import** is: the uploaded JSON held until approval (simplest; the browser-side summary
+     already exists in `sheetImport.ts`, the server would need to store the file and its computed effect), or draft
+     dates on the sheet itself. Also whether single-date edits and rule markers on a sheet need the lifecycle.
+  3. Whether **business settings** (release mode / time / days-before) join the lifecycle — the user's 2026-11-10
+     wording is "all core settings"; earlier we said a business needs no draft state, only an affected-orders preview
+     and a change history. Re-ask.
+  4. How a draft stays valid when the live template / sheet changes before approval (the "one blocking draft" rule
+     covers templates; sheets and calendar changes are not covered).
+  5. Data model: a pending copy linked to the live template (my earlier sketch) vs version rows like `SOPVersion`.
+     Needs a migration either way → **remind the user to run `alembic upgrade head`**.
+- **Building blocks Level 2 can reuse:** the dry run (`src/infrastructure/dry_run.py`, `plan_services.dry_run_update /
+  dry_run_create`, `coordination/template_preview.py`) gives the approval dialog its "what will change" for free;
+  `canPreviewPlanSettings` / the `canSave` and `canImport` check-only modes are where "save as draft" buttons go;
+  the SOP draft / approve screens (M2) are the UI pattern; `SOPVersion` has no drafted-by / approved-by either.
+- **Not verified in a browser by me (all merged):** the sheet import window, the releaser check-only windows, and the
+  "started work" fix (merged on the user's word). The user browser-tested the template preview as admin on their dev
+  DB. Their dev DB still has one orphan row from that test (template 8 不定期テスト, 11/26 11:00, no order; order 888
+  finished on the retired occurrence) — I do not write to dev_db.
+- **USB zip:** rebuilt after the last merge — the newest `packages/ops-20261110-<sha>.zip` (git-ignored). Not urgent
+  now that the pilot is postponed; rebuild with `python scripts/make_package.py` before any server install.
+- **No free client-code prefix letter is left for new test files** (`tests/client_codes.py`): share a letter or widen
+  `new_client_code` first.
+
+### Earlier status notes (kept for reference; the block above wins where they differ)
+
+- **Before the last merge: `main` = merge `1dff126` + one MEMORY.md commit on top (`75d6755`).** `1dff126` =
   merge of `fix/started-slot-not-regenerated` (`97c7fdc`, 2026-11-10): a recalculation leaves an occurrence alone when
   its work has started — §2 "Safer changes" → "Started work keeps its occurrence". Found by the user's browser test on
   their dev DB; merged on the user's word ("I trust your changes") without a second browser check. **Tests 217**,
@@ -15,10 +64,9 @@ setup was merged and handed to the user for a test on the VM.
 - **USB zip rebuilt 2026-11-10 from the head of `main`** (`python scripts/make_package.py` → the newest
   `packages/ops-20261110-<sha>.zip`; `packages/` is git-ignored). It replaces `ops-20261106-4cfca4c.zip`, which has
   none of the 2026-11-10 work. The user still has to copy it to the USB drive. Rebuild again after any later commit.
-- **Branch `feature/releaser-preview` (from `main` `75d6755`, 2026-11-10):** releasers can preview, admins save — §2
-  "Safer changes" → "Releasers preview (Option B)". The user asked to rebuild the USB package once it is merged.
-- **Next: nothing open to build.** Waiting for the server (first run postponed for IP configuration) and the pilot;
-  Level 2 (drafts + approval with finer permissions) only after the pilot. Not confirmed as browser-checked: the sheet
+- `feature/releaser-preview` (from `main` `75d6755`, 2026-11-10) = releasers can preview, admins save — §2
+  "Safer changes" → "Releasers preview (Option B)"; merged as `61f796f`.
+- (Superseded the same evening: "Level 2 only after the pilot" — the pilot is postponed and Level 2 is next.) Not confirmed as browser-checked: the sheet
   import window. The user's dev DB still has the orphan row from the test (template 8, 11/26 11:00, no order).
 - Before that: `2395544` = merge of `feature/template-preview` ("Level 1" preview before saving a
   template: P.1 `595f5f8`, P.2 `707e1f8`, P.3 `d7539fe`, P.4 `8b2f62f`; §2 "Safer changes"). The user browser-tested the
@@ -145,7 +193,7 @@ setup was merged and handed to the user for a test on the VM.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 104 (2026-11-10: rev 104 adds "Who can use it" (releasers preview, admins save; import summary for releasers) to the Level 1 item; revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 104}` to see only newer edits, and
+**Last rev written by me: 107 (2026-11-10: revs 105–107 add the milestone + "pilot postponed, next phase = level 2" to the status paragraph, retitle Level 2 as the primary goal of the next phase and widen its scope to sheet imports with four open points; rev 104 adds "Who can use it" (releasers preview, admins save; import summary for releasers) to the Level 1 item; revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 107}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
@@ -1189,7 +1237,7 @@ reconcile, orders follow); templates have no status and no who-changed-what; `sr
   result; month grids; 12-month range; nothing saved). **Not opened in a browser by me.**
   P.3 committed `d7539fe`. **P.4:** `docs/OPERATION-MANUAL.md` 3.7 got 「保存の前の確認」 (steps, a table of what each
   summary line means, the things to know, both preview API calls); design doc rev 101.
-- **Releasers preview (Option B, user's decision 2026-11-10; branch `feature/releaser-preview`).** The user expected
+- **Releasers preview (Option B, user's decision 2026-11-10; `6b8f653`, merged `61f796f`).** The user expected
   releasers to do the "pre-editing"; both features were admin-only. Offered A (template preview only) / B (A + see the
   import summary, no import) / C (A + import directly, no approval); **chosen: B** — releasers are involved in
   preparation "without bypassing the admin approval principle"; save / create / import stay admin-only until Level 2
