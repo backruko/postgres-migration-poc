@@ -103,6 +103,9 @@ export function DraftViewModal({ open, change, template, clientCode, me, onClose
   }, [change, baseline, calendars.data, sheets.data]);
 
   if (!change) return null;
+  // 承認は「起きること」を見てから: 確認の結果（または誤り）がまだ無い間・確認が動いている間は押せない。
+  // 開いた直後の 1 回の描画では、確認がまだ始まっていない（running は 0）ため、結果の有無でも見る
+  const previewPending = showPreview && (preview.loading || running > 0 || (!preview.data && !preview.error));
   const mine = canChangeOwnDraft(change, me);
   const ownDraft = me?.id === change.drafted_by_id;
 
@@ -179,8 +182,8 @@ export function DraftViewModal({ open, change, template, clientCode, me, onClose
             </Button>
           )}
           {isAdmin && pending && (
-            <Button type="primary" onClick={() => openDecision("approve")} disabled={busy || preview.loading || running > 0}
-              title={running > 0 ? "確認が終わるまでお待ちください" : undefined}>
+            <Button type="primary" onClick={() => openDecision("approve")} disabled={busy || previewPending}
+              title={previewPending ? "確認が終わるまでお待ちください" : undefined}>
               承認する
             </Button>
           )}

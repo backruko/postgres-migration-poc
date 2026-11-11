@@ -128,7 +128,7 @@ export function BizSettingsPanel({ biz, canEdit, onSaved }: Props) {
               <InputNumber min={0} max={30} />
             </Form.Item>
             <Form.Item name="release_time" label="自動リリースの時刻（日本時間）">
-              <TimePicker format="HH:mm" minuteStep={5} allowClear={false} />
+              <TimePicker format="HH:mm" minuteStep={5} needConfirm={false} allowClear={false} />
             </Form.Item>
           </Space>
           <Form.Item name="execution_type" label="実行のしかた">

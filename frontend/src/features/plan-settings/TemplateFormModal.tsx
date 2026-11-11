@@ -122,6 +122,9 @@ export function TemplateFormModal({ open, mode, draft = null, biz, template, onC
       setError(null);
       setPreview(null);
       setMonths(DEFAULT_PREVIEW_MONTHS);
+      // 前回の操作の途中の印も消す（開き直せば、いつでも操作できる状態から始まる）
+      setSubmitting(false);
+      setChecking(false);
     }
   }, [open, template, draft, form]);
 
@@ -213,6 +216,11 @@ export function TemplateFormModal({ open, mode, draft = null, biz, template, onC
    */
   const saveDraft = async (v: FormValues) => {
     const body = current ? updateDraftBody(v, current) : createDraftBody(v, biz.id);
+    if (!body) {
+      // 保存するものが無いときは、送信中の印を必ず外す。編集の「保存」は確認を取りに行く間 submitting を立ててから
+      // ここへ来るため、外さないとフォームもキャンセルも押せないまま固まる（開き直しても戻らなかった。2026-11-11）
+      setSubmitting(false);
+    }
     if (!body && draft) {
       // 直した結果が今の設定と同じ（例: 間違えた時刻を元に戻した）: 保存するものは無い。下書きを残すと承認待ちのままなので、取り下げを勧める
       setPreview(null);
@@ -378,7 +386,7 @@ export function TemplateFormModal({ open, mode, draft = null, biz, template, onC
 
         <Space wrap align="start" size="large">
           <Form.Item name="start_time" label="開始時刻" rules={[{ required: true, message: "開始時刻を選択してください" }]}>
-            <TimePicker format="HH:mm" minuteStep={5} allowClear={false} />
+            <TimePicker format="HH:mm" minuteStep={5} needConfirm={false} allowClear={false} />
           </Form.Item>
           <Form.Item
             name="duration_minutes"
@@ -540,7 +548,7 @@ export function TemplateFormModal({ open, mode, draft = null, biz, template, onC
                 <Select style={{ width: 120 }} options={DAY_OFFSET_OPTIONS} />
               </Form.Item>
               <Form.Item name="deadline_time" label="締切時刻" rules={[{ required: true, message: "締切時刻を選択してください" }]}>
-                <TimePicker format="HH:mm" minuteStep={5} />
+                <TimePicker format="HH:mm" minuteStep={5} needConfirm={false} />
               </Form.Item>
             </>
           )}

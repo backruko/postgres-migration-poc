@@ -1,4 +1,4 @@
-import { DeleteOutlined, EditOutlined, FileTextOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, FileTextOutlined, HistoryOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +25,7 @@ import { ChangeRequestsPanel } from "./ChangeRequestsPanel";
 import { DraftViewModal } from "./DraftViewModal";
 import { deleteDraftBody } from "./templateDraft";
 import { TemplateFormModal } from "./TemplateFormModal";
+import { TemplateHistoryDrawer } from "./TemplateHistoryDrawer";
 
 const CATEGORY_COLOR: Record<TemplateCategory, string | undefined> = { regular: undefined, adhoc: "gold", special: "red" };
 
@@ -132,6 +133,9 @@ export function PlanSettingsPage() {
   });
   const openEditor = (template: PlanTemplate | null, draft: TemplateChange | null = null) => setEditor({ open: true, template, draft });
 
+  // 変更履歴の引き出し（だれでも見られる）
+  const [history, setHistory] = useState<{ open: boolean; template: PlanTemplate | null }>({ open: false, template: null });
+
   // 下書きを見る窓
   const [viewer, setViewer] = useState<{ open: boolean; change: TemplateChange | null }>({ open: false, change: null });
   const openViewer = (change: TemplateChange) => setViewer({ open: true, change });
@@ -227,12 +231,16 @@ export function PlanSettingsPage() {
     {
       title: "操作",
       key: "actions",
-      width: 260,
+      width: 320,
       fixed: "right",
       render: (_, t) => {
         const pending = t.pending_change_id != null;
         return (
           <Space size={0} wrap>
+            <Button type="link" size="small" icon={<HistoryOutlined />} onClick={() => setHistory({ open: true, template: t })}
+              aria-label={`「${t.name}」の変更履歴`}>
+              履歴
+            </Button>
             {pending && (
               <Button type="link" size="small" icon={<FileTextOutlined />} onClick={() => viewPending(t)}
                 aria-label={`「${t.name}」の下書きを見る`}>
@@ -373,6 +381,14 @@ export function PlanSettingsPage() {
           template={editor.template}
           onClose={() => setEditor((s) => ({ ...s, open: false }))}
           onSaved={reloadAll}
+        />
+      )}
+      {selectedBiz && (
+        <TemplateHistoryDrawer
+          open={history.open}
+          template={history.template}
+          clientCode={selectedBiz.client_code}
+          onClose={() => setHistory((h) => ({ ...h, open: false }))}
         />
       )}
       {selectedBiz && (

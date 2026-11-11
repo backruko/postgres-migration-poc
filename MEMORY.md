@@ -6,7 +6,8 @@ Handoff for the next working session. Read this first, then the design doc (§2)
 approval, templates only) is in progress on `feature/template-drafts`; D.1 (data model) committed, D.2 (drafts:
 create / edit / withdraw, blocking), D.3 (approve / reject, direct-save rows, biz delete guard) and D.4 (read
 endpoints, pending_change_id, preview of any draft) and D.5a (frontend data + logic) committed; D.5b (drafter
-screens), D.6a (approval window) and the order-sync N+1 fix committed; D.6b (承認待ち page, badge, 履歴 drawer) in progress
+screens), D.6a (approval window `c8c370f`) and the order-sync N+1 fix (`a7f2697`) committed; D.6b (承認待ち page, badge,
+履歴 drawer) committed; D.7 (manual + doc + handoff) in progress
 (see the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
@@ -51,7 +52,41 @@ screens), D.6a (approval window) and the order-sync N+1 fix committed; D.6b (承
   下書きを見る window** (auto preview for pending drafts, admins + releasers; admin 承認 with an optional note and a
   self-approval line, 差し戻し with a required reason); **Q4 a 履歴 button per template row → side drawer** (newest
   first, approved changes compared with `before_values`, direct saves marked). D.6b then D.7 (manual + doc + MEMORY).
-- **D.6a committed (frontend; the N+1 fix is its own commit):**
+- **D.6b committed (frontend only; user browser-tested, incl. the two fixes below):**
+  - `domain/plan/lib/templateChangeEvents.ts`: tiny store (`notifyTemplateChangesChanged`, `subscribe…`, `version`);
+    `templateChangeApi` create / edit / withdraw / approve / reject notify after success (`notifying()`).
+    `useTemplateChanges.ts`: `useTemplateChangesVersion()` (`useSyncExternalStore`), `usePendingDraftCount(enabled)`
+    and `usePendingDrafts()` (both + `useAutoRefresh` 2 min); `useBizChangeRequests` now also reloads on the version.
+  - `AppLayout`: 設定 menu entry **承認待ち** (`/settings/approvals`, after 予定テンプレート設定); for admins
+    (`templateWriteMode === "direct"`) an antd `Badge` with the pending count on the 設定 button and on the menu entry
+    (`.nav-badge`); the hook is called before the layout's early returns with `enabled` false until admin.
+  - `features/plan-settings/ApprovalsPage.tsx`: all pending drafts oldest first, client filter `?client=`, columns
+    書いた日時 / 業務 (link `/settings/templates?biz=&template=`) / テンプレート / 種類 / 書いた人 / 見る; 見る loads the
+    live template (`templateApi.list(biz)`) then opens `DraftViewModal`; its 直す navigates to the template page.
+  - `TemplateHistoryDrawer.tsx` + 履歴 button on every template row (everyone; actions column 320 px): history newest
+    first in a `Collapse` (header: time, kind, 直接の保存 / status, self, drafter → decider; body: decision note +
+    summary table with `summaryBaseline` → 変更前 for approved). **Bug found by the jsdom check and fixed:** the
+    newest entry never opened — `defaultActiveKey` is read on the first render only, which happened with no rows
+    while loading; now the Collapse renders once rows exist, keyed by the newest id.
+  - **Also fixed in `DraftViewModal` (D.6a race, found by the jsdom check):** for one render after opening, no
+    preview had started yet (`running` 0, `loading` false), so 承認する was briefly enabled before the effect.
+    Now `previewPending` = showPreview && (loading || running > 0 || no data and no error).
+  - Checked: `npm run build`; jsdom check `domtest/d6b_dom.tsx` with the real `AppRoutes` in a `MemoryRouter` on
+    `plan_check` **13/13** (admin badge = count, page rows + link, 見る → window with preview, approve → row gone and
+    badge −1 at once, no dialog left, client filter empty state, history 3 entries newest first + newest open with
+    変更前, releaser: no badge + "admins decide" text); `approve_dom` / `reject_dom` still pass. Cleanup helper
+    `cleanup_d6b.py` (withdraws HARNESS_D6B* drafts, deletes the templates) — a failed jsdom run leaves them behind.
+  - **User's browser test, two more issues (fixed before committing D.6b):**
+    1. **TimePicker needed an OK click** (users forgot it → the value did not change). All five TimePickers
+       (`TemplateFormModal` ×2, `BizSettingsPanel`, `ScheduleFields` ×2) now have `needConfirm={false}`: picking applies at once.
+    2. **Deadlock on "no changes" in the releaser form:** `onFinish` sets `submitting` before the preview request,
+       then `save` → `saveDraft` returned early on a null body (「変更がありません」) **without clearing `submitting`** →
+       form and キャンセル disabled, and reopening did not reset it. Fix: `saveDraft` clears `submitting` whenever the
+       body is null; the open effect also resets `submitting` / `checking`. jsdom check `domtest/form_dom.tsx` (draft
+       mode, releaser): **9/9** (no-change warning with usable キャンセル / 保存 / fields, X + reopen clean, an hour
+       picked without OK applies, the saved draft carries it); **against the old form it fails exactly like the
+       user's report** (キャンセル / fields disabled, still after reopen). Cleanup helper `domtest/cleanup_form.py`.
+- **D.6a committed `c8c370f` (frontend; the N+1 fix is its own commit `a7f2697`):**
   - `templateChangeApi.approve(id, note?)` (trims; blank → null) and `reject(id, reason)`.
   - `templateDraft.summaryBaseline(change, current)` → `{template, label: "変更前" | "今"}`: approved changes use
     `before_values` (incl. `dates`, works when the template is gone), others the current template.

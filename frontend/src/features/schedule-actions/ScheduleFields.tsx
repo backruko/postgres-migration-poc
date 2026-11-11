@@ -46,7 +46,7 @@ export function ScheduleFields({ colorHelp, timezone }: { colorHelp: string; tim
               }),
             ]}
           >
-            <TimePicker format="HH:mm" minuteStep={5} allowClear={false} placeholder="開始" />
+            <TimePicker format="HH:mm" minuteStep={5} needConfirm={false} allowClear={false} placeholder="開始" />
           </Form.Item>
           <span className="range-sep">〜</span>
           <Form.Item
@@ -66,7 +66,7 @@ export function ScheduleFields({ colorHelp, timezone }: { colorHelp: string; tim
               }),
             ]}
           >
-            <TimePicker format="HH:mm" minuteStep={5} allowClear={false} placeholder="終了" />
+            <TimePicker format="HH:mm" minuteStep={5} needConfirm={false} allowClear={false} placeholder="終了" />
           </Form.Item>
         </Space>
       </Form.Item>

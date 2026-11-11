@@ -1,5 +1,13 @@
 import { http, unwrap } from "../../../shared/api/http";
+import { notifyTemplateChangesChanged } from "../lib/templateChangeEvents";
 import type { TemplateChange, TemplateChangeStatus, TemplateDraftInput, TemplateDraftPreview } from "../types";
+
+/** 書き込みが成功したら、バッジ・一覧に知らせる */
+async function notifying<T>(p: Promise<T>): Promise<T> {
+  const result = await p;
+  notifyTemplateChangesChanged();
+  return result;
+}
 
 /** 一覧の絞り込み（すべて省略可） */
 export interface TemplateChangeFilter {
@@ -51,17 +59,17 @@ export const templateChangeApi = {
    * 何も変えない下書きは 400、承認待ちの下書きがあるテンプレートには 409 TEMPLATE_DRAFT_PENDING。
    */
   create(input: TemplateDraftInput): Promise<TemplateChange> {
-    return unwrap(http.POST("/plans/template-changes", { body: input }));
+    return notifying(unwrap(http.POST("/plans/template-changes", { body: input })));
   },
 
   /** 本人が承認待ちの下書きを直す（中身をまるごと置き換える。種類と対象のテンプレートは変えられない） */
   edit(changeId: number, input: TemplateDraftInput): Promise<TemplateChange> {
-    return unwrap(http.PUT("/plans/template-changes/{change_id}", { params: { path: { change_id: changeId } }, body: input }));
+    return notifying(unwrap(http.PUT("/plans/template-changes/{change_id}", { params: { path: { change_id: changeId } }, body: input })));
   },
 
   /** 本人が承認待ちの下書きを取り下げる（記録は残る） */
   withdraw(changeId: number): Promise<TemplateChange> {
-    return unwrap(http.POST("/plans/template-changes/{change_id}/withdraw", { params: { path: { change_id: changeId } } }));
+    return notifying(unwrap(http.POST("/plans/template-changes/{change_id}/withdraw", { params: { path: { change_id: changeId } } })));
   },
 
   /**
@@ -69,19 +77,19 @@ export const templateChangeApi = {
    * 当てはめで誤りになれば（参照するシートが無いなど）何も変わらず、下書きは承認待ちのまま。自分の下書きも承認できる。
    */
   approve(changeId: number, note?: string | null): Promise<TemplateChange> {
-    return unwrap(
+    return notifying(unwrap(
       http.POST("/plans/template-changes/{change_id}/approve", {
         params: { path: { change_id: changeId } },
         body: { note: note?.trim() ? note.trim() : null },
       }),
-    );
+    ));
   },
 
   /** 業務管理者が差し戻す（理由は必須）。テンプレートは何も変わらない */
   reject(changeId: number, reason: string): Promise<TemplateChange> {
-    return unwrap(
+    return notifying(unwrap(
       http.POST("/plans/template-changes/{change_id}/reject", { params: { path: { change_id: changeId } }, body: { reason } }),
-    );
+    ));
   },
 
   /**
