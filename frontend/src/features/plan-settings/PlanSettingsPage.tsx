@@ -6,7 +6,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import { bizOptions } from "../../domain/biz/lib/businesses";
 import { BizSettingsPanel } from "./BizSettingsPanel";
-import { canEditPlanSettings, PLAN_SETTINGS_ADMIN_ONLY } from "../../domain/biz/lib/settings";
+import { canEditPlanSettings, canEditReleaseSettings, PLAN_SETTINGS_ADMIN_ONLY } from "../../domain/biz/lib/settings";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
 import { templateApi, templateChangeApi } from "../../domain/plan/api";
 import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
@@ -333,7 +333,9 @@ export function PlanSettingsPage() {
           {withoutUpcoming > 0 && (
             <Alert type="warning" showIcon message={`今後の予定が無いテンプレートが ${withoutUpcoming} 件あります。`} description={NO_UPCOMING_HINT} />
           )}
-          {selectedBiz && <BizSettingsPanel biz={selectedBiz} canEdit={canEdit} onSaved={bizes.reload} />}
+          {selectedBiz && (
+            <BizSettingsPanel biz={selectedBiz} canEdit={canEdit} canEditRelease={canEditReleaseSettings(me.data)} onSaved={bizes.reload} />
+          )}
           <ChangeRequestsPanel
             data={changes.data}
             loading={changes.loading}

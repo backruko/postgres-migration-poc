@@ -70,6 +70,12 @@ is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the 
   react-router-dom → frontend node_modules, `--external:jsdom`, `NODE_PATH=domtest/node_modules`). **antd dialogs are
   found by class (`.ant-modal-confirm`, `.ant-modal-content`, `.ant-drawer-content`), not by role**; wait for a
   button to be enabled before clicking. `sop_dom.tsx` **17/17** twice. Not checked: the user's browser.
+- **P.5 committed (frontend only):** `BizSettingsPanel` gets `canEditRelease`: admin = full 編集 (unchanged, server
+  records release changes); releaser = **リリースを編集** (release fields only, immediate-effect note,
+  `bizApi.updateRelease`); everyone = **履歴** → new `ReleaseHistoryDrawer` (time / who / before → after, reloads after
+  a save). `lib/settings.ts`: `canEditReleaseSettings`, `releaseText` (shared by panel + history). jsdom
+  `release_dom.tsx` on biz 2 **9/9** twice (operator view-only, releaser form + save + panel + history, admin full
+  form, restore recorded). biz 2 restored to manual / 03:00 / 0; its history rows stay on `plan_check`.
 
 ### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — merged
 

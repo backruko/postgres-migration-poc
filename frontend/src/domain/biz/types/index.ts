@@ -12,6 +12,9 @@ export type DependencyKind = components["schemas"]["DependencyKind"];
 
 // ---- 業務の設定（リリース・顧客側の出来事） ----
 export type BizMasterUpdate = components["schemas"]["BizMasterUpdate"];
+// ---- リリース設定だけの変更と履歴（細かな権限、P.5） ----
+export type BizReleaseUpdate = components["schemas"]["BizReleaseUpdate"];
+export type BizReleaseChange = components["schemas"]["BizReleaseChangeResponse"];
 export type ReleaseMode = components["schemas"]["ReleaseMode"];
 export type ExecutionType = components["schemas"]["ExecutionType"];
 export type CompletionMode = components["schemas"]["CompletionMode"];

@@ -14,6 +14,20 @@ export const canEditPlanSettings = (s: Staff | null | undefined) => s?.status ==
 export const canPreviewPlanSettings = (s: Staff | null | undefined) =>
   s?.status === "active" && (s.roles.includes("admin") || s.roles.includes("releaser"));
 
+/**
+ * 業務のリリース設定（方法・時刻・何日前）を変えられるか（リリース担当・業務管理者。細かな権限 P.5、2026-11-11）。
+ * ほかの業務の設定は業務管理者のみ（canEditPlanSettings）
+ */
+export const canEditReleaseSettings = (s: Staff | null | undefined) =>
+  s?.status === "active" && (s.roles.includes("admin") || s.roles.includes("releaser"));
+
+/** リリース設定の表示（例: 自動: 予定日の1日前 05:30）。履歴の変更前・変更後にも使う */
+export function releaseText(v: { release_mode: ReleaseMode; release_time: string; release_days_before: number }): string {
+  return v.release_mode === "automatic"
+    ? `${RELEASE_MODE_LABEL.automatic}: 予定日の${v.release_days_before ? `${v.release_days_before}日前` : "当日"} ${v.release_time.slice(0, 5)}`
+    : RELEASE_MODE_LABEL.manual_approval;
+}
+
 /** 変更できない職員に見せる案内 */
 export const PLAN_SETTINGS_ADMIN_ONLY = "変更は業務管理者だけができます";
 /** 確認だけできる職員（リリース担当）に見せる案内 */
