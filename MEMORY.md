@@ -2,17 +2,47 @@
 
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
-`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11** — Level 2 (template drafts +
-approval, templates only) is in progress on `feature/template-drafts`; D.1 (data model) committed, D.2 (drafts:
-create / edit / withdraw, blocking), D.3 (approve / reject, direct-save rows, biz delete guard) and D.4 (read
-endpoints, pending_change_id, preview of any draft) and D.5a (frontend data + logic) committed; D.5b (drafter
-screens), D.6a (approval window `c8c370f`) and the order-sync N+1 fix (`a7f2697`) committed; D.6b (承認待ち page, badge,
-履歴 drawer) committed; D.7 (manual + doc + handoff) in progress
-(see the first block of §1). The MVP pilot is postponed.
+`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (end of day)** — **Level 2
+(template drafts + approval, templates only) is built and committed on `feature/template-drafts`, NOT merged** (see
+the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
 
-### Level 2 in progress (2026-11-11) — start here
+### Handoff 2026-11-11 — start here
+
+- **Branch `feature/template-drafts`** (from `main` `306f34a`; `main` unchanged; nothing pushed — the user pushes).
+  Commits, oldest first: `67d0d81` D.1 · `bab603f` D.2 · `05a5acb` D.3 · `6dc1b15` D.4 · `34f37f8` D.5a · `98ad5d6`
+  D.5b · `a7f2697` **perf: order-sync N+1** · `c8c370f` D.6a · `77afd4f` D.6b · + the D.7 docs commit (manual,
+  GO-LIVE, MEMORY). **Next: ask the user whether to "commit and merge"** into `main` (`--no-ff`; check `main` hasn't
+  diverged), then rebuild the USB zip (`python scripts/make_package.py`) before any server install.
+- **Migration `e7f9acb3d34a`** (`plan_template_change`) — the user ran `alembic upgrade head` on the dev DB
+  (2026-11-11); the server's `app` container migrates at start. Alembic head is now `e7f9acb3d34a`.
+- **Checks at the end:** backend **278 tests** pass, pyright 0, `npm run build` passes. The user browser-tested the
+  releaser flow, approval (after the N+1 fix: "lightning fast"), the stuck-dialog fix, the TimePicker and the
+  no-change deadlock fix.
+- **Docs:** `docs/OPERATION-MANUAL.md` (1.4 roles, 1.5 screens, 1.6 refresh, 3.7 「下書きと承認」 + 変更履歴 + API, 4.3
+  error codes `TEMPLATE_DRAFT_PENDING` / `TEMPLATE_CHANGE_DECIDED` / `TEMPLATE_CHANGED_MEANWHILE`, 5 QA rows 17–19, 6
+  limits); `deploy/GO-LIVE.md` D role table + checklist line "an admin to approve drafts". Every screen label quoted
+  in the manual was grepped in the frontend. Design doc **rev 124** (Level 2 marked built; finer-permissions item
+  updated: template part done, SOP drafting + release settings still open).
+- **Open / offered, not decided:** (1) batching order **creation** — a rule change that creates hundreds of orders
+  still inserts them one by one (+ per-order link resolution with a dependency): MO/WE/FR → DAILY on a 2-year daily
+  template = 1.2 s, 3.4 s with a dependency; (2) finer permissions for SOP drafts and release settings (doc item);
+  (3) biz delete doesn't lock the biz row (narrow race with a new-template draft, same as the existing template
+  check — the user said leave it).
+- **`README.md` has the user's own uncommitted edits** (Japanese project description) — never include it in my
+  commits; leave it to the user.
+- **`plan_check` state:** template 23 (biz 2, daily) materialized ~2 years (for profiling); many withdrawn /
+  rejected `HARNESS_*` change rows; all `HARNESS_*` templates deleted. jsdom test kit in the scratchpad
+  `domtest/` (jsdom 24 + @testing-library/react 14, outside the project) — see the D.6 notes below for the bundling
+  flags; scratchpads are per session, so re-install if needed.
+- **Lessons from this phase (also in the step notes below):** `get_locked(... populate_existing)` discards unflushed
+  changes → flush first; JSONB `None` needs `none_as_null=True` for `IS NULL` checks; antd doesn't re-render a
+  closed modal's content → never nest a stateful modal unless the outer has `forceRender`; a flag set before an
+  early `return` must be cleared on every path; order follow-up must stay batched (regression test counts
+  statements); profile with a statement counter before guessing at locks.
+
+### Level 2 step log (2026-11-11)
 
 - **Branch `feature/template-drafts` from `main` `306f34a`.** Step plan approved (user, 2026-11-11), one step at a
   time, stop for review after each: **D.1** data model (migration + model + repo) · D.2 drafts in the backend
@@ -422,7 +452,7 @@ screens), D.6a (approval window `c8c370f`) and the order-sync N+1 fix (`a7f2697`
   `alembic upgrade head` (head `b4e8d2a6c913`) and `python scripts/set_password.py system` (staff 1, login `system`,
   has system_admin + operator / checker / releaser but **not admin** — grant 業務管理者 to edit settings). **Both
   confirmed by the user 2026-11-06.** The two Task Scheduler jobs on their PC stay for the dev DB; the server uses `worker`.
-- **DB:** latest Alembic head **`b4e8d2a6c913`**. Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
+- **DB:** latest Alembic head **`e7f9acb3d34a`** (plan_template_change, Level 2 D.1, 2026-11-11; before it `b4e8d2a6c913`). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
   `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) → `f9bbe9648f15` (biz
   release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657` (step template condition /
   is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at) → `2904467fd7b9`
@@ -433,13 +463,13 @@ screens), D.6a (approval window `c8c370f`) and the order-sync N+1 fix (`a7f2697`
   **Never run alembic against `dev_db` myself.** The user runs `alembic upgrade head`; their uvicorn on 8000
   auto-reloads, so a model change without the migration returns 500 until they upgrade. **Warn them whenever a step
   adds a migration.** On the server the `app` container migrates at start.
-  **`plan_check`** (throwaway, mine) is at `b4e8d2a6c913`. Seeded: client `MOCK` (+ test clients `Z8E4`, `YA64`), biz 1
+  **`plan_check`** (throwaway, mine) is at `e7f9acb3d34a`. Seeded: client `MOCK` (+ test clients `Z8E4`, `YA64`), biz 1
   `MOCK0001` (approved SOP `v9.26817.0` current; draft id 6 `v9.1793927904.0-http` with 2 steps), biz 2 `MOCK0002`
   (LIGHTWEIGHT + AUTOMATIC `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff (every id
   N has password **`check-pass-N`**): 1 `check-admin` (system_admin), 2 suspended, 3 viewer+auditor, 4 operator
   `http-operator-1793324910`, 5 releaser `http-releaser-1793324911`, 6 / 7 checkers, 8 admin `http-admin-6eb1ee`, 9 / 10
   signal_sender. Many open orders past their deadline (good for 遅れ / attention / SLA checks).
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **214 passed**,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **278 passed** (2026-11-11),
   ~3–8 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
   and with it the biz dependency / template listeners and the master guards — is registered there). **Every new test
   file uses `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M
@@ -485,7 +515,7 @@ screens), D.6a (approval window `c8c370f`) and the order-sync N+1 fix (`a7f2697`
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 107 (2026-11-10: revs 105–107 add the milestone + "pilot postponed, next phase = level 2" to the status paragraph, retitle Level 2 as the primary goal of the next phase and widen its scope to sheet imports with four open points; rev 104 adds "Who can use it" (releasers preview, admins save; import summary for releasers) to the Level 1 item; revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 107}` to see only newer edits, and
+**Last rev written by me: 124 (2026-11-11: revs 108–124 = Level 2 in the "Safer changes" item — scope corrected to templates only, the decisions, D.1–D.6 built, the N+1 note; status paragraph notes Level 2 is built on its branch; finer-permissions item updated). Before that 107 (2026-11-10: revs 105–107 add the milestone + "pilot postponed, next phase = level 2" to the status paragraph, retitle Level 2 as the primary goal of the next phase and widen its scope to sheet imports with four open points; rev 104 adds "Who can use it" (releasers preview, admins save; import summary for releasers) to the Level 1 item; revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 124}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
