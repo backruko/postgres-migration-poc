@@ -2,13 +2,18 @@
 
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
-`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (end of day)** — **Level 2
-(template drafts + approval, templates only) is built and merged into `main` (`5e1af2f`), not pushed** (see the first
-block of §1). The MVP pilot is postponed.
+`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (late)** — **batch order creation
+is built on `feature/batch-orders` (B.1–B.5 committed, not merged, not pushed)**; Level 2 is merged into `main`
+(`5e1af2f`). See the first block of §1. The MVP pilot is postponed.
 
 ## 1. Current status
 
-### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — in progress
+### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — start here
+
+- **Status: B.1–B.5 committed on `feature/batch-orders`, not merged, not pushed** (`0ef890c` B.1 · `cee8ee2` B.2 ·
+  `471f683` B.3 · `1cee5c5` B.4 · + the B.5 handoff commit). Next: the user reviews / merges ("commit and merge"
+  merges into `main` like Level 2); then the next phase is open (finer permissions for SOP drafts + release
+  settings; the pilot — rebuild the USB zip first, the tree is clean). No migration in this phase.
 
 - **User chose it 2026-11-11** over finer permissions / the pilot (USB zip: rebuild later; the user's README is now
   committed as `2038e4b`, so the tree is clean). Design doc unchanged since rev 125, no new comments.
@@ -51,6 +56,12 @@ block of §1). The MVP pilot is postponed.
   `get_active_for_slots` refers to). Oracle test `test_go_live_creation_in_batches_equals_one_by_one` (listeners off,
   old one-by-one loop copied into the test, limited to its world). **Probe: 3 two-year daily templates + a
   dependency, 2,190 orders: 22.5 s / 18,251 statements → 2.5 s / 29.** Suite 292.
+- **B.5 (checks + handoff):** suite **292 passed**; `npx pyright@1.1.400 …` **0 errors**. HTTP on `plan_check`, admin 8
+  `PATCH /plans/templates/23` (biz 2 daily, materialized to 2028-11, no dependency) DAILY ↔ MO/WE/FR, old code
+  (`main` `2038e4b` in a temporary worktree, uvicorn 8002) vs new (8001), two rounds each: **create 1.85–2.82 s →
+  0.45–0.79 s**, cancel 0.40–0.48 s → 0.32–0.52 s (no dependency → already batched before). Template 23 restored to
+  `FREQ=DAILY`; worktree removed; probe deleted. Manual / GO-LIVE quote no timings → unchanged; design doc unchanged
+  (performance only, same behaviour). Harness script: scratchpad `batch_http.py` (per session).
 
 ### Handoff 2026-11-11 — start here
 
@@ -71,13 +82,12 @@ block of §1). The MVP pilot is postponed.
   limits); `deploy/GO-LIVE.md` D role table + checklist line "an admin to approve drafts". Every screen label quoted
   in the manual was grepped in the frontend. Design doc **rev 125** (Level 2 marked built and merged; finer-permissions item
   updated: template part done, SOP drafting + release settings still open).
-- **Open / offered, not decided:** (1) batching order **creation** — a rule change that creates hundreds of orders
-  still inserts them one by one (+ per-order link resolution with a dependency): MO/WE/FR → DAILY on a 2-year daily
-  template = 1.2 s, 3.4 s with a dependency; (2) finer permissions for SOP drafts and release settings (doc item);
+- **Open / offered, not decided:** (1) ~~batching order creation~~ — **built on `feature/batch-orders`** (block
+  above); (2) finer permissions for SOP drafts and release settings (doc item);
   (3) biz delete doesn't lock the biz row (narrow race with a new-template draft, same as the existing template
   check — the user said leave it).
-- **`README.md` has the user's own uncommitted edits** (Japanese project description) — never include it in my
-  commits; leave it to the user.
+- **`README.md` is the user's** (Japanese project description; the user committed it as `2038e4b`) — never include
+  README edits in my commits; leave it to the user.
 - **`plan_check` state:** template 23 (biz 2, daily) materialized ~2 years (for profiling); many withdrawn /
   rejected `HARNESS_*` change rows; all `HARNESS_*` templates deleted. jsdom test kit in the scratchpad
   `domtest/` (jsdom 24 + @testing-library/react 14, outside the project) — see the D.6 notes below for the bundling
