@@ -3,21 +3,22 @@
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
 `src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (late)** — **finer permissions
-(releasers draft SOPs + change release settings) is built on `feature/finer-permissions` (P.1–P.6 committed), not
-merged, not pushed; it has migration `3ff92f646c92`** (the user runs `alembic upgrade head` on the dev DB). Batch order
-creation (`c8bdec6`) and Level 2 (`5e1af2f`) are merged into `main`, not pushed (`origin/main` = `6390c87`; the user
+(releasers draft SOPs + change release settings) is merged into `main` (`d4ceeaa`), not pushed; it has migration
+`3ff92f646c92`** (the user runs `alembic upgrade head` on the dev DB). Batch order creation (`c8bdec6`) and Level 2
+(`5e1af2f`) are merged into `main` too, nothing pushed (`origin/main` = `6390c87`; the user
 pushes). See the first block of §1. The MVP pilot is postponed.
 
 ## 1. Current status
 
 ### Finer permissions (branch `feature/finer-permissions` from `main` `e07649b`, 2026-11-11) — start here
 
-- **Status: P.1–P.6 committed on `feature/finer-permissions`, not merged, not pushed** (`5de2110` P.1 · `d29aaa9` P.2 ·
-  `22b8124` P.3 · `c3bcb8f` P.4 · `e84e82d` P.5 · + the P.6 docs commit). **Migration `3ff92f646c92`**: the user runs
+- **Status: merged into `main` as `d4ceeaa` ("commit and merge", user, 2026-11-11), not pushed** (`5de2110` P.1 ·
+  `d29aaa9` P.2 · `22b8124` P.3 · `c3bcb8f` P.4 · `e84e82d` P.5 · `574660c` P.6 + this handoff commit). Merged before
+  the user's browser test (the user had the list; ask how it went). **Migration `3ff92f646c92`**: the user runs
   `alembic upgrade head` on the dev DB before trying it (the server's `app` container migrates at start). Next: the
   user browser-tests (releaser: SOP 新しい版 → 承認を依頼 → 取り下げる; admin: 承認待ち → SOP の草稿 → 開く → 差し戻す… /
-  承認…, badge; releaser: 予定テンプレート設定 → リリースを編集 → 履歴) and merges ("commit and merge" like before).
-  Then the next phase is open (the pilot: rebuild the USB zip first — tree clean).
+  承認…, badge; releaser: 予定テンプレート設定 → リリースを編集 → 履歴). Next phase is open (the pilot: rebuild the
+  USB zip first — tree clean; design doc rev 128).
 
 - **User chose it 2026-11-11** after batch orders. Design doc item "Finer permissions for settings" (rev 125, no new
   comments). **Decisions (all my recommendations):** releasers do **all SOP draft edits, shared** (create / clone /
@@ -167,7 +168,7 @@ pushes). See the first block of §1. The MVP pilot is postponed.
   in the manual was grepped in the frontend. Design doc **rev 125** (Level 2 marked built and merged; finer-permissions item
   updated: template part done, SOP drafting + release settings still open).
 - **Open / offered, not decided:** (1) ~~batching order creation~~ — **merged (`c8bdec6`)**; (2) ~~finer permissions
-  for SOP drafts and release settings~~ — **built on `feature/finer-permissions`** (first block of §1); (4) moved
+  for SOP drafts and release settings~~ — **merged (`d4ceeaa`)** (first block of §1); (4) moved
   orders with a LATEST_BEFORE dependency still refresh links per order (told the user, not asked for);
   (3) biz delete doesn't lock the biz row (narrow race with a new-template draft, same as the existing template
   check — the user said leave it).
@@ -656,7 +657,7 @@ pushes). See the first block of §1. The MVP pilot is postponed.
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 125 (2026-11-11: revs 108–125 = Level 2 in the "Safer changes" item — scope corrected to templates only, the decisions, D.1–D.6 built, the N+1 note; status paragraph notes Level 2 is built on its branch; finer-permissions item updated). Before that 107 (2026-11-10: revs 105–107 add the milestone + "pilot postponed, next phase = level 2" to the status paragraph, retitle Level 2 as the primary goal of the next phase and widen its scope to sheet imports with four open points; rev 104 adds "Who can use it" (releasers preview, admins save; import summary for releasers) to the Level 1 item; revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 125}` to see only newer edits, and
+**Last rev written by me: 128 (2026-11-11: revs 126–128 = finer-permissions item: the rest built and merged, with the decisions; before that revs 108–125 = Level 2 in the "Safer changes" item — scope corrected to templates only, the decisions, D.1–D.6 built, the N+1 note; status paragraph notes Level 2 is built on its branch; finer-permissions item updated). Before that 107 (2026-11-10: revs 105–107 add the milestone + "pilot postponed, next phase = level 2" to the status paragraph, retitle Level 2 as the primary goal of the next phase and widen its scope to sheet imports with four open points; rev 104 adds "Who can use it" (releasers preview, admins save; import summary for releasers) to the Level 1 item; revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 128}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 
