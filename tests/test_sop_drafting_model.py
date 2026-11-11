@@ -88,9 +88,8 @@ def test_a_rejection_needs_a_reason(db, world):
 
 
 def test_events_are_listed_oldest_first_and_go_with_a_deleted_draft(db, world):
-    version = draft(db, world["biz"][0])
-    for event_type, note in ((SOPVersionEventType.CREATED, None), (SOPVersionEventType.SUBMITTED, None),
-                             (SOPVersionEventType.REJECTED, "手順 2 が足りない")):
+    version = draft(db, world["biz"][0])  # 作成の記録はサービスが付ける
+    for event_type, note in ((SOPVersionEventType.SUBMITTED, None), (SOPVersionEventType.REJECTED, "手順 2 が足りない")):
         sop_version_event_repo.add(db, version=version, event_type=event_type, actor_id=world["staff"], note=note)
         db.commit()
     events = sop_version_event_repo.list_for_version(db, version_id=version.id)

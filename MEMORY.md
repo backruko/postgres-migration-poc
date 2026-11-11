@@ -30,6 +30,17 @@ is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the 
   added by hand (+ enum drop on downgrade). Repos `sop_version_event_repo` (add, list_for_version, list_submitted /
   count_submitted — deleted businesses skipped by the soft-delete filter), `biz_release_change_repo`; `RELEASE_FIELDS`
   in `domain_biz/models.py`. Tests `tests/test_sop_drafting_model.py` (5). Suite 297, pyright 0.
+- **P.2 committed:** `SOP_DRAFTERS = [RELEASER, ADMIN]` on create / clone / rename / delete draft, step add / edit /
+  reorder / delete, new `POST /biz/versions/{id}/submit` + `/withdraw`; admin only: approve (+ optional `note` in
+  `SOPVersionScheduleIn`), cancel, new `POST /biz/versions/{id}/reject` (`SOPVersionReject.reason`). Services take
+  `actor_id` (default None for scripts / old tests): `_authored` / `_touch` set created_by / updated_by / updated_at;
+  events CREATED (clone: `detail.cloned_from_version_id` / `cloned_from_tag`), SUBMITTED, WITHDRAWN, REJECTED (note),
+  APPROVED (`detail.effective_date`, `drafted_by_id` = submitter else creator → self-approval derivable), CANCELLED.
+  `_get_draft(..., allow_submitted=False)` refuses submitted drafts **409 `SOP_DRAFT_SUBMITTED`** (rename now locks
+  too); `_get_submitted` → **409 `SOP_DRAFT_NOT_SUBMITTED`**; submit needs ≥ 1 step (400); withdraw = submitter or
+  admin (router passes `is_admin` from `role_codes`), else 403; approve works submitted or not and clears it.
+  `SOPVersionResponse` + the 5 id / time fields (names in P.3). Tests `tests/test_sop_drafting.py` (7) +
+  `test_plan_settings_guard.py` RELEASER_OR_ADMIN list + the 10 drafting routes. Suite 304, pyright 0.
 
 ### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — merged
 

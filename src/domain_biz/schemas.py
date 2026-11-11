@@ -94,7 +94,22 @@ class SOPVersionUpdate(SOPVersionCreate):
 
 class SOPVersionScheduleIn(BaseModel):
     """草稿の承認（M2.1）: この日の 0:00（日本時間）から有効にする。明日以降"""
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     effective_date: date = Field(..., description="first day (JST) the version applies to; tomorrow or later")
+    note: str | None = Field(default=None, max_length=500, description="optional comment on the approval (kept in the version's history)")
+
+    @field_validator("note")
+    @classmethod
+    def blank_note_is_none(cls, v: str | None) -> str | None:
+        return v or None
+
+
+class SOPVersionReject(BaseModel):
+    """依頼された草稿の差し戻し（P.2）: 理由は必須"""
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reason: str = Field(..., min_length=1, max_length=500, description="why the draft is sent back (required)")
 
 class SOPVersionResponse(BaseModel):
     id: int
@@ -105,6 +120,12 @@ class SOPVersionResponse(BaseModel):
     state: SopState = Field(description="draft / scheduled (approved, not yet in effect) / current / past, from the dates")
     effective_at: datetime | None
     expired_at: datetime | None = Field(description="end (exclusive): the next version's effective_at")
+    # P.2: 誰が作った・直した・承認を依頼した（この機能より前の版は null）
+    created_by_id: int | None = Field(default=None, description="staff who created the version (null before 2026-11-11)")
+    updated_by_id: int | None = Field(default=None, description="staff who last changed the draft")
+    updated_at: datetime | None = Field(default=None, description="when the draft was last changed")
+    submitted_by_id: int | None = Field(default=None, description="staff who asked for approval (only while it waits)")
+    submitted_at: datetime | None = Field(default=None, description="when approval was asked for (only while it waits)")
 
     model_config = ConfigDict(from_attributes=True)
 

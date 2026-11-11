@@ -24,6 +24,17 @@ RELEASER_OR_ADMIN = {
     ("/plans/template-changes", "post"),
     ("/plans/template-changes/{change_id}", "put"),
     ("/plans/template-changes/{change_id}/withdraw", "post"),
+    # SOP の草稿（細かな権限、P.2、2026-11-11）: 書く・承認を依頼するのはリリース担当も。承認・差し戻し・取消は admin のみ
+    ("/biz/{biz_id}/versions", "post"),
+    ("/biz/{biz_id}/versions/clone", "post"),
+    ("/biz/versions/{version_id}", "patch"),
+    ("/biz/versions/{version_id}", "delete"),
+    ("/biz/versions/{version_id}/steps", "post"),
+    ("/biz/versions/{version_id}/steps/order", "put"),
+    ("/biz/steps/{step_id}", "patch"),
+    ("/biz/steps/{step_id}", "delete"),
+    ("/biz/versions/{version_id}/submit", "post"),
+    ("/biz/versions/{version_id}/withdraw", "post"),
 }
 
 

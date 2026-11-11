@@ -32,6 +32,8 @@ class ErrorCode(str, Enum):
     TEMPLATE_DRAFT_PENDING = "TEMPLATE_DRAFT_PENDING"  # 承認待ちの下書きがあるテンプレートは、ほかの変更・下書きができない
     TEMPLATE_CHANGE_DECIDED = "TEMPLATE_CHANGE_DECIDED"  # 承認・差し戻し・取り下げが済んだ下書きは、もう直せない
     TEMPLATE_CHANGED_MEANWHILE = "TEMPLATE_CHANGED_MEANWHILE"  # 下書きを確かめている間にテンプレートが変わった（やり直す）
+    SOP_DRAFT_SUBMITTED = "SOP_DRAFT_SUBMITTED"  # 承認を依頼中の SOP の草稿は直せない・もう一度依頼できない（取り下げか判断を待つ）
+    SOP_DRAFT_NOT_SUBMITTED = "SOP_DRAFT_NOT_SUBMITTED"  # 承認を依頼していない草稿は、取り下げ・差し戻しできない
     
     # サーバー内部エラー (500)
     INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
