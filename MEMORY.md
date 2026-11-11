@@ -2,11 +2,66 @@
 
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
-`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (end of day)** — **Level 2
-(template drafts + approval, templates only) is built and merged into `main` (`5e1af2f`), not pushed** (see the first
-block of §1). The MVP pilot is postponed.
+`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (late)** — **batch order creation
+is built on `feature/batch-orders` (B.1–B.5 committed, not merged, not pushed)**; Level 2 is merged into `main`
+(`5e1af2f`). See the first block of §1. The MVP pilot is postponed.
 
 ## 1. Current status
+
+### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — start here
+
+- **Status: B.1–B.5 committed on `feature/batch-orders`, not merged, not pushed** (`0ef890c` B.1 · `cee8ee2` B.2 ·
+  `471f683` B.3 · `1cee5c5` B.4 · + the B.5 handoff commit). Next: the user reviews / merges ("commit and merge"
+  merges into `main` like Level 2); then the next phase is open (finer permissions for SOP drafts + release
+  settings; the pilot — rebuild the USB zip first, the tree is clean). No migration in this phase.
+
+- **User chose it 2026-11-11** over finer permissions / the pilot (USB zip: rebuild later; the user's README is now
+  committed as `2038e4b`, so the tree is clean). Design doc unchanged since rev 125, no new comments.
+- **Decisions (all my recommendations):** creation **and** cancellation; a new batched `links.refresh_orders(db,
+  orders)` for `order_sync` (single `refresh_order` stays for the ope services paths); proof = oracle tests (batched
+  vs per-order links identical: same date / same sheet event / latest before, both sides, cancelled-upstream
+  fallback) + statement counts; `create_missing_orders` reuses the batched path.
+- **Steps:** B.1 batched creation without links · B.2 batched links for new orders · B.3 batched cancellation · B.4
+  go-live script · B.5 checks (suite, probe before/after, HTTP on `plan_check` 8001) + MEMORY.
+- **Probe before (test DB, 2-year daily, MO/WE/FR ↔ DAILY, 417 orders), create / cancel:** no dependency 1.25 s /
+  1,270 stmts · 0.28 s / 22; downstream same-date 2.61 s / 2,521 · 0.68 s / 854; downstream latest-before 2.59 s /
+  2,521 · 0.79 s / 854; upstream same-date 3.20 s / 3,355 · 2.61 s / 2,939. Probe = untracked
+  `tests/test_zz_probe_creation.py` (never commit; delete in B.5).
+- **B.1 committed:** cause = per order `db.get(BizMaster)` re-read (**the session's identity map is weak**: nothing
+  held the business between orders, so it was collected and re-selected) + a flush per order (INSERT order, INSERT
+  event). `order_sync.create_orders(db, items: list[NewOrder])`: template + business once per template (held), add
+  all → one flush (multi-row INSERT … RETURNING), events → one flush; `_apply` appends to `new_orders`,
+  `apply_slot_changes` creates after the loop; `create_order` = batch of one. Links still per order (B.2). No
+  dependency: **1,270 → 22 statements, 1.25 → 0.50 s.** Test `test_a_rule_change_creates_hundreds_of_orders_…`
+  (fails on old code: 706 statements for 228 orders). Suite 279 passed.
+- **B.2 committed:** `links.refresh_orders(db, orders)` (downstream: `resolve_many` per definition of the order's
+  business; upstream: per upstream definition, the downstreams already waiting on the new orders
+  (`get_active_downstream_orders`) + the rule's candidates (`_downstream_candidates`: keys in one query, latest
+  before = one range query then `bisect` on the windows), each definition's affected set resolved once).
+  `resolve_many` = current links (`get_active_for_definition`) + upstream candidates (`_targets_for_many`: keys in one
+  query / latest before: one range query + `bisect`, tie = latest start then highest id) → shared `_apply_targets`
+  (also used by `resolve`), one flush. Oracle tests `tests/test_links_batched.py` (5 scenarios, two worlds, links incl.
+  removed + reason normalised): a mutated cancelled fallback fails it. Count test both sides (B.1 code: 709 / 1,396).
+  **Create with a dependency: 2,521–3,355 → 25–27 statements, ~1 s** (of which ~0.45 s SQL; same as no dependency —
+  the rest is plan materialization + ORM objects). Test DB slower that day (unchanged cancel 0.28 → 0.43 s). Suite 286.
+- **B.3 committed:** `_cancel` appends to `_Deferred.cancelled` (holder with `new` / `cancelled`, passed `_apply` →
+  `_slot_removed` → `_cancel`) instead of `refresh_order` (its flush split UPDATE + event INSERT per order);
+  `apply_slot_changes` runs `links.refresh_orders(cancelled)` once after `create_orders`. **Cancel 417 with a
+  dependency: 854 / 2,939 → 22 / 26 statements, ~0.45 s.** 2 more oracle scenarios (downstream cancel, latest-before
+  upstream cancel); count test none / downstream / upstream (B.2 code: 478 / 1,623). Suite 291. **Left as is (told the
+  user):** moved orders with a LATEST_BEFORE definition still refresh per order (`_slot_moved`).
+- **B.4 committed:** `create_missing_orders` groups future instances per template → `_find_orders` (one query) →
+  `create_orders` (links via `refresh_orders`), inside `definitions_cached`, one commit; idempotent. Removed the
+  unused `_find_order` / single `create_order` (`ope_order_repo.get_active_for_slot` kept: its docstring is the rule
+  `get_active_for_slots` refers to). Oracle test `test_go_live_creation_in_batches_equals_one_by_one` (listeners off,
+  old one-by-one loop copied into the test, limited to its world). **Probe: 3 two-year daily templates + a
+  dependency, 2,190 orders: 22.5 s / 18,251 statements → 2.5 s / 29.** Suite 292.
+- **B.5 (checks + handoff):** suite **292 passed**; `npx pyright@1.1.400 …` **0 errors**. HTTP on `plan_check`, admin 8
+  `PATCH /plans/templates/23` (biz 2 daily, materialized to 2028-11, no dependency) DAILY ↔ MO/WE/FR, old code
+  (`main` `2038e4b` in a temporary worktree, uvicorn 8002) vs new (8001), two rounds each: **create 1.85–2.82 s →
+  0.45–0.79 s**, cancel 0.40–0.48 s → 0.32–0.52 s (no dependency → already batched before). Template 23 restored to
+  `FREQ=DAILY`; worktree removed; probe deleted. Manual / GO-LIVE quote no timings → unchanged; design doc unchanged
+  (performance only, same behaviour). Harness script: scratchpad `batch_http.py` (per session).
 
 ### Handoff 2026-11-11 — start here
 
@@ -27,13 +82,12 @@ block of §1). The MVP pilot is postponed.
   limits); `deploy/GO-LIVE.md` D role table + checklist line "an admin to approve drafts". Every screen label quoted
   in the manual was grepped in the frontend. Design doc **rev 125** (Level 2 marked built and merged; finer-permissions item
   updated: template part done, SOP drafting + release settings still open).
-- **Open / offered, not decided:** (1) batching order **creation** — a rule change that creates hundreds of orders
-  still inserts them one by one (+ per-order link resolution with a dependency): MO/WE/FR → DAILY on a 2-year daily
-  template = 1.2 s, 3.4 s with a dependency; (2) finer permissions for SOP drafts and release settings (doc item);
+- **Open / offered, not decided:** (1) ~~batching order creation~~ — **built on `feature/batch-orders`** (block
+  above); (2) finer permissions for SOP drafts and release settings (doc item);
   (3) biz delete doesn't lock the biz row (narrow race with a new-template draft, same as the existing template
   check — the user said leave it).
-- **`README.md` has the user's own uncommitted edits** (Japanese project description) — never include it in my
-  commits; leave it to the user.
+- **`README.md` is the user's** (Japanese project description; the user committed it as `2038e4b`) — never include
+  README edits in my commits; leave it to the user.
 - **`plan_check` state:** template 23 (biz 2, daily) materialized ~2 years (for profiling); many withdrawn /
   rejected `HARNESS_*` change rows; all `HARNESS_*` templates deleted. jsdom test kit in the scratchpad
   `domtest/` (jsdom 24 + @testing-library/react 14, outside the project) — see the D.6 notes below for the bundling

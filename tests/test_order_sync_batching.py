@@ -16,7 +16,7 @@ from src.domain_biz import services as biz_services
 from src.domain_biz.models import DependencyMatchRule
 from src.domain_biz.schemas import BizDependencyCreate, BizMasterCreate
 from src.domain_client.schemas import ClientCreate
-from src.domain_ope.models import OpeDependency, OpeOrder, OrderStatus
+from src.domain_ope.models import OpeDependency, OpeOrder, OpeOrderEvent, OrderEventType, OrderStatus
 from src.domain_plan import services as plan_services
 from src.domain_plan.models import TemplateType
 from src.domain_plan.schemas import PlanTemplateUpdate, RRuleTemplateCreate
@@ -123,3 +123,86 @@ def test_a_time_change_keeps_same_date_links_without_reading_them_again(db):
     }
     assert links_after == links_before
     assert counter.count < 60, f"{counter.count} statements (links are read again per order?)"
+
+
+def test_a_rule_change_creates_hundreds_of_orders_with_a_handful_of_statements(db):
+    """新しい枠のオーダーは 1 件ずつ INSERT しない（業務も 1 件ごとに読み直さない）。作成の記録も 1 件ずつ付く"""
+    code = new_client_code("I")
+    client_repo.create(db, obj_in=ClientCreate(code=code, name="batching client"))
+    template_id = _daily(db, _biz(db, code, 1), "Daily")
+    plan_services.update_template(db, template_id, PlanTemplateUpdate(rrule="FREQ=WEEKLY;BYDAY=MO,WE,FR"))
+    before = {o.id for o in open_orders(db, template_id)}
+
+    with StatementCounter() as counter:
+        plan_services.update_template(db, template_id, PlanTemplateUpdate(rrule="FREQ=DAILY"))
+
+    new = [o for o in open_orders(db, template_id) if o.id not in before]
+    assert len(new) > 200
+    events = db.scalars(select(OpeOrderEvent).where(
+        OpeOrderEvent.order_id.in_([o.id for o in new]), OpeOrderEvent.event_type == OrderEventType.CREATED,
+    )).all()
+    assert sorted(e.order_id for e in events) == sorted(o.id for o in new)
+    assert all(o.deadline_at is not None and o.client_code == code for o in new)
+    assert counter.count < 60, f"{counter.count} statements for {len(new)} new orders (one INSERT per order again?)"
+
+
+@pytest.mark.parametrize("side", ["downstream", "upstream"])
+def test_new_orders_get_their_links_with_a_handful_of_statements(db, side):
+    """依存関係のある業務でも、新しいオーダーのつながりを 1 件ずつ直さない（定義ごとに数回の問い合わせ）"""
+    code = new_client_code("I")
+    client_repo.create(db, obj_in=ClientCreate(code=code, name="batching client"))
+    upstream_biz, downstream_biz = _biz(db, code, 1), _biz(db, code, 2)
+    upstream = _daily(db, upstream_biz, "Upstream " + uuid.uuid4().hex[:4])
+    downstream = _daily(db, downstream_biz, "Downstream " + uuid.uuid4().hex[:4])
+    biz_services.create_dependency(
+        db, downstream_biz, BizDependencyCreate(upstream_biz_id=upstream_biz, match_rule=DependencyMatchRule.SAME_OCCURRENCE_DATE),
+    )
+    changed = downstream if side == "downstream" else upstream
+    plan_services.update_template(db, changed, PlanTemplateUpdate(rrule="FREQ=WEEKLY;BYDAY=MO,WE,FR"))
+
+    with StatementCounter() as counter:
+        plan_services.update_template(db, changed, PlanTemplateUpdate(rrule="FREQ=DAILY"))
+
+    # 下流のオーダーはそれぞれ、同じ日の取消されていない上流を待つ
+    ups = {o.occurrence_date: o.id for o in open_orders(db, upstream)}
+    downs = open_orders(db, downstream)
+    linked = {
+        link.downstream_order_id: link.upstream_order_id
+        for link in db.scalars(select(OpeDependency).where(
+            OpeDependency.downstream_order_id.in_([o.id for o in downs]), OpeDependency.removed_at.is_(None),
+        ))
+    }
+    assert len(downs) > 350 and all(linked[o.id] == ups[o.occurrence_date] for o in downs)
+    assert counter.count < 60, f"{counter.count} statements ({side} side: links resolved per order?)"
+
+
+@pytest.mark.parametrize("side", ["none", "downstream", "upstream"])
+def test_a_rule_change_cancels_hundreds_of_orders_with_a_handful_of_statements(db, side):
+    """取消も 1 件ずつ書き出さない（依存関係のつながりは最後にまとめて直す）。取消済みの上流を待つ下流は、それを指したまま"""
+    code = new_client_code("I")
+    client_repo.create(db, obj_in=ClientCreate(code=code, name="batching client"))
+    upstream_biz, downstream_biz = _biz(db, code, 1), _biz(db, code, 2)
+    upstream = _daily(db, upstream_biz, "Upstream " + uuid.uuid4().hex[:4])
+    downstream = _daily(db, downstream_biz, "Downstream " + uuid.uuid4().hex[:4])
+    if side != "none":
+        biz_services.create_dependency(
+            db, downstream_biz, BizDependencyCreate(upstream_biz_id=upstream_biz, match_rule=DependencyMatchRule.SAME_OCCURRENCE_DATE),
+        )
+    changed = upstream if side == "upstream" else downstream
+    before = {o.id for o in open_orders(db, changed)}
+
+    with StatementCounter() as counter:
+        plan_services.update_template(db, changed, PlanTemplateUpdate(rrule="FREQ=WEEKLY;BYDAY=MO,WE,FR"))
+
+    db.expire_all()
+    cancelled = db.scalars(select(OpeOrder).where(OpeOrder.id.in_(before), OpeOrder.status == OrderStatus.CANCELED)).all()
+    assert len(cancelled) > 200
+    if side == "upstream":
+        waiting = {
+            link.upstream_order_id
+            for link in db.scalars(select(OpeDependency).where(
+                OpeDependency.upstream_order_id.in_([o.id for o in cancelled]), OpeDependency.removed_at.is_(None),
+            ))
+        }
+        assert waiting == {o.id for o in cancelled}  # 「上流が取消」のまま待つ（人が判断する）
+    assert counter.count < 60, f"{counter.count} statements for {len(cancelled)} cancelled orders ({side})"

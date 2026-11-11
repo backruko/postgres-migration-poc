@@ -13,6 +13,7 @@
   無ければ待ち先なしの行。上流のオーダーができた・動いた・取り消されたら、その後 lookback_days 日の間に
   開始する開始前の下流のオーダーを直し、下流が動いたら（時刻だけでも）その下流を直す。
 """
+from bisect import bisect_right
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
@@ -67,11 +68,7 @@ def _lookback(dep: BizDependency) -> timedelta:
 
 def _upstream_targets(db: Session, dep: BizDependency, key: int | date) -> list[OpeOrder]:
     """待つ上流のオーダー（取消されていないもの全部 / 無ければ最新の取消済み1件 / それも無ければ空）"""
-    candidates = ope_dependency_repo.get_orders_matching(db, biz_id=dep.upstream_biz_id, rule=dep.match_rule, key=key)
-    live = [o for o in candidates if o.status != OrderStatus.CANCELED]
-    if live:
-        return live
-    return candidates[-1:]
+    return _live_or_last(ope_dependency_repo.get_orders_matching(db, biz_id=dep.upstream_biz_id, rule=dep.match_rule, key=key))
 
 
 def _targets_for(db: Session, order: OpeOrder, dep: BizDependency) -> tuple[list[OpeOrder], int | date | None] | None:
@@ -96,9 +93,19 @@ def resolve(db: Session, order: OpeOrder, dep: BizDependency) -> None:
     """1つの定義について、下流のオーダーのつながりを今の状態に合わせる（開始前のオーダーのみ）"""
     if not is_not_started(order) or dep.downstream_biz_id != order.biz_master_id:
         return
-    now = _now()
     current = ope_dependency_repo.get_active(db, downstream_order_id=order.id, biz_dependency_id=dep.id)
-    found = _targets_for(db, order, dep)
+    _apply_targets(db, order, dep, current, _targets_for(db, order, dep), _now())
+    db.flush()
+
+
+def _apply_targets(
+    db: Session, order: OpeOrder, dep: BizDependency, current: list[OpeDependency],
+    found: tuple[list[OpeOrder], int | date | None] | None, now: datetime,
+) -> None:
+    """
+    下流のオーダーの今のつながり（current、古い順）を、定義のルールで見つけた上流（found）に合わせる（書き出さない）。
+    resolve（1 件）と resolve_many（まとめて）の共通部分
+    """
     if found is None:
         for link in current:
             _remove(link, REASON_RULE_NOT_APPLICABLE, now)
@@ -122,7 +129,65 @@ def resolve(db: Session, order: OpeOrder, dep: BizDependency) -> None:
         db.add(_link(order, dep, key, upstream_id))
     if not targets and not waiting:
         db.add(_link(order, dep, key, None))  # 待ち先なし（条件を満たさない）
+
+
+def resolve_many(db: Session, orders: list[OpeOrder], dep: BizDependency) -> None:
+    """
+    resolve を多くの下流のオーダーにまとめて行う（結果は 1 件ずつ resolve したのと同じ）。
+    今のつながりと上流の候補を定義ごとに 1〜2 回の問い合わせで読み、最後に 1 回だけ書き出す
+    （テンプレートの変更で数百のオーダーができる・消えるため。1 件ずつだと 1 件に数文かかる）
+    """
+    targets = [o for o in orders if is_not_started(o) and dep.downstream_biz_id == o.biz_master_id]
+    if not targets:
+        return
+    now = _now()
+    current: dict[int, list[OpeDependency]] = {}
+    for link in ope_dependency_repo.get_active_for_definition(
+        db, biz_dependency_id=dep.id, downstream_order_ids=[o.id for o in targets],
+    ):
+        current.setdefault(link.downstream_order_id, []).append(link)
+    found = _targets_for_many(db, targets, dep)
+    for order in targets:
+        _apply_targets(db, order, dep, current.get(order.id, []), found[order.id], now)
     db.flush()
+
+
+def _targets_for_many(
+    db: Session, orders: list[OpeOrder], dep: BizDependency,
+) -> dict[int, tuple[list[OpeOrder], int | date | None] | None]:
+    """_targets_for を多くの下流のオーダーにまとめて行う（上流の候補は 1 回の問い合わせで読む）"""
+    if dep.match_rule == DependencyMatchRule.LATEST_BEFORE:
+        lookback = _lookback(dep)
+        candidates = ope_dependency_repo.get_orders_starting_between(
+            db, biz_id=dep.upstream_biz_id,
+            since=min(o.scheduled_start for o in orders) - lookback, until=max(o.scheduled_start for o in orders),
+        )  # 予定開始・id の順
+        starts = [c.scheduled_start for c in candidates]
+        result: dict[int, tuple[list[OpeOrder], int | date | None] | None] = {}
+        for order in orders:
+            # 予定開始 ≤ 下流の開始で最新（同じ時刻なら id の大きいもの）。lookback より前なら無し
+            i = bisect_right(starts, order.scheduled_start) - 1
+            latest = candidates[i] if i >= 0 and starts[i] >= order.scheduled_start - lookback else None
+            result[order.id] = ([latest] if latest is not None else []), None
+        return result
+    keys = {o.id: _key(o, dep.match_rule) for o in orders}
+    by_key: dict[int | date, list[OpeOrder]] = {}
+    for candidate in ope_dependency_repo.get_orders_matching_keys(
+        db, biz_id=dep.upstream_biz_id, rule=dep.match_rule, keys={k for k in keys.values() if k is not None},
+    ):  # id の順
+        by_key.setdefault(_key(candidate, dep.match_rule), []).append(candidate)  # type: ignore[arg-type]
+    return {
+        order.id: None if keys[order.id] is None else (_live_or_last(by_key.get(keys[order.id], [])), keys[order.id])  # type: ignore[arg-type]
+        for order in orders
+    }
+
+
+def _live_or_last(candidates: list[OpeOrder]) -> list[OpeOrder]:
+    """取消されていないもの全部 / 無ければ最新の取消済み1件 / それも無ければ空（候補は古い順）"""
+    live = [o for o in candidates if o.status != OrderStatus.CANCELED]
+    if live:
+        return live
+    return candidates[-1:]
 
 
 def _link(order: OpeOrder, dep: BizDependency, key: int | date | None, upstream_order_id: int | None) -> OpeDependency:
@@ -210,6 +275,62 @@ def refresh_order(db: Session, order: OpeOrder, only_time_based: bool = False) -
         for dep in upstream_defs:
             if dep.downstream_biz_id == downstream.biz_master_id:
                 resolve(db, downstream, dep)
+
+
+def refresh_orders(db: Session, orders: list[OpeOrder]) -> None:
+    """
+    refresh_order を多くのオーダーにまとめて行う（オーダーの追従: テンプレートの変更で数百のオーダーができる・消える）。
+    結果は 1 件ずつ refresh_order したのと同じ: 下流のつながりは今の状態だけで決まるので、関わる下流のオーダーを
+    全部のオーダーを書き出したあとに 1 回ずつ直せば、1 件ごとに直したときの最後の状態と同じになる。
+    問い合わせは定義ごとに数回（オーダーの数によらない）。
+    """
+    defs_by_biz = {biz_id: _definitions_for(db, biz_id) for biz_id in {o.biz_master_id for o in orders}}
+    if not any(defs_by_biz.values()):
+        return  # 定義の無い業務（ほとんど）
+    db.flush()
+    by_biz: dict[int, list[OpeOrder]] = {}
+    for order in orders:
+        by_biz.setdefault(order.biz_master_id, []).append(order)
+
+    # このオーダー自身のつながり（下流として）
+    for biz_id, group in by_biz.items():
+        for dep in defs_by_biz[biz_id]:
+            if dep.downstream_biz_id == biz_id:
+                resolve_many(db, group, dep)
+
+    # このオーダーを待ちうる下流のオーダー（上流として）。refresh_order と同じく、上流の業務の定義ごとに、
+    # このオーダーを待っている下流 + 定義のルールで当てはまりうる下流を直す
+    affected: dict[int, tuple[BizDependency, dict[int, OpeOrder]]] = {}
+    for biz_id, group in by_biz.items():
+        defs = [dep for dep in defs_by_biz[biz_id] if dep.upstream_biz_id == biz_id]
+        if not defs:
+            continue
+        linked = ope_dependency_repo.get_active_downstream_orders(db, upstream_order_ids=[o.id for o in group])
+        for dep in defs:
+            orders_for_dep = affected.setdefault(dep.id, (dep, {}))[1]
+            for downstream in [*linked, *_downstream_candidates(db, group, dep)]:
+                orders_for_dep[downstream.id] = downstream
+    for dep, downstreams in affected.values():
+        resolve_many(db, list(downstreams.values()), dep)
+
+
+def _downstream_candidates(db: Session, upstream_orders: list[OpeOrder], dep: BizDependency) -> list[OpeOrder]:
+    """上流のオーダーができた・動いた・消えたときに、定義のルールで直す下流のオーダー（refresh_order と同じ範囲）"""
+    if dep.match_rule == DependencyMatchRule.LATEST_BEFORE:
+        # 上流の開始から lookback_days 日の間に開始する、開始前の下流
+        lookback = _lookback(dep)
+        windows = sorted(o.scheduled_start for o in upstream_orders)
+        found = ope_dependency_repo.get_open_orders_of(
+            db, biz_id=dep.downstream_biz_id, starting_from=windows[0], starting_until=windows[-1] + lookback,
+        )
+        result = []
+        for downstream in found:
+            i = bisect_right(windows, downstream.scheduled_start) - 1  # 下流の開始以前で最後の上流の開始
+            if i >= 0 and downstream.scheduled_start <= windows[i] + lookback:
+                result.append(downstream)
+        return result
+    keys = {k for k in (_key(o, dep.match_rule) for o in upstream_orders) if k is not None}
+    return ope_dependency_repo.get_orders_matching_keys(db, biz_id=dep.downstream_biz_id, rule=dep.match_rule, keys=keys)
 
 
 def definition_created(db: Session, dep: BizDependency) -> None:

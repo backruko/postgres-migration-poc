@@ -356,6 +356,45 @@ class OpeDependencyRepository:
             stmt = stmt.where(OpeOrder.occurrence_date == key)
         return list(db.scalars(stmt.order_by(OpeOrder.id)).all())
 
+    # --- まとめて読む版（オーダーの追従で数百のオーダーを一度に直す: links.refresh_orders / resolve_many） ---
+    def get_orders_matching_keys(
+        self, db: Session, *, biz_id: int, rule: DependencyMatchRule, keys: set[int] | set[date] | set[int | date],
+    ) -> list[OpeOrder]:
+        """get_orders_matching を多くのキーでまとめて（取消済みも含む。古い順）"""
+        if not keys:
+            return []
+        column = OpeOrder.source_sheet_event_id if rule == DependencyMatchRule.SAME_SHEET_EVENT else OpeOrder.occurrence_date
+        stmt = select(OpeOrder).where(OpeOrder.biz_master_id == biz_id, column.in_(keys))
+        return list(db.scalars(stmt.order_by(OpeOrder.id)).all())
+
+    def get_orders_starting_between(self, db: Session, *, biz_id: int, since: datetime, until: datetime) -> list[OpeOrder]:
+        """業務のオーダーのうち since ≤ 予定開始 ≤ until のもの（取消済みも含む。予定開始・id の順）。直前の上流をまとめて探す用"""
+        stmt = select(OpeOrder).where(
+            OpeOrder.biz_master_id == biz_id, OpeOrder.scheduled_start >= since, OpeOrder.scheduled_start <= until,
+        )
+        return list(db.scalars(stmt.order_by(OpeOrder.scheduled_start, OpeOrder.id)).all())
+
+    def get_active_for_definition(
+        self, db: Session, *, biz_dependency_id: int, downstream_order_ids: list[int],
+    ) -> list[OpeDependency]:
+        """定義の、複数の下流のオーダーの有効なつながり（古い順）"""
+        if not downstream_order_ids:
+            return []
+        stmt = select(OpeDependency).where(
+            OpeDependency.biz_dependency_id == biz_dependency_id,
+            OpeDependency.downstream_order_id.in_(downstream_order_ids), OpeDependency.removed_at.is_(None),
+        )
+        return list(db.scalars(stmt.order_by(OpeDependency.id)).all())
+
+    def get_active_downstream_orders(self, db: Session, *, upstream_order_ids: list[int]) -> list[OpeOrder]:
+        """複数の上流のオーダーのどれかを待っている下流のオーダー（id の順）"""
+        if not upstream_order_ids:
+            return []
+        waiting = select(OpeDependency.downstream_order_id).where(
+            OpeDependency.upstream_order_id.in_(upstream_order_ids), OpeDependency.removed_at.is_(None),
+        )
+        return list(db.scalars(select(OpeOrder).where(OpeOrder.id.in_(waiting)).order_by(OpeOrder.id)).all())
+
 
 # ==========================================
 #  インスタンス化とエクスポート
