@@ -3,16 +3,15 @@
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
 `src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (late)** — **batch order creation
-is built on `feature/batch-orders` (B.1–B.5 committed, not merged, not pushed)**; Level 2 is merged into `main`
+is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the user pushes); Level 2 is merged into `main`
 (`5e1af2f`). See the first block of §1. The MVP pilot is postponed.
 
 ## 1. Current status
 
 ### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — start here
 
-- **Status: B.1–B.5 committed on `feature/batch-orders`, not merged, not pushed** (`0ef890c` B.1 · `cee8ee2` B.2 ·
-  `471f683` B.3 · `1cee5c5` B.4 · + the B.5 handoff commit). Next: the user reviews / merges ("commit and merge"
-  merges into `main` like Level 2); then the next phase is open (finer permissions for SOP drafts + release
+- **Status: merged into `main` as `c8bdec6` ("commit and merge", user, 2026-11-11), not pushed** (`0ef890c` B.1 ·
+  `cee8ee2` B.2 · `471f683` B.3 · `1cee5c5` B.4 · `6ffa574` B.5 + this handoff commit). Next phase is open (finer permissions for SOP drafts + release
   settings; the pilot — rebuild the USB zip first, the tree is clean). No migration in this phase.
 
 - **User chose it 2026-11-11** over finer permissions / the pilot (USB zip: rebuild later; the user's README is now
@@ -82,8 +81,7 @@ is built on `feature/batch-orders` (B.1–B.5 committed, not merged, not pushed)
   limits); `deploy/GO-LIVE.md` D role table + checklist line "an admin to approve drafts". Every screen label quoted
   in the manual was grepped in the frontend. Design doc **rev 125** (Level 2 marked built and merged; finer-permissions item
   updated: template part done, SOP drafting + release settings still open).
-- **Open / offered, not decided:** (1) ~~batching order creation~~ — **built on `feature/batch-orders`** (block
-  above); (2) finer permissions for SOP drafts and release settings (doc item);
+- **Open / offered, not decided:** (1) ~~batching order creation~~ — **merged (`c8bdec6`)** (block above); (2) finer permissions for SOP drafts and release settings (doc item);
   (3) biz delete doesn't lock the biz row (narrow race with a new-template draft, same as the existing template
   check — the user said leave it).
 - **`README.md` is the user's** (Japanese project description; the user committed it as `2038e4b`) — never include
