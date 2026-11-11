@@ -8,6 +8,28 @@ block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
 
+### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — in progress
+
+- **User chose it 2026-11-11** over finer permissions / the pilot (USB zip: rebuild later; the user's README is now
+  committed as `2038e4b`, so the tree is clean). Design doc unchanged since rev 125, no new comments.
+- **Decisions (all my recommendations):** creation **and** cancellation; a new batched `links.refresh_orders(db,
+  orders)` for `order_sync` (single `refresh_order` stays for the ope services paths); proof = oracle tests (batched
+  vs per-order links identical: same date / same sheet event / latest before, both sides, cancelled-upstream
+  fallback) + statement counts; `create_missing_orders` reuses the batched path.
+- **Steps:** B.1 batched creation without links · B.2 batched links for new orders · B.3 batched cancellation · B.4
+  go-live script · B.5 checks (suite, probe before/after, HTTP on `plan_check` 8001) + MEMORY.
+- **Probe before (test DB, 2-year daily, MO/WE/FR ↔ DAILY, 417 orders), create / cancel:** no dependency 1.25 s /
+  1,270 stmts · 0.28 s / 22; downstream same-date 2.61 s / 2,521 · 0.68 s / 854; downstream latest-before 2.59 s /
+  2,521 · 0.79 s / 854; upstream same-date 3.20 s / 3,355 · 2.61 s / 2,939. Probe = untracked
+  `tests/test_zz_probe_creation.py` (never commit; delete in B.5).
+- **B.1 committed:** cause = per order `db.get(BizMaster)` re-read (**the session's identity map is weak**: nothing
+  held the business between orders, so it was collected and re-selected) + a flush per order (INSERT order, INSERT
+  event). `order_sync.create_orders(db, items: list[NewOrder])`: template + business once per template (held), add
+  all → one flush (multi-row INSERT … RETURNING), events → one flush; `_apply` appends to `new_orders`,
+  `apply_slot_changes` creates after the loop; `create_order` = batch of one. Links still per order (B.2). No
+  dependency: **1,270 → 22 statements, 1.25 → 0.50 s.** Test `test_a_rule_change_creates_hundreds_of_orders_…`
+  (fails on old code: 706 statements for 228 orders). Suite 279 passed.
+
 ### Handoff 2026-11-11 — start here
 
 - **`main` = merge `5e1af2f` of `feature/template-drafts` (2026-11-11) + this handoff commit; nothing pushed — the user

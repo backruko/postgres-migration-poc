@@ -16,7 +16,7 @@ from src.domain_biz import services as biz_services
 from src.domain_biz.models import DependencyMatchRule
 from src.domain_biz.schemas import BizDependencyCreate, BizMasterCreate
 from src.domain_client.schemas import ClientCreate
-from src.domain_ope.models import OpeDependency, OpeOrder, OrderStatus
+from src.domain_ope.models import OpeDependency, OpeOrder, OpeOrderEvent, OrderEventType, OrderStatus
 from src.domain_plan import services as plan_services
 from src.domain_plan.models import TemplateType
 from src.domain_plan.schemas import PlanTemplateUpdate, RRuleTemplateCreate
@@ -123,3 +123,24 @@ def test_a_time_change_keeps_same_date_links_without_reading_them_again(db):
     }
     assert links_after == links_before
     assert counter.count < 60, f"{counter.count} statements (links are read again per order?)"
+
+
+def test_a_rule_change_creates_hundreds_of_orders_with_a_handful_of_statements(db):
+    """新しい枠のオーダーは 1 件ずつ INSERT しない（業務も 1 件ごとに読み直さない）。作成の記録も 1 件ずつ付く"""
+    code = new_client_code("I")
+    client_repo.create(db, obj_in=ClientCreate(code=code, name="batching client"))
+    template_id = _daily(db, _biz(db, code, 1), "Daily")
+    plan_services.update_template(db, template_id, PlanTemplateUpdate(rrule="FREQ=WEEKLY;BYDAY=MO,WE,FR"))
+    before = {o.id for o in open_orders(db, template_id)}
+
+    with StatementCounter() as counter:
+        plan_services.update_template(db, template_id, PlanTemplateUpdate(rrule="FREQ=DAILY"))
+
+    new = [o for o in open_orders(db, template_id) if o.id not in before]
+    assert len(new) > 200
+    events = db.scalars(select(OpeOrderEvent).where(
+        OpeOrderEvent.order_id.in_([o.id for o in new]), OpeOrderEvent.event_type == OrderEventType.CREATED,
+    )).all()
+    assert sorted(e.order_id for e in events) == sorted(o.id for o in new)
+    assert all(o.deadline_at is not None and o.client_code == code for o in new)
+    assert counter.count < 60, f"{counter.count} statements for {len(new)} new orders (one INSERT per order again?)"
