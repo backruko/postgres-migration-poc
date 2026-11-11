@@ -29,6 +29,16 @@ block of §1). The MVP pilot is postponed.
   `apply_slot_changes` creates after the loop; `create_order` = batch of one. Links still per order (B.2). No
   dependency: **1,270 → 22 statements, 1.25 → 0.50 s.** Test `test_a_rule_change_creates_hundreds_of_orders_…`
   (fails on old code: 706 statements for 228 orders). Suite 279 passed.
+- **B.2 committed:** `links.refresh_orders(db, orders)` (downstream: `resolve_many` per definition of the order's
+  business; upstream: per upstream definition, the downstreams already waiting on the new orders
+  (`get_active_downstream_orders`) + the rule's candidates (`_downstream_candidates`: keys in one query, latest
+  before = one range query then `bisect` on the windows), each definition's affected set resolved once).
+  `resolve_many` = current links (`get_active_for_definition`) + upstream candidates (`_targets_for_many`: keys in one
+  query / latest before: one range query + `bisect`, tie = latest start then highest id) → shared `_apply_targets`
+  (also used by `resolve`), one flush. Oracle tests `tests/test_links_batched.py` (5 scenarios, two worlds, links incl.
+  removed + reason normalised): a mutated cancelled fallback fails it. Count test both sides (B.1 code: 709 / 1,396).
+  **Create with a dependency: 2,521–3,355 → 25–27 statements, ~1 s** (of which ~0.45 s SQL; same as no dependency —
+  the rest is plan materialization + ORM objects). Test DB slower that day (unchanged cancel 0.28 → 0.43 s). Suite 286.
 
 ### Handoff 2026-11-11 — start here
 

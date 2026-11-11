@@ -286,9 +286,9 @@ def create_orders(db: Session, items: list[NewOrder]) -> list[OpeOrder]:
             actor_staff_id=item.actor_staff_id if item.source == EventSource.HUMAN else None, detail=item.detail,
         )
     db.flush()
-    for order, _ in created:
-        links.refresh_order(db, order)  # B.2 でまとめる
-    return [order for order, _ in created]
+    orders = [order for order, _ in created]
+    links.refresh_orders(db, orders)  # 依存関係のつながり（定義ごとに数回の問い合わせ）
+    return orders
 
 
 def _slot_moved(db: Session, order: OpeOrder, live: PlanInstance, change: SlotChange) -> None:
