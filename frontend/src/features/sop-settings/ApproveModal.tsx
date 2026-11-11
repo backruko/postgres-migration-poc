@@ -1,12 +1,13 @@
-import { Alert, App, DatePicker, Empty, Modal, Space, Spin, Tag, Typography } from "antd";
+import { Alert, App, DatePicker, Empty, Input, Modal, Space, Spin, Tag, Typography } from "antd";
 import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 import { sopApi } from "../../domain/biz/api/sopApi";
-import { firstEffectiveDate } from "../../domain/biz/lib/sop";
+import { firstEffectiveDate, isOwnDraft, isSubmitted } from "../../domain/biz/lib/sop";
 import type { SopVersion } from "../../domain/biz/types";
 import { sopImpactApi } from "../../domain/ope/api";
 import { ORDER_STATUS_COLOR, ORDER_STATUS_LABEL } from "../../domain/ope/lib/orderActions";
 import type { SopImpactGroup, SopImpactOrder } from "../../domain/ope/types";
+import type { Staff } from "../../domain/staff/types";
 import { TIMEZONE } from "../../shared/config";
 import { ApiError } from "../../shared/api/http";
 import { useApiQuery } from "../../shared/hooks/useApiQuery";
@@ -18,6 +19,8 @@ interface Props {
   draft: SopVersion | null;
   /** いま有効な版（発効日の前日で終わる。無ければ null） */
   current: SopVersion | null;
+  /** 承認する業務管理者（自分の草稿の承認なら、そう知らせる） */
+  me: Staff | null | undefined;
   onClose: () => void;
   onApproved: () => void;
 }
@@ -29,17 +32,20 @@ const when = (iso: string) => inZone(iso, TIMEZONE).format("YYYY/M/D HH:mm");
  * 草稿の承認。発効日（明日以降、その日の 0:00 日本時間から）を選ぶと、影響（どのオーダーが新しい版を使うか）を
  * 承認する前に見せる。承認すると状態は「予定」になり、発効日に「現行」になる。
  */
-export function ApproveModal({ open, bizId, draft, current, onClose, onApproved }: Props) {
+export function ApproveModal({ open, bizId, draft, current, me, onClose, onApproved }: Props) {
   const { message } = App.useApp();
   const first = firstEffectiveDate(todayIn(TIMEZONE));
   const [date, setDate] = useState<string>(first);
+  const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setDate(firstEffectiveDate(todayIn(TIMEZONE)));
+      setNote("");
       setError(null);
+      setSubmitting(false);
     }
   }, [open]);
 
@@ -50,7 +56,7 @@ export function ApproveModal({ open, bizId, draft, current, onClose, onApproved 
     setSubmitting(true);
     setError(null);
     try {
-      const approved = await sopApi.approve(bizId, draft.id, date);
+      const approved = await sopApi.approve(bizId, draft.id, date, note);
       message.success(`${approved.version_tag} を承認しました（${dayjs(date).format("YYYY/M/D")} から有効）。`, 6);
       onClose();
       onApproved();
@@ -107,6 +113,18 @@ export function ApproveModal({ open, bizId, draft, current, onClose, onApproved 
             <ImpactGroup title="リリース済み（固定した版のまま）" note="リリースのときに版とステップが固定された" group={impact.data.released} tag={(o) => o.frozen_sop_version_tag ?? "版なし"} />
           </div>
         ) : null}
+        {draft && isSubmitted(draft) && (
+          <Typography.Text type="secondary">
+            {draft.submitted_by_name ?? `職員 #${draft.submitted_by_id}`} が {when(draft.submitted_at!)} に承認を依頼しました。
+          </Typography.Text>
+        )}
+        {draft && isOwnDraft(draft, me) && (
+          <Alert type="warning" showIcon message="自分の草稿を承認します（記録に「自分の草稿を承認」と残ります）。" />
+        )}
+        <label className="field" style={{ margin: 0 }}>
+          <span className="field-label">ひとこと（任意。記録に残ります）</span>
+          <Input.TextArea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} autoSize={{ minRows: 1, maxRows: 4 }} />
+        </label>
         {error && <Alert type="error" showIcon message={error} />}
       </Space>
     </Modal>

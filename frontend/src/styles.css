@@ -338,3 +338,7 @@ h1 .client { color: var(--accent); }
 .pv-day.k-manual, .pv-swatch.k-manual { background: var(--select); border: 1.5px dashed var(--accent); color: var(--ink); }
 .pv-details { margin-top: 14px; }
 .pv-list { margin: 0; padding-left: 18px; columns: 2 240px; font-size: 12.5px; }
+/* 細かな権限（P.4）: SOP の版の作成・編集の人、承認待ちの画面の見出し、版の履歴 */
+.sop-authors { font-size: 12.5px; margin: 6px 0 10px; }
+.section-title { margin: 20px 0 8px !important; }
+.history-entry { display: flex; flex-direction: column; gap: 2px; }

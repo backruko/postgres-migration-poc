@@ -2,6 +2,8 @@ import { EyeOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Select, Table, Tag, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useSubmittedSopDrafts } from "../../domain/biz/hooks/useSopApprovals";
+import type { SubmittedSopDraft } from "../../domain/biz/types";
 import { templateApi } from "../../domain/plan/api";
 import { usePendingDrafts } from "../../domain/plan/hooks/useTemplateChanges";
 import { CHANGE_KIND_LABEL, draftErrorText, templateWriteMode } from "../../domain/plan/lib/templateChanges";
@@ -16,6 +18,7 @@ const when = (iso: string) => inZone(iso, TIMEZONE).format("YYYY/M/D(dd) HH:mm")
 /**
  * 承認待ち（Level 2、D.6b）: 全業務の、承認待ちのテンプレートの下書き。古い順（承認の順番待ち）。顧客で絞り込める（?client=）。
  * 行の「見る」で下書きの窓（今のデータでの確認・承認・差し戻し）を開く。見るのはだれでも、承認・差し戻しは業務管理者。
+ * その下に、承認を依頼された SOP の草稿（P.4）。行から SOP の画面のその版へ移り、ステップを見て承認・差し戻しする。
  */
 export function ApprovalsPage() {
   const { message } = App.useApp();
@@ -25,12 +28,17 @@ export function ApprovalsPage() {
   const me = useCurrentStaff();
   const isAdmin = templateWriteMode(me.data) === "direct";
   const drafts = usePendingDrafts();
+  const sopDrafts = useSubmittedSopDrafts();
 
   const clients = useMemo(
-    () => [...new Set((drafts.data ?? []).map((c) => c.client_code).filter((c): c is string => !!c))].sort(),
-    [drafts.data],
+    () => [...new Set([
+      ...(drafts.data ?? []).map((c) => c.client_code),
+      ...(sopDrafts.data ?? []).map((d) => d.client_code),
+    ].filter((c): c is string => !!c))].sort(),
+    [drafts.data, sopDrafts.data],
   );
   const rows = (drafts.data ?? []).filter((c) => !client || c.client_code === client);
+  const sopRows = (sopDrafts.data ?? []).filter((d) => !client || d.client_code === client);
 
   // 下書きの窓。変更・削除の下書きは、対象のテンプレートの今の値を読んでから開く（要約の「今」と確認に使う）
   const [viewer, setViewer] = useState<{ open: boolean; change: TemplateChange | null; template: PlanTemplate | null }>({
@@ -58,7 +66,7 @@ export function ApprovalsPage() {
           <div className="eyebrow">事前設定</div>
           <h1>承認待ち</h1>
           <Typography.Text type="secondary">
-            予定テンプレートの下書き（リリース担当が書いたもの）。古い順。{isAdmin ? "開いて、承認するか差し戻してください。" : "承認・差し戻しは業務管理者が行います。"}
+            リリース担当が書いた、予定テンプレートの下書きと SOP の草稿。古い順。{isAdmin ? "開いて、承認するか差し戻してください。" : "承認・差し戻しは業務管理者が行います。"}
           </Typography.Text>
         </div>
       </header>
@@ -80,6 +88,7 @@ export function ApprovalsPage() {
           action={<Button size="small" onClick={drafts.reload}>再読み込み</Button>} />
       )}
 
+      <Typography.Title level={4} className="section-title">予定テンプレートの下書き <span className="muted mono">{rows.length} 件</span></Typography.Title>
       <Table<TemplateChange>
         rowKey="id"
         loading={drafts.loading}
@@ -108,6 +117,40 @@ export function ApprovalsPage() {
               <Button type="link" size="small" icon={<EyeOutlined />} loading={opening === c.id} onClick={() => view(c)}>
                 見る
               </Button>
+            ),
+          },
+        ]}
+      />
+
+      <Typography.Title level={4} className="section-title">SOP の草稿 <span className="muted mono">{sopRows.length} 件</span></Typography.Title>
+      {sopDrafts.error && (
+        <Alert type="error" showIcon message={`SOP の承認待ちを取得できませんでした: ${sopDrafts.error.message}`}
+          action={<Button size="small" onClick={sopDrafts.reload}>再読み込み</Button>} />
+      )}
+      <Table<SubmittedSopDraft>
+        rowKey="version_id"
+        loading={sopDrafts.loading}
+        dataSource={sopRows}
+        pagination={sopRows.length > 50 ? { pageSize: 50 } : false}
+        locale={{ emptyText: <Empty description="承認を依頼された SOP の草稿はありません" /> }}
+        columns={[
+          { title: "依頼した日時", key: "when", width: 170, className: "mono", render: (_, d) => when(d.submitted_at) },
+          {
+            title: "業務",
+            key: "biz",
+            render: (_, d) => <><span className="mono">{d.business_code}</span> {d.biz_name}</>,
+          },
+          { title: "版", dataIndex: "version_tag", width: 160, className: "mono" },
+          { title: "ステップ", dataIndex: "step_count", width: 84, className: "mono", render: (n: number) => `${n} 件` },
+          { title: "依頼した人", key: "submitter", width: 150, render: (_, d) => d.submitted_by_name ?? `職員 #${d.submitted_by_id}` },
+          {
+            title: "",
+            key: "open",
+            width: 96,
+            render: (_, d) => (
+              <Link to={`/settings/sop?biz=${d.biz_master_id}&version=${d.version_id}`}>
+                <EyeOutlined /> 開く
+              </Link>
             ),
           },
         ]}

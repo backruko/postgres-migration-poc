@@ -52,6 +52,24 @@ is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the 
   never import the staff models would break mapper config). OpenAPI + `gen:api`; build passes. Tests
   `tests/test_biz_release_and_reads.py` (4) + guard list + release route. HTTP harness scratchpad `p3_harness.py`
   on `plan_check` 8001 **20/20** (cleans up its draft, restores biz 2 release; 2 history rows stay). Suite 308.
+- **P.4 UI decisions (user, all my recommendations):** admins decide on the **SOP page** (承認待ち gets an SOP section
+  linking there); releasers get the **same editor + 承認を依頼**, admins no submit button (approve directly); **one
+  combined badge** (template + SOP); **履歴 button → drawer** + an author line.
+- **P.4 committed (frontend only):** `sopApi` submit / withdraw / reject / events / listSubmitted / countSubmitted,
+  approve(note); SOP decisions call `notifyTemplateChangesChanged` (same signal as template drafts → badge + lists
+  reload). `lib/sop.ts`: `canDraftSop` (releaser / admin), `canDecideSop` (admin), `isSubmitted`, `canSubmitSop`
+  (releaser who is not admin), `submitBlockedReason`, `canWithdrawSop`, `isOwnDraft`, `isSelfApproval`, event labels
+  (replaces `canManageSop`). `hooks/useSopApprovals.ts`. `SopSettingsPage`: 承認待ち tag (list + title), editor hidden
+  while submitted, warning alert (who / when), 承認を依頼 (confirm) / 取り下げる / 差し戻す… / 承認…, author line
+  `.sop-authors`, 履歴 → `SopHistoryDrawer` (Timeline, newest first). `ApproveModal` + comment + submitter line +
+  self-approval warning (`me` prop); new `RejectDraftModal` (reason required). `ApprovalsPage` second table SOP の草稿
+  (link `/settings/sop?biz=&version=`), client filter over both. `AppLayout` badge = template + SOP count. CSS
+  `.sop-authors`, `.section-title`, `.history-entry`. Build passes. **jsdom kit re-installed** in this session's
+  scratchpad `domtest/` (jsdom 24.1.3, @testing-library/react 14.3.1, dom 9.3.4; `dom_setup.ts` = jsdom globals +
+  cookie-keeping fetch + `api` / `login` / `check`; esbuild alias `@app` → `frontend/src`, react / react-dom / antd /
+  react-router-dom → frontend node_modules, `--external:jsdom`, `NODE_PATH=domtest/node_modules`). **antd dialogs are
+  found by class (`.ant-modal-confirm`, `.ant-modal-content`, `.ant-drawer-content`), not by role**; wait for a
+  button to be enabled before clicking. `sop_dom.tsx` **17/17** twice. Not checked: the user's browser.
 
 ### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — merged
 

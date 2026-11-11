@@ -25,3 +25,8 @@ export type SopVersionDetail = components["schemas"]["SOPVersionDetailResponse"]
 export type SopStep = components["schemas"]["SOPStepTemplateResponse"];
 export type SopStepCreate = components["schemas"]["SOPStepTemplateCreate"];
 export type SopStepUpdate = components["schemas"]["SOPStepTemplateUpdate"];
+
+// ---- SOP の草稿の承認の依頼・記録（細かな権限、P.4） ----
+export type SopVersionEvent = components["schemas"]["SOPVersionEventResponse"];
+export type SopVersionEventType = components["schemas"]["SOPVersionEventType"];
+export type SubmittedSopDraft = components["schemas"]["SubmittedSOPDraftResponse"];
