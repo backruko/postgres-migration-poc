@@ -113,6 +113,16 @@ button, input, select { font: inherit; color: inherit; }
 /* 今日より前の日付（実績・変更不可） */
 .is-past-row > td { color: var(--muted); background: var(--past-bg); }
 .template-name .swatch { width: 12px; height: 12px; }
+/* テンプレートの変更依頼（Level 2）: 一覧の「承認待ち」、業務ごとの「変更依頼」の欄、下書きを見る窓 */
+.template-name .draft-tag { margin-inline-start: 4px; }
+.change-requests { display: grid; gap: 8px; margin: 12px 0; padding: 12px; border: 1px solid var(--rule); border-radius: 8px; }
+.draft-meta { margin-bottom: 12px; }
+.draft-after { font-weight: 600; }
+.draft-preview { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--rule); }
+/* 承認待ちの件数（設定のメニュー）、変更履歴の見出し */
+.nav-badge { margin-inline-start: 6px; }
+.history-head { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.history-who { color: var(--muted); }
 
 /* ---------------- header ---------------- */
 .page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }

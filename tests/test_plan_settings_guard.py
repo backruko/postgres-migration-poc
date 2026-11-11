@@ -20,6 +20,10 @@ RELEASER_OR_ADMIN = {
     ("/plans/instances/{instance_id}/revert", "post"),
     ("/plans/instances/{instance_id}/cancel", "post"),
     ("/plans/instances/{instance_id}/restore", "post"),
+    # テンプレートの変更の下書き（Level 2、D.2）: 書くのはリリース担当も。承認・直接の保存は admin のみのまま
+    ("/plans/template-changes", "post"),
+    ("/plans/template-changes/{change_id}", "put"),
+    ("/plans/template-changes/{change_id}/withdraw", "post"),
 }
 
 

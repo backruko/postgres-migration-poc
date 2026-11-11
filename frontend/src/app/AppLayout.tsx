@@ -1,8 +1,10 @@
 import { useRef } from "react";
-import { Alert, Button, Dropdown, Spin, Typography } from "antd";
+import { Alert, Badge, Button, Dropdown, Spin, Typography } from "antd";
 import type { MenuProps } from "antd";
 import { DownOutlined } from "@ant-design/icons";
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
+import { usePendingDraftCount } from "../domain/plan/hooks/useTemplateChanges";
+import { templateWriteMode } from "../domain/plan/lib/templateChanges";
 import { useCurrentStaff } from "../domain/staff/hooks/useStaff";
 import { PasswordChangeForm } from "../features/auth/PasswordChangeForm";
 import { useSession } from "../shared/hooks/useSession";
@@ -23,11 +25,15 @@ const SETTINGS_PAGES: Page[] = [
   { path: "/settings/businesses", label: "業務", end: false },
   { path: "/settings/sop", label: "SOP", end: false },
   { path: "/settings/templates", label: "予定テンプレート設定", end: false },
+  { path: "/settings/approvals", label: "承認待ち", end: false },
   { path: "/settings/sheets", label: "年間計画シート", end: false },
   { path: "/settings/holidays", label: "休日カレンダー", end: false },
   { path: "/settings/dependencies", label: "業務の依存関係", end: false },
   { path: "/settings/staff", label: "職員", end: false },
 ];
+
+/** 承認待ちの画面（業務管理者には件数のバッジを付ける） */
+const APPROVALS_PATH = "/settings/approvals";
 
 /** 今開いている設定の画面（無ければ undefined） */
 export function currentSettingsPage(pathname: string): Page | undefined {
@@ -50,9 +56,22 @@ export function AppLayout() {
   lastSearch.current[location.pathname] = location.search;
   const to = (p: Page) => ({ pathname: p.path, search: lastSearch.current[p.path] ?? "" });
 
+  // 承認待ちの件数（業務管理者だけ。決めた直後と 2 分ごとに読み直す）。ほかの人には出さない（読まない）
+  const isAdmin = templateWriteMode(me.data) === "direct";
+  const pending = usePendingDraftCount(isAdmin);
+  const pendingCount = isAdmin ? pending.data ?? 0 : 0;
+
   const activeSetting = currentSettingsPage(location.pathname);
   const settingsMenu: MenuProps = {
-    items: SETTINGS_PAGES.map((p) => ({ key: p.path, label: <Link to={to(p)}>{p.label}</Link> })),
+    items: SETTINGS_PAGES.map((p) => ({
+      key: p.path,
+      label: (
+        <Link to={to(p)}>
+          {p.label}
+          {p.path === APPROVALS_PATH && pendingCount > 0 && <Badge count={pendingCount} size="small" className="nav-badge" />}
+        </Link>
+      ),
+    })),
     selectable: true,
     selectedKeys: activeSetting ? [activeSetting.path] : [],
   };
@@ -94,6 +113,9 @@ export function AppLayout() {
           <Dropdown menu={settingsMenu} trigger={["hover", "click"]}>
             <button type="button" className={activeSetting ? "nav-link nav-menu active" : "nav-link nav-menu"} aria-haspopup="menu">
               設定{activeSetting && <span className="nav-menu-current">：{activeSetting.label}</span>}
+              {pendingCount > 0 && (
+                <Badge count={pendingCount} size="small" className="nav-badge" title={`承認待ちの下書き ${pendingCount} 件`} />
+              )}
               <DownOutlined className="nav-menu-caret" />
             </button>
           </Dropdown>

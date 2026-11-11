@@ -38,7 +38,7 @@ from src.domain_ope.steps import LOCAL_TIMEZONE, StepSetChange, scheduled_day, s
 from src.domain_plan import template_events
 from src.domain_plan.models import PlanInstance, PlanOccurrenceCache, PlanTemplate, VoidReason
 from src.domain_plan.slot_events import (
-    SimpleSlot, SlotChange, SlotKey, live_instance_for_slot, register_slot_guard, register_slot_listener, slot_key_of,
+    SimpleSlot, SlotChange, SlotKey, live_instances_for_slots, register_slot_guard, register_slot_listener, slot_key_of,
 )
 from src.infrastructure.repositories import ope_order_repo
 
@@ -105,25 +105,68 @@ def apply_dependency_change(db: Session, change: dependency_events.DependencyCha
 
 
 def apply_slot_changes(db: Session, changes: list[SlotChange]) -> None:
+    """
+    発生枠の変更をオーダーに反映します。テンプレートの変更では生成済みの範囲の全部の枠が一度に動く
+    （2 年先まで生成した毎日の予定なら 730 枠）ため、枠ごとに問い合わせず、今の予定とオーダーをまとめて読む
+    （以前は枠ごとに 3 回の問い合わせ: 1 回の承認で 2,000 文を超え、数秒〜十数秒かかっていた）。
+    依存関係の定義も、この間は業務ごとに 1 回だけ読む。
+    """
     now = _now()
     weeks: dict[int, set[date]] = {}  # テンプレートごとの、変更のあった週（月曜日）
-    for change in changes:
-        for day in _apply(db, change, now):
-            weeks.setdefault(change.slot.template_id, set()).add(week_start(day))
+    lives = live_instances_for_slots(db, [c.slot for c in changes])
+    orders = _find_orders(db, [c.slot for c in changes])
+    with links.definitions_cached(db):
+        for change in changes:
+            for day in _apply(db, change, now, lives.get(change.slot), orders.get(change.slot)):
+                weeks.setdefault(change.slot.template_id, set()).add(week_start(day))
     _recheck_steps(db, weeks)
 
 
+def _order_slot(order: OpeOrder) -> tuple[int, str, date | int]:
+    """オーダーの発生枠（SlotKey と同じ見分け方: シート日付 → 臨時の予定 → ルール上の日付）"""
+    if order.source_sheet_event_id is not None:
+        return (order.template_id, "sheet_event", order.source_sheet_event_id)
+    if order.one_off_instance_id is not None:
+        return (order.template_id, "one_off", order.one_off_instance_id)
+    return (order.template_id, "date", order.occurrence_date)
+
+
 def _find_order(db: Session, slot: SlotKey) -> OpeOrder | None:
+    """1 つの発生枠の取消されていないオーダー（行ロック付き。取りこぼしの作成など、枠が少ない処理用）"""
     return ope_order_repo.get_active_for_slot(
         db, template_id=slot.template_id, occurrence_date=slot.occurrence_date,
         sheet_event_id=slot.sheet_event_id, one_off_instance_id=slot.one_off_instance_id,
     )
 
 
-def _apply(db: Session, change: SlotChange, now: datetime) -> list[date]:
-    """発生枠の変更をオーダーに反映し、関わった日（日本時間。変更前・変更後の予定日）を返します。"""
-    live = live_instance_for_slot(db, change.slot)
-    order = _find_order(db, change.slot)
+def _find_orders(db: Session, slots: list[SlotKey]) -> dict[SlotKey, OpeOrder]:
+    """発生枠ごとの、取消されていないオーダー（テンプレートごとに 1 回の問い合わせ。行ロック付き）"""
+    by_template: dict[int, list[SlotKey]] = {}
+    for slot in slots:
+        by_template.setdefault(slot.template_id, []).append(slot)
+    result: dict[SlotKey, OpeOrder] = {}
+    for template_id, group in by_template.items():
+        found = {
+            _order_slot(o): o
+            for o in ope_order_repo.get_active_for_slots(
+                db, template_id=template_id,
+                occurrence_dates={s.occurrence_date for s in group if s.kind == "date"},
+                sheet_event_ids={s.ref for s in group if s.kind == "sheet_event"},  # type: ignore[misc]
+                one_off_instance_ids={s.ref for s in group if s.kind == "one_off"},  # type: ignore[misc]
+            )
+        }
+        for slot in group:
+            order = found.get((slot.template_id, slot.kind, slot.ref))
+            if order is not None:
+                result[slot] = order
+    return result
+
+
+def _apply(db: Session, change: SlotChange, now: datetime, live: PlanInstance | None, order: OpeOrder | None) -> list[date]:
+    """
+    発生枠の変更をオーダーに反映し、関わった日（日本時間。変更前・変更後の予定日）を返します。
+    live: 枠の今の有効な予定（無ければ枠が消えた）、order: 枠の取消されていないオーダー（まとめて読んだもの）
+    """
     days = [live.scheduled_start.astimezone(LOCAL_TIMEZONE).date()] if live is not None else []
     if order is None:
         # 新しい枠（または取消後に戻った枠）。過去の予定にはオーダーを作らない（運用開始より前は plan の履歴のみ）
@@ -232,9 +275,11 @@ def _slot_moved(db: Session, order: OpeOrder, live: PlanInstance, change: SlotCh
             actor_staff_id=change.actor_staff_id if source == EventSource.HUMAN else None,
             reason=change.note if change.by_person else None, detail=_cause(change, before=before, after=after),
         )
-    # 依存関係: キー（ルール上の日付）が変わった、または時刻が変わった（直前の上流は予定開始で突き合わせる）
-    if key_changed or times_changed:
+    # 依存関係: キー（ルール上の日付）が変わったら全部、時刻だけが変わったら「直前の上流」（予定開始で突き合わせる）だけ直す
+    if key_changed:
         links.refresh_order(db, order)
+    elif times_changed:
+        links.refresh_order(db, order, only_time_based=True)
 
 
 def _slot_removed(db: Session, order: OpeOrder, change: SlotChange) -> None:

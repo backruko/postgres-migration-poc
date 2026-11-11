@@ -2,13 +2,342 @@
 
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
-`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-10 (end of day)** — milestone and
-handoff: sheet import, template preview, "started work keeps its occurrence" and the releaser check-only mode are all
-merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the first block of §1).
+`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (end of day)** — **Level 2
+(template drafts + approval, templates only) is built and committed on `feature/template-drafts`, NOT merged** (see
+the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
 
-### Handoff 2026-11-10 — start here
+### Handoff 2026-11-11 — start here
+
+- **Branch `feature/template-drafts`** (from `main` `306f34a`; `main` unchanged; nothing pushed — the user pushes).
+  Commits, oldest first: `67d0d81` D.1 · `bab603f` D.2 · `05a5acb` D.3 · `6dc1b15` D.4 · `34f37f8` D.5a · `98ad5d6`
+  D.5b · `a7f2697` **perf: order-sync N+1** · `c8c370f` D.6a · `77afd4f` D.6b · + the D.7 docs commit (manual,
+  GO-LIVE, MEMORY). **Next: ask the user whether to "commit and merge"** into `main` (`--no-ff`; check `main` hasn't
+  diverged), then rebuild the USB zip (`python scripts/make_package.py`) before any server install.
+- **Migration `e7f9acb3d34a`** (`plan_template_change`) — the user ran `alembic upgrade head` on the dev DB
+  (2026-11-11); the server's `app` container migrates at start. Alembic head is now `e7f9acb3d34a`.
+- **Checks at the end:** backend **278 tests** pass, pyright 0, `npm run build` passes. The user browser-tested the
+  releaser flow, approval (after the N+1 fix: "lightning fast"), the stuck-dialog fix, the TimePicker and the
+  no-change deadlock fix.
+- **Docs:** `docs/OPERATION-MANUAL.md` (1.4 roles, 1.5 screens, 1.6 refresh, 3.7 「下書きと承認」 + 変更履歴 + API, 4.3
+  error codes `TEMPLATE_DRAFT_PENDING` / `TEMPLATE_CHANGE_DECIDED` / `TEMPLATE_CHANGED_MEANWHILE`, 5 QA rows 17–19, 6
+  limits); `deploy/GO-LIVE.md` D role table + checklist line "an admin to approve drafts". Every screen label quoted
+  in the manual was grepped in the frontend. Design doc **rev 124** (Level 2 marked built; finer-permissions item
+  updated: template part done, SOP drafting + release settings still open).
+- **Open / offered, not decided:** (1) batching order **creation** — a rule change that creates hundreds of orders
+  still inserts them one by one (+ per-order link resolution with a dependency): MO/WE/FR → DAILY on a 2-year daily
+  template = 1.2 s, 3.4 s with a dependency; (2) finer permissions for SOP drafts and release settings (doc item);
+  (3) biz delete doesn't lock the biz row (narrow race with a new-template draft, same as the existing template
+  check — the user said leave it).
+- **`README.md` has the user's own uncommitted edits** (Japanese project description) — never include it in my
+  commits; leave it to the user.
+- **`plan_check` state:** template 23 (biz 2, daily) materialized ~2 years (for profiling); many withdrawn /
+  rejected `HARNESS_*` change rows; all `HARNESS_*` templates deleted. jsdom test kit in the scratchpad
+  `domtest/` (jsdom 24 + @testing-library/react 14, outside the project) — see the D.6 notes below for the bundling
+  flags; scratchpads are per session, so re-install if needed.
+- **Lessons from this phase (also in the step notes below):** `get_locked(... populate_existing)` discards unflushed
+  changes → flush first; JSONB `None` needs `none_as_null=True` for `IS NULL` checks; antd doesn't re-render a
+  closed modal's content → never nest a stateful modal unless the outer has `forceRender`; a flag set before an
+  early `return` must be cleared on every path; order follow-up must stay batched (regression test counts
+  statements); profile with a statement counter before guessing at locks.
+
+### Level 2 step log (2026-11-11)
+
+- **Branch `feature/template-drafts` from `main` `306f34a`.** Step plan approved (user, 2026-11-11), one step at a
+  time, stop for review after each: **D.1** data model (migration + model + repo) · D.2 drafts in the backend
+  (create / edit / withdraw, releaser + admin; checked like a real save; one pending draft; template writes refused
+  while one is pending) · D.3 approve / reject (admin; applies through the existing `_apply_*`; no revision check;
+  self-approval; admin direct saves write an `is_direct` row) · D.4 read endpoints (pending by business / all + count,
+  history per template, preview of a stored draft; OpenAPI + `npm run gen:api`) · D.5 frontend for drafters
+  (下書きとして保存, draft badge, blocked edit state) · D.6 frontend for admins (approval window with the current
+  preview, 承認 / 差し戻し with a reason, 承認待ち list + menu badge, history drawer) · D.7 harness on `plan_check` +
+  manual + design doc + MEMORY.
+- **User's decisions 2026-11-11 (all my recommendations accepted):** Q1 data model **A** = a change-request table
+  next to the live template (not SOP-style version rows); Q2 a releaser drafts **every** template change (create,
+  any field incl. name / display, specified-date add / remove, delete; one draft holds fields + dates); Q3 admin
+  direct saves are recorded too (`is_direct`, drafted = approved by the same admin) → full change history; Q4 a person
+  holding admin counts as admin → may self-approve, history marks it self-approved (derived: approved, not direct,
+  decided_by = drafted_by); Q5 a pending draft blocks admin direct edits, other drafts, date changes and delete of
+  that template — not single-occurrence changes, sheets or calendars; drafter edits / withdraws, admin approves or
+  rejects with a reason and **does not edit** the draft; Q6 the draft holds settings, not dates — the approval window
+  re-runs the preview on current data, approval fails with the normal save errors if a referenced sheet / marker /
+  calendar is gone; **no revision check at approval** (user chose A before D.2: `revision` also rises on holiday /
+  calendar / sheet recalculation, which drafts do not block — so the blocking rule is the guard and `base_revision` is
+  a record only; a separate settings counter was rejected as overengineering); Q7 承認待ち list on 予定の設定 + admin menu count badge, no
+  notifications. **Releasers do not draft SOPs** in this phase (SOPs have their own versions). Design doc rev 110.
+- **D.5 = the drafter screens, split D.5a (data + logic) / D.5b (screens).** User's decisions 2026-11-11 (all four
+  as I recommended): **Q1 admins keep direct save only** (no draft button); **Q2 the releaser's draft flow mirrors the
+  admin's save** (edit that changes dates → the existing 保存の前の確認 window, button この内容で下書きを保存;
+  name / deadline / display edits save the draft directly; new template: optional 予定を確認 + 下書きとして保存;
+  fields + dates in ONE draft call); **Q3 rows with a pending draft**: 承認待ち tag (who / when), 編集 / 削除 disabled
+  for everyone with a tooltip (server would 409), 下書きを見る window (summary now → proposed, who / when; drafter
+  also 直す (form prefilled with the proposed values, save = PUT) / 取り下げる; D.6 adds 承認 / 差し戻し there),
+  releasers get 削除を依頼 on rows without a draft; **Q4 a 変更依頼 section above the table** for the selected
+  business: its pending drafts of every kind + my own drafts decided in the last 30 days (with 差し戻し reasons).
+- **D.6 = the admin screens, split D.6a / D.6b.** User's decisions 2026-11-11 (all as I recommended): **Q1 a new
+  承認待ち page in the 設定 menu** (all businesses, oldest first, client filter, row → approval window, link to the
+  business's template page); **Q2 a pending count badge for admins only** on the 設定 button and the 承認待ち entry,
+  refreshed every 2 min while the tab is visible and after a decision (`useAutoRefresh`); **Q3 extend the
+  下書きを見る window** (auto preview for pending drafts, admins + releasers; admin 承認 with an optional note and a
+  self-approval line, 差し戻し with a required reason); **Q4 a 履歴 button per template row → side drawer** (newest
+  first, approved changes compared with `before_values`, direct saves marked). D.6b then D.7 (manual + doc + MEMORY).
+- **D.6b committed (frontend only; user browser-tested, incl. the two fixes below):**
+  - `domain/plan/lib/templateChangeEvents.ts`: tiny store (`notifyTemplateChangesChanged`, `subscribe…`, `version`);
+    `templateChangeApi` create / edit / withdraw / approve / reject notify after success (`notifying()`).
+    `useTemplateChanges.ts`: `useTemplateChangesVersion()` (`useSyncExternalStore`), `usePendingDraftCount(enabled)`
+    and `usePendingDrafts()` (both + `useAutoRefresh` 2 min); `useBizChangeRequests` now also reloads on the version.
+  - `AppLayout`: 設定 menu entry **承認待ち** (`/settings/approvals`, after 予定テンプレート設定); for admins
+    (`templateWriteMode === "direct"`) an antd `Badge` with the pending count on the 設定 button and on the menu entry
+    (`.nav-badge`); the hook is called before the layout's early returns with `enabled` false until admin.
+  - `features/plan-settings/ApprovalsPage.tsx`: all pending drafts oldest first, client filter `?client=`, columns
+    書いた日時 / 業務 (link `/settings/templates?biz=&template=`) / テンプレート / 種類 / 書いた人 / 見る; 見る loads the
+    live template (`templateApi.list(biz)`) then opens `DraftViewModal`; its 直す navigates to the template page.
+  - `TemplateHistoryDrawer.tsx` + 履歴 button on every template row (everyone; actions column 320 px): history newest
+    first in a `Collapse` (header: time, kind, 直接の保存 / status, self, drafter → decider; body: decision note +
+    summary table with `summaryBaseline` → 変更前 for approved). **Bug found by the jsdom check and fixed:** the
+    newest entry never opened — `defaultActiveKey` is read on the first render only, which happened with no rows
+    while loading; now the Collapse renders once rows exist, keyed by the newest id.
+  - **Also fixed in `DraftViewModal` (D.6a race, found by the jsdom check):** for one render after opening, no
+    preview had started yet (`running` 0, `loading` false), so 承認する was briefly enabled before the effect.
+    Now `previewPending` = showPreview && (loading || running > 0 || no data and no error).
+  - Checked: `npm run build`; jsdom check `domtest/d6b_dom.tsx` with the real `AppRoutes` in a `MemoryRouter` on
+    `plan_check` **13/13** (admin badge = count, page rows + link, 見る → window with preview, approve → row gone and
+    badge −1 at once, no dialog left, client filter empty state, history 3 entries newest first + newest open with
+    変更前, releaser: no badge + "admins decide" text); `approve_dom` / `reject_dom` still pass. Cleanup helper
+    `cleanup_d6b.py` (withdraws HARNESS_D6B* drafts, deletes the templates) — a failed jsdom run leaves them behind.
+  - **User's browser test, two more issues (fixed before committing D.6b):**
+    1. **TimePicker needed an OK click** (users forgot it → the value did not change). All five TimePickers
+       (`TemplateFormModal` ×2, `BizSettingsPanel`, `ScheduleFields` ×2) now have `needConfirm={false}`: picking applies at once.
+    2. **Deadlock on "no changes" in the releaser form:** `onFinish` sets `submitting` before the preview request,
+       then `save` → `saveDraft` returned early on a null body (「変更がありません」) **without clearing `submitting`** →
+       form and キャンセル disabled, and reopening did not reset it. Fix: `saveDraft` clears `submitting` whenever the
+       body is null; the open effect also resets `submitting` / `checking`. jsdom check `domtest/form_dom.tsx` (draft
+       mode, releaser): **9/9** (no-change warning with usable キャンセル / 保存 / fields, X + reopen clean, an hour
+       picked without OK applies, the saved draft carries it); **against the old form it fails exactly like the
+       user's report** (キャンセル / fields disabled, still after reopen). Cleanup helper `domtest/cleanup_form.py`.
+- **D.6a committed `c8c370f` (frontend; the N+1 fix is its own commit `a7f2697`):**
+  - `templateChangeApi.approve(id, note?)` (trims; blank → null) and `reject(id, reason)`.
+  - `templateDraft.summaryBaseline(change, current)` → `{template, label: "変更前" | "今"}`: approved changes use
+    `before_values` (incl. `dates`, works when the template is gone), others the current template.
+  - `DraftViewModal` rewritten: preview of pending drafts loaded on open for `canPreviewPlanSettings` (admin +
+    releaser) via `templateChangeApi.preview` with `TemplatePreviewPanel` (create / update modes, 3 / 6 / 12 months);
+    a preview error is shown as "このままでは承認もできません"; admins (`templateWriteMode === "direct"`) get 差し戻す
+    (reason required, OK disabled while blank) and 承認する (optional note; warning line when it is their own draft;
+    disabled while the preview loads) in a small inner modal; decisions reload via `onChanged`; summary column title
+    = the baseline label. CSS `.draft-preview`.
+  - **User's browser test: "loading is too long when approving with a comment".** Measured on `plan_check`: approve
+    0.07–0.45 s ≈ a direct save, so approval itself is fine; **a running preview of the same template holds the
+    template row lock (dry run, FOR UPDATE) and approve waits for it** (approve during a 12-month preview: 3.36 s vs
+    0.45 s). Switching 3 / 6 / 12 months starts a new preview while the old one still runs on the server. Fix in
+    `DraftViewModal`: count in-flight previews (`running`), 承認する disabled until all have returned (stale results
+    ignored); while approving, an info line 「反映しています…」 and the dialog can't be cancelled / closed. (React
+    StrictMode is on, but it double-runs effects only on mount, and this window is mounted before it opens — not a
+    cause.) **The user retested: still ~10 s (MOCK0002, rrule) and asked for the backend root cause** → next bullet.
+  - **Root cause found and fixed (backend, `order_sync` N+1):** a template change moves every slot in the generated
+    range (the calendar extends `materialized_until` up to 2 years → a daily template = 730 slots), and
+    `order_sync._apply` ran 3 queries per slot: `live_instance_for_slot`, `get_active_for_slot` (FOR UPDATE) and
+    `links.refresh_order` → `biz_dependency_repo.get_for_biz` (same business every time). Profile on `plan_check`,
+    template 23 materialized 730 days: **approve 5.48 s / 2,211 statements → 0.67 s / 24**; preview 5.58 s → 0.48 s.
+    With a SAME_OCCURRENCE_DATE dependency on the downstream template the per-order link refresh (+ a `db.flush()`
+    per order that broke the batched UPDATE / INSERT) cost 4.1 s / 2,942 → **0.82 s / 24**. Fix:
+    `slot_events.live_instances_for_slots` (one query per template; same matching as the single version),
+    `ope_order_repo.get_active_for_slots` (one FOR UPDATE query per template, ordered by id),
+    `order_sync.apply_slot_changes` prefetches both and runs inside `links.definitions_cached(db)` (definitions read
+    once per business per follow-up, kept in `db.info`), `_apply(db, change, now, live, order)`; `_find_order` kept
+    for `create_missing_orders`; `links.refresh_order(..., only_time_based=True)` from `_slot_moved` when only times
+    changed — re-resolves only LATEST_BEFORE definitions (same-date / same-sheet-event links depend only on the slot
+    key, which a time change never alters). The preview holds row locks by design (it runs the real save and rolls
+    back — Level 1 decision), now only ~0.5 s. HTTP on `plan_check`: approve 0.56 s, 12-month preview 0.81 s (was
+    2.66 s). **Still per order (not fixed, told the user):** creating / cancelling hundreds of orders (a rule change,
+    e.g. MO/WE/FR → DAILY creates 417 orders: 1.2 s, with a dependency 3.4 s) — one INSERT per order for its id + link
+    resolution per order. Regression test `tests/test_order_sync_batching.py` (2; < 60 statements for ~400 moved
+    orders, links unchanged): **fails on the old code (1,221 / 2,819 statements)**, passes now. **User confirmed on
+    the dev DB: "lightning fast".**
+  - **Bug found by the user after that: the approve dialog stayed on 「反映しています…」 after success and could not
+    be closed.** Reproduced in jsdom (scratchpad `domtest/`: jsdom 24 + @testing-library/react 14 installed there, NOT
+    in the project; `dom_setup.ts` + `approve_dom.tsx` / `reject_dom.tsx`, esbuild with react / react-dom / antd
+    aliased to `frontend/node_modules`, `--external:jsdom`, run with `NODE_PATH=domtest/node_modules`). Cause:
+    **antd / rc-dialog does not re-render a closed modal's content (`MemoChildren shouldUpdate = visible ||
+    forceRender`)**; the decision modal was nested inside the 下書きを見る modal, both closed in one render, so the
+    inner one froze with busy=true. Fix: render the decision modal as a sibling (fragment). `TemplateFormModal`'s
+    nested preview modal is safe because the outer one has `forceRender`. **Lesson: never nest a modal whose state
+    changes while the outer modal closes, unless the outer has `forceRender`.** jsdom check after the fix: approve
+    and reject both close everything, server status approved / rejected. Full suite 278
+    (276 + 2) — the suite itself got faster (2 m 54 s vs ~4 m). `plan_check` template 23 is now materialized ~2 years.
+  - Checked: `npm run build`; harness `d6a_harness.ts` on `plan_check` **19/19** (releaser 403 on approve, releaser
+    preview, approve with trimmed note, applied at once, approved baseline = 変更前 (today's values would show
+    06:50→06:50), dates baseline + summary, blank reject 422, reject with reason, rejected baseline 今, self-approved,
+    approved delete summarised from before values after the template is gone, history order). **The window itself
+    (preview panel inside, inner modals, buttons) was not rendered — the user clicks through.**
+- **D.5b committed `98ad5d6` (frontend only; user browser-tested the releaser flow on the dev DB):**
+  - `TemplateFormModal`: prop `canSave` → **`mode: "direct" | "draft" | "preview"`** + optional `draft`
+    (`TemplateChange`; opens prefilled via `formValuesOfDraft`, save = `templateChangeApi.edit`). Draft mode: titles
+    「予定テンプレートの変更を下書き」 / 「新しい予定テンプレートを下書き」 / 「下書きを直す」, info `DRAFT_NOTE`, button
+    下書きとして保存, the confirmation window's button この内容で下書きを保存; `saveDraft` = `updateDraftBody` /
+    `createDraftBody` in ONE call, "変更がありません" when null, errors via `draftErrorText`, success
+    `DRAFT_SAVED_MESSAGE`. Same preview rule as admins (window only when `generation_changed`). Admin path unchanged.
+    **User's browser test (MOCK0002, dev DB):** a wrong time was drafted, then 直す set it back to the live value →
+    「変更がありません」 and the useless draft stayed pending. Fix (user approved the wording): when 直す makes the
+    draft equal to the live template, `saveDraft` asks 「今の設定と同じになりました。この下書きを取り下げますか？」
+    (取り下げる / 戻って直す) and withdraws on OK. Checked on `plan_check`: a +1 h draft on all 19 templates saves,
+    setting the time back gives `updateDraftBody` → null on all 19; the dialog itself only in the browser.
+  - `PlanSettingsPage`: `writeMode = templateWriteMode(me)`; name cell gets a gold 承認待ち tag (tooltip: drafter +
+    time from the loaded pending list); actions column always shown: 下書きを見る (anyone, when pending), direct →
+    編集 / 削除, draft → 変更を下書き / 削除を依頼 (confirm → delete draft); all four disabled with the
+    `pendingDraftReason` tooltip while pending. New button 新しいテンプレートを下書き for releasers. Header note
+    「変更は下書きとして保存し、業務管理者が承認します」. Admin delete error maps TEMPLATE_DRAFT_PENDING to Japanese.
+  - New `ChangeRequestsPanel.tsx` (the 変更依頼 section above the table; hidden when empty; pages of 10 when > 10
+    rows), `DraftViewModal.tsx` (状態 / 業務 / 書いた人 / 決めた人 / 理由, summary table 項目・今・下書きの内容 with
+    calendar + sheet names, drafter's 取り下げる (confirm) and 直す; "今 = the current value" note for decided ones;
+    D.6 adds 承認 / 差し戻し here), hook `domain/plan/hooks/useTemplateChanges.ts` (`loadBizChangeRequests` +
+    `useBizChangeRequests`: pending of the biz + my drafts decided within 30 days). CSS `.change-requests`,
+    `.draft-tag`, `.draft-meta`, `.draft-after`. The sheet page keeps the releaser check-only mode (sheets are out of
+    Level 2).
+  - Checked: `npm run build`; harness `d5b_harness.tsx` (esbuild `--jsx=automatic` + react / react-dom aliases to
+    `frontend/node_modules`, `--loader:.css=empty`) on `plan_check` **19/19**: each button's API path (変更を下書き with
+    and without the window, 直す, 削除を依頼, 新しいテンプレートを下書き, 取り下げる), admin 409 texts, the panel data
+    (pending, rejected reason, 30-day cut) and **the panel rendered with `react-dom/server`** (SSR inserts `<!-- -->`
+    between text parts — strip before matching). D.5a harness still 33/33. **No jsdom here → the modals, tooltips
+    and disabled buttons were not rendered; the user clicks through.** `plan_check` releaser 5 now has ~27 decided
+    drafts on biz 1 from harness runs.
+- **D.5a committed `34f37f8`.** As built (frontend only, no visible change):
+  - `domain/plan/types`: `TemplateChange`, `TemplateChangeKind`, `TemplateChangeStatus`, `TemplateDraftInput`
+    (create / update / delete union), `TemplateUpdateDraftInput`, `TemplateDraftPreview`.
+  - `domain/plan/api/templateChangeApi.ts` (exported from `api/index.ts`): `list(filter)`, `count(filter)`, `get`,
+    `history(templateId)`, `create`, `edit`, `withdraw`, `preview(changeId, months)`.
+  - `domain/plan/lib/templateChanges.ts`: `CHANGE_STATUS_LABEL` (承認待ち / 承認済み / 差し戻し / 取り下げ) +
+    colors, `CHANGE_KIND_LABEL` (新規作成 / 変更 / 削除), `templateWriteMode(staff)` → direct (admin, also admin +
+    releaser) / draft (releaser without admin) / none, `canChangeOwnDraft`, `pendingDraftReason(template)`,
+    `decidedWithin(change, now, 30)`, `draftErrorText(e)` (Japanese for TEMPLATE_DRAFT_PENDING / CHANGE_DECIDED /
+    CHANGED_MEANWHILE / FORBIDDEN / "changes nothing").
+  - `features/plan-settings/templateDraft.ts`: `changedFields(updateInput, template)` (keeps only differing fields),
+    `updateDraftBody(form, template)` (null when nothing changes; dates via `diffDates`), `createDraftBody`,
+    `deleteDraftBody`, `proposedTemplate(change, template)`, `templateOfCreateDraft(change)`,
+    `formValuesOfDraft(change, template|null)` (prefill for 直す), `changeSummary(change, template, names?)` →
+    `{label, before, after}` lines (deadline fields grouped into one 締切 line; dates 指定日を追加 / 外す; create =
+    main fields with before "—"; delete = one line; sheet / calendar names via optional resolvers).
+  - **Found and fixed while checking:** an untouched form looked like a display change on 10 of the 19 `plan_check`
+    templates — the form always sends `ui_metadata.category`, older templates have none (or `ui_metadata` null).
+    `comparable()` now compares display settings with `categoryOf()` (missing = 定例).
+  - Checked: `npm run build`; esbuild harness `d5a_harness.ts` (scratchpad, imports `cookie_fetch.ts` first) against
+    uvicorn 8001 on `plan_check`, releaser 5 / admin 8: **33/33** (write modes, only changed fields, draft written,
+    pending_change_id + reason, summary lines, prefill + round trip, preview, edit, 409 + Japanese text, dates draft,
+    create draft round trip + summary + preview, delete summary, list / count / get, withdraw + decided text,
+    history); `d5a_all.ts`: unchanged form → no draft on **all 19** templates. Harness templates `HARNESS_D5A_*`
+    deleted at the end; its drafts withdrawn.
+  - **`README.md` is modified in the working tree by the user (project description in Japanese) — not mine; leave it
+    out of my commits.**
+- **D.4 committed `6dc1b15`.** As built (no migration). User's decisions before D.4 (both as I
+  recommended): **reads open to any logged-in active staff** (like every `/plans` GET; `test_reads_need_a_login_but_no_role`
+  covers them); **the approval preview covers every draft kind** (fields, specified dates, delete, create).
+  - Reads (`src/domain_plan/router.py`): `GET /plans/template-changes?status=&biz_id=&template_id=&drafted_by=&limit=`
+    (1–500, default 100; **status=draft → oldest first** = approval queue, otherwise newest first by
+    coalesce(decided_at, drafted_at)) · `GET /plans/template-changes/count?status=draft&biz_id=&drafted_by=` →
+    `{count}` (default status draft; declared before `/{change_id}`) · `GET /plans/template-changes/{id}` ·
+    `GET /plans/templates/{id}/changes` (history newest first; deleted templates readable; unknown → 404).
+  - `PlanTemplateChangeResponse` + `drafted_by_name`, `decided_by_name`, `client_code`, `business_code`,
+    `business_name`, `template_name` (current name; for an unapproved create = the proposed `changes.name`), filled by
+    `template_changes.describe(db, changes)` (bulk: one query each for staff, biz incl. deleted, templates incl.
+    deleted). **Every draft endpoint (writes too) now returns described rows.** Repo `get_list` / `count` (shared
+    `_filtered`).
+  - `PlanTemplateResponse.pending_change_id` (null = none), set in `_with_next_occurrence` via
+    `get_draft_template_ids` (one query per list).
+  - Preview: `POST /ops/template-changes/{id}/preview?months=1..12` (releaser + admin = `PREVIEWERS`) →
+    `TemplateDraftPreview {change_id, kind, create: TemplateCreatePreview | null, change: TemplateChangePreview | null}`;
+    only DRAFT (else 409 `TEMPLATE_CHANGE_DECIDED`). `coordination/template_preview.py`: diff core extracted to
+    `_preview_change(db, template_id, months, apply)` (`apply(since, until)`; one `now` for before and after);
+    `preview_template_draft` applies like approval (fields → dates, or delete). Plan: `dry_run_update` gained
+    `add_dates` / `remove_dates` (skips the field update when no field is set); new public `dry_run_delete`.
+  - `test_template_preview.py` route count of `/ops/*/preview` 2 → 3. OpenAPI exported + `npm run gen:api` (also
+    brings D.2's error codes into `schema.gen.ts`); `npm run build` passes. Avoid `Result.tuples()` (deprecated in
+    SQLAlchemy 2.1 — it raised 12 warnings).
+  - Checked: `tests/test_template_change_reads.py` 9 (list order / filters / count / names, history after delete,
+    pending_change_id, **preview == approval result** for update, dates, delete, create; decided → 409; route roles);
+    full suite **276 passed**; pyright 0. HTTP harness `reads_harness.py` on `plan_check` **21/21** (operator reads,
+    401 without login, operator preview 403, dates / create / delete previews, approval matches the preview, own
+    template `HARNESS_READS` deleted at the end via an approved delete draft; the create draft withdrawn).
+- **D.3 committed `05a5acb`.** As built (no migration). User's decisions before D.3: **A = pending
+  drafts block deleting their business**; all my calls approved (below).
+  - `POST /plans/template-changes/{id}/approve` (admin; body `TemplateChangeApprove {note?}` optional — a POST with no
+    body works) → `template_changes.approve_draft`: locks the draft, then (update / delete) the template; applies via
+    `_apply_template_create` / `_apply_template_update` (if fields) + `_apply_explicit_dates` / `_apply_template_delete`
+    in one transaction (orders follow like a direct save); then sets `template_id` (create), `before_values`,
+    `applied_revision`, status, decided_by / at, note **all at the end** (setting `before_values` early made autoflush
+    write a DRAFT row with before values → CHECK violation; the constraints caught it). A failing apply → nothing
+    changes, draft stays DRAFT (tested by making the dates step fail after the field update). No revision check.
+    Self-approval allowed (`self_approved` in the response).
+  - `POST /plans/template-changes/{id}/reject` (admin; `TemplateChangeReject {reason}` required, stripped, 1–500) → REJECTED,
+    template untouched. Decided drafts → 409 `TEMPLATE_CHANGE_DECIDED` for approve / reject too.
+  - Direct saves: `create_template` / `update_template` / `delete_template` / `add_explicit_dates` /
+    `remove_explicit_date` take `actor_id: int | None = None`; the API passes `current_staff.id` → `_record_direct_change`
+    writes an APPROVED `is_direct` row (drafted = decided = admin, `base_revision` + `before_values` for update / delete,
+    `applied_revision`). Rows only when something changed (`template_settings` before ≠ after; dates: only the new ones
+    are listed). No actor (tests, service calls) → no row. Restore records nothing.
+  - `coordination/master_guards.business_template_drafts_pending` → biz delete refused: "N template draft(s) waiting
+    for approval; approve, reject or withdraw them first". (Existing narrow race, same as the template check: biz delete
+    doesn't lock the biz row.)
+  - **Bug found by the HTTP harness and fixed here (it was in committed D.2):** a draft changing only the name (or only
+    display / deadline-warning fields) was refused as "changes nothing". Sessions run with `autoflush=False`; a
+    name-only update writes nothing, and the following `_apply_explicit_dates([], [])` re-locked the template with
+    `populate_existing`, which reloaded the row and dropped the unflushed rename. Fix: `_apply_template_update` ends with
+    `db.flush()`; `_apply_explicit_dates` returns early when there is nothing to add / remove. **Lesson: any
+    `get_locked(... populate_existing)` after unflushed changes silently discards them — flush first.**
+  - Checked: `tests/test_template_approval.py` 14 (update / create / delete / dates approvals with orders following;
+    name / display / warn-only drafts applied (regression); self-approval; failing approval atomic; reject; decided →
+    409; direct rows only on change and only with an actor; dates rows list only new dates; biz delete refused while a
+    draft waits; approve / reject admin-only); full suite **267 passed**; pyright 0. HTTP harness `approval_harness.py`
+    on `plan_check` **16/16** (its own template `HARNESS_APPROVAL`, deleted at the end through an approved delete
+    draft; the aborted first run's template 53 deleted by admin DELETE).
+- **D.2 committed `bab603f`.** As built (no migration):
+  - Endpoints (releaser + admin, login): `POST /plans/template-changes` (body switched by `kind`: `create` +
+    `template` = POST body / `update` + `template_id`, `changes` = PATCH body, `add_dates`, `remove_dates` / `delete` +
+    `template_id`) → 201 `PlanTemplateChangeResponse` (`self_approved` computed); `PUT /plans/template-changes/{id}`
+    (drafter replaces the whole draft; kind + template fixed → 400; delete draft → 400 "nothing to edit");
+    `POST /plans/template-changes/{id}/withdraw` (drafter). Not the drafter → 403 (admins too: they reject in D.3);
+    decided draft → 409 `TEMPLATE_CHANGE_DECIDED`.
+  - `src/domain_plan/template_changes.py`: `_check_draft` runs the real `_apply_template_create` /
+    `_apply_template_update` + `_apply_explicit_dates` / `_apply_template_delete` inside `dry_run` (rolled back; the
+    `after_rollback` hook of slot_events drops pending slot changes, so nothing reaches orders); "changes nothing"
+    = `template_settings()` equal before / after → 400. The dry-run rollback releases the row lock, so before saving it
+    re-locks the template, re-checks pending drafts and compares `template_settings` with the checked state → 409
+    `TEMPLATE_CHANGED_MEANWHILE`. A unique-index race on commit → 409 `TEMPLATE_DRAFT_PENDING`. Stored `changes`:
+    create = `model_dump(mode="json")`, update = `exclude_unset` (reads back with `model_validate`, tested).
+  - `services.py`: `refuse_if_draft_pending(db, template_id, except_change_id)` (409 `TEMPLATE_DRAFT_PENDING`, names
+    the change id + drafter) called under the template row lock by `update_template`, `delete_template`,
+    `add_explicit_dates`, `remove_explicit_date`, `restore_template`. New non-committing `_apply_explicit_dates(add,
+    remove)` (one regeneration) and `_apply_template_delete` (the public functions use them; behaviour unchanged).
+    `template_settings(template)` = JSON snapshot of `TEMPLATE_SETTING_FIELDS` (biz, type, every PATCH field) + `dates`
+    for specified-dates templates — D.3 uses it for `before_values`. Single-occurrence changes, one-offs, preview,
+    sheets and calendars are not blocked.
+  - New error codes `TEMPLATE_DRAFT_PENDING`, `TEMPLATE_CHANGE_DECIDED`, `TEMPLATE_CHANGED_MEANWHILE` (frontend
+    `schema.gen.ts` not regenerated yet — OpenAPI export + `npm run gen:api` is planned for D.4).
+  - Checked: `tests/test_template_drafts.py` 13 (nothing changes: settings, revision, instances, voids, orders, order
+    events; errors equal the real save; one pending draft blocks drafts + PATCH / DELETE / dates; single-occurrence
+    changes not blocked; edit / withdraw rules; route roles); `test_plan_settings_guard.py` allowlist gained the three
+    draft routes; full suite **253 passed**; pyright 0. HTTP harness `drafts_harness.py` (scratchpad) on `plan_check`
+    via uvicorn 8001, releaser 5 / admin 8 / operator 4: **29/29** (401 / 403 / 422s for body errors, 400 / 404 like
+    PATCH, 409s, preview still works, withdraw frees PATCH; every draft it wrote is withdrawn, template settings as
+    at the start — `plan_check` keeps the withdrawn change rows).
+- **D.1 committed `67d0d81`:** migration **`e7f9acb3d34a`** (revises `b4e8d2a6c913`) →
+  **the user runs `alembic upgrade head`**. Table `plan_template_change` (`src/domain_plan/models.py` §6):
+  `biz_master_id`, `template_id` (NULL for a create until approved), `kind` CREATE / UPDATE / DELETE, `status` DRAFT /
+  APPROVED / REJECTED / WITHDRAWN (enums stored as member names), `is_direct`, `base_revision`, `changes` JSONB
+  (create = full body incl. `dates`; update = PATCH body with only set fields; delete = NULL), `add_dates` /
+  `remove_dates` DATE[] (update only), `before_values` JSONB + `applied_revision` (set on approval), drafted_by /
+  drafted_at / updated_at, decided_by / decided_at / `decision_note`. Partial unique index
+  `uq_plan_template_change_one_draft` (template_id WHERE DRAFT); 10 CHECK constraints spell the state rules (see the
+  model). **JSONB columns use `none_as_null=True`** — without it Python `None` is stored as JSON `null` and the
+  `IS NULL` checks break. FKs RESTRICT (history must not vanish). No rows for existing templates: history starts with
+  the first change after the migration. Repo `plan_template_change_repo` (`repositories/Plan.py`, flush only): `add`,
+  `get`, `get_locked`, `get_draft_for_template`, `get_draft_template_ids`, `get_drafts(biz_master_id?)`,
+  `count_drafts`, `get_history` (newest first by decided_at, else drafted_at).
+  Checked: tests `tests/test_template_change_model.py` 23 (client prefix **`"I"`, shared** with
+  `test_template_preview.py` — fine, the pool is per prefix per run); full suite **240 passed**; pyright 0;
+  on `plan_check`: upgrade → `alembic check` no drift → downgrade (both enum types dropped, checked in `pg_type`) →
+  upgrade; `plan_check` is at `e7f9acb3d34a`.
+
+### Handoff 2026-11-10
 
 - **`main` = merge `61f796f` + one handoff commit on top (local, NOT pushed; `origin/main` = `6390c87` — the user
   pushes).** Working tree clean, no open branch. **Tests 217**, pyright 0, frontend build passes, **no migration since
@@ -18,9 +347,13 @@ merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the 
 - **The user's decisions at the end of the day (2026-11-10):**
   - **The MVP pilot is postponed.** (The first server run was already postponed for IP configuration.) No go-live
     work is expected next session unless the user says so.
-  - **Next phase, primary goal = "Level 2": a Draft → Approve → Active lifecycle for the core settings that have no
-    version control — templates AND sheet imports — "just like SOPs".** The user wants to "spare no effort" on this
-    architectural gap. Start the next session with questions (with a recommended option) and a step plan, as always.
+  - **Next phase, primary goal = "Level 2": a Draft → Approve → Active lifecycle for TEMPLATES ONLY, "just like
+    SOPs".** The user wants to "spare no effort" on this architectural gap. Start the next session with questions
+    (with a recommended option) and a step plan, as always.
+  - **Corrected 2026-11-11 (user): sheet imports get NO draft state / version control** — sheets are updated very
+    rarely; the user had said so before and my 2026-11-10 note ("templates AND sheet imports") was wrong. Admins
+    import directly as today; releasers keep the check-only import window. Business settings are out of Level 2 too
+    ("Templates ONLY"). Fixed in the design doc rev 109.
 - **Level 2: what is already decided** (§2 "Safer changes"; design doc rev 107, open-questions item "Safer changes to
   businesses and templates"): releaser drafts, **only admin approves**; a non-admin drafter cannot approve their own
   draft; an admin may approve their own draft or apply directly; approval applies **immediately**; **one pending draft
@@ -29,18 +362,7 @@ merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the 
   **Do NOT propose effective-dated / scheduled versions for templates** — the user dropped that for good on
   2026-11-10 ("superfluous"). "Like SOPs" means the draft → approve → active states, not the SOP effective date; if
   the user now wants a start date after all, they must say so — ask, do not assume.
-- **Level 2: open questions to bring to the user first:**
-  1. Four-eyes when one person holds both releaser and admin (most of the flat team has several roles).
-  2. What a **draft of a sheet import** is: the uploaded JSON held until approval (simplest; the browser-side summary
-     already exists in `sheetImport.ts`, the server would need to store the file and its computed effect), or draft
-     dates on the sheet itself. Also whether single-date edits and rule markers on a sheet need the lifecycle.
-  3. Whether **business settings** (release mode / time / days-before) join the lifecycle — the user's 2026-11-10
-     wording is "all core settings"; earlier we said a business needs no draft state, only an affected-orders preview
-     and a change history. Re-ask.
-  4. How a draft stays valid when the live template / sheet changes before approval (the "one blocking draft" rule
-     covers templates; sheets and calendar changes are not covered).
-  5. Data model: a pending copy linked to the live template (my earlier sketch) vs version rows like `SOPVersion`.
-     Needs a migration either way → **remind the user to run `alembic upgrade head`**.
+- **Level 2 open questions:** all answered on 2026-11-11 (see the block above).
 - **Building blocks Level 2 can reuse:** the dry run (`src/infrastructure/dry_run.py`, `plan_services.dry_run_update /
   dry_run_create`, `coordination/template_preview.py`) gives the approval dialog its "what will change" for free;
   `canPreviewPlanSettings` / the `canSave` and `canImport` check-only modes are where "save as draft" buttons go;
@@ -130,7 +452,7 @@ merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the 
   `alembic upgrade head` (head `b4e8d2a6c913`) and `python scripts/set_password.py system` (staff 1, login `system`,
   has system_admin + operator / checker / releaser but **not admin** — grant 業務管理者 to edit settings). **Both
   confirmed by the user 2026-11-06.** The two Task Scheduler jobs on their PC stay for the dev DB; the server uses `worker`.
-- **DB:** latest Alembic head **`b4e8d2a6c913`**. Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
+- **DB:** latest Alembic head **`e7f9acb3d34a`** (plan_template_change, Level 2 D.1, 2026-11-11; before it `b4e8d2a6c913`). Chain: `ceee1634d6a7` (squashed init) → `34bdbd214739` →
   `9ee3f3e0624e` → `9b2ec314368a` → `3493c39bdf43` → `5c1f7d2a9e04` → `568c3287c359` (staff) → `f9bbe9648f15` (biz
   release settings) → `9e1bcef6cbc7` (ope tables) → `5eede5808433` → `971958268657` (step template condition /
   is_blocking) → `966b78ff950f` (ope_step, ope_step_event) → `6c8cc87274c8` (ope_step.retired_at) → `2904467fd7b9`
@@ -141,13 +463,13 @@ merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the 
   **Never run alembic against `dev_db` myself.** The user runs `alembic upgrade head`; their uvicorn on 8000
   auto-reloads, so a model change without the migration returns 500 until they upgrade. **Warn them whenever a step
   adds a migration.** On the server the `app` container migrates at start.
-  **`plan_check`** (throwaway, mine) is at `b4e8d2a6c913`. Seeded: client `MOCK` (+ test clients `Z8E4`, `YA64`), biz 1
+  **`plan_check`** (throwaway, mine) is at `e7f9acb3d34a`. Seeded: client `MOCK` (+ test clients `Z8E4`, `YA64`), biz 1
   `MOCK0001` (approved SOP `v9.26817.0` current; draft id 6 `v9.1793927904.0-http` with 2 steps), biz 2 `MOCK0002`
   (LIGHTWEIGHT + AUTOMATIC `data_received`, daily template 23), calendar `JP_BANK` id 1, the mock sheet. Staff (every id
   N has password **`check-pass-N`**): 1 `check-admin` (system_admin), 2 suspended, 3 viewer+auditor, 4 operator
   `http-operator-1793324910`, 5 releaser `http-releaser-1793324911`, 6 / 7 checkers, 8 admin `http-admin-6eb1ee`, 9 / 10
   signal_sender. Many open orders past their deadline (good for 遅れ / attention / SLA checks).
-- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **214 passed**,
+- **Tests:** `pytest tests/ --ignore=tests/client_biz_check.py --ignore=tests/client_biz_check2.py` → **278 passed** (2026-11-11),
   ~3–8 min. Runs against `test_db` via `tests/conftest.py` (`create_all`, no migrations; the order-sync listener —
   and with it the biz dependency / template listeners and the master guards — is registered there). **Every new test
   file uses `from tests.client_codes import new_client_code` with its own prefix letter**; used: T D B O S A R V P K M
@@ -193,7 +515,7 @@ merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the 
 Design doc (Claude Docs): https://claude.ai/artifact/W4XgfnPTH4iJPstx362xpV — the source of truth for this section.
 Decided in the doc's comments (2026-10-28): SOP version + steps **freeze at release**.
 Before building any phase, re-read the doc: the team may have edited or commented on it.
-**Last rev written by me: 107 (2026-11-10: revs 105–107 add the milestone + "pilot postponed, next phase = level 2" to the status paragraph, retitle Level 2 as the primary goal of the next phase and widen its scope to sheet imports with four open points; rev 104 adds "Who can use it" (releasers preview, admins save; import summary for releasers) to the Level 1 item; revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 107}` to see only newer edits, and
+**Last rev written by me: 124 (2026-11-11: revs 108–124 = Level 2 in the "Safer changes" item — scope corrected to templates only, the decisions, D.1–D.6 built, the N+1 note; status paragraph notes Level 2 is built on its branch; finer-permissions item updated). Before that 107 (2026-11-10: revs 105–107 add the milestone + "pilot postponed, next phase = level 2" to the status paragraph, retitle Level 2 as the primary goal of the next phase and widen its scope to sheet imports with four open points; rev 104 adds "Who can use it" (releasers preview, admins save; import summary for releasers) to the Level 1 item; revs 102–103 add "Work that has started keeps its occurrence" after the table in "Propagating plan changes to orders" and replace the "two occurrences today" sentence in the Level 1 item; revs 100–101 mark Level 1 as built in the "Safer changes" item, with how it works and the accepted "two occurrences today" behaviour; rev 96 open-questions item "Safer changes to businesses and templates" (level 1 preview, level 2 drafts + its rules); revs 97–99 removed the "Level 3" scheduled-versions sentence from it at the user's request; rev 93 open question "Finer permissions for settings" at the end of the open-questions list; revs 94–95 in the "Go-live" paragraph "Reference sheets are not used at go-live" → sheets are part of go-live, JSON converted by the team, import screen with two modes, and the status paragraph notes the postponed first run; before that 2026-11-06: "Go-live" paragraph after "MVP deployment" — rev 91 wrote it: pilot client, screens for master data, setup_calendar.py, no sheets, USB zip + fresh folder, GO-LIVE.md; rev 92 replaced "internet still being checked" with the proxy build, optional company certificate, package + install scripts)** — read with `{"kind": "view", "sinceRev": 124}` to see only newer edits, and
 query comments with `afterSeq: 24`. Doc ids: project `eb57297f-757b-4c1e-9116-9e545b1abd76`, body node `9e7b6bb0-1c80`.
 The delivery-phase list in the doc carries the build status (phases 1–7 plus 8 deadlines and 9 SLA report, built and merged; rev 77). Rev 77 also added: SLA report and dashboard tabs bullets, latest-before note under phase 6, ope_order deadline columns in the data model.
 

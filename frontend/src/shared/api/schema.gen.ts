@@ -744,6 +744,7 @@ export interface paths {
          * Create Template Endpoint
          * @description テンプレートを作成し、今から90日先までのインスタンスを生成します。
          *     template_type により必須項目が変わります（rrule / explicit_dates / reference_sheet_based）。
+         *     変更の履歴に「業務管理者の直接の保存」として残ります。
          */
         post: operations["create_template_endpoint_plans_templates_post"];
         delete?: never;
@@ -763,13 +764,17 @@ export interface paths {
         get: operations["get_template_endpoint_plans_templates__template_id__get"];
         put?: never;
         post?: never;
-        /** Delete Template Endpoint */
+        /**
+         * Delete Template Endpoint
+         * @description 論理削除。変更の履歴に残ります。承認待ちの下書きがある間は 409。
+         */
         delete: operations["delete_template_endpoint_plans_templates__template_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Template Endpoint
          * @description 生成に影響する項目を変更するとリビジョンが上がり、未来のインスタンスが再照合されます（過去分は不変）。
+         *     何かが変われば、変更の履歴に「業務管理者の直接の保存」として残ります。承認待ちの下書きがある間は 409。
          */
         patch: operations["update_template_endpoint_plans_templates__template_id__patch"];
         trace?: never;
@@ -802,7 +807,7 @@ export interface paths {
         put?: never;
         /**
          * Add Explicit Dates Endpoint
-         * @description 顧客指定日を追加します(登録済みの日付は無視)。
+         * @description 顧客指定日を追加します(登録済みの日付は無視)。足した日付は変更の履歴に残ります。
          */
         post: operations["add_explicit_dates_endpoint_plans_templates__template_id__dates_post"];
         delete?: never;
@@ -821,8 +826,167 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remove Explicit Date Endpoint */
+        /**
+         * Remove Explicit Date Endpoint
+         * @description 顧客指定日を外します。変更の履歴に残ります。
+         */
         delete: operations["remove_explicit_date_endpoint_plans_templates__template_id__dates__local_date__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/template-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Template Changes Endpoint
+         * @description テンプレートの変更依頼の一覧（ログインしている職員なら誰でも）。承認待ち（status=draft）は古い順＝承認の順番待ち、
+         *     それ以外は新しい順。差し戻された新規作成の下書き（テンプレートが無い）も、drafted_by などで探せます。
+         */
+        get: operations["list_template_changes_endpoint_plans_template_changes_get"];
+        put?: never;
+        /**
+         * Create Template Draft Endpoint
+         * @description テンプレートの変更の下書きを作ります。kind で種類を選びます:
+         *     - `create`: 新しいテンプレート（template = POST /plans/templates と同じ本文）
+         *     - `update`: 項目の変更（changes = PATCH /plans/templates/{id} と同じ本文）と、指定日の追加・削除（add_dates / remove_dates）
+         *     - `delete`: テンプレートの削除
+         *
+         *     本物の保存と同じ処理で確かめ（何も保存しない試し実行）、誤りは直接の保存と同じエラーになります。何も変えない下書きは 400。
+         *     承認待ちの下書きがあるテンプレートには書けません（409 TEMPLATE_DRAFT_PENDING）。
+         */
+        post: operations["create_template_draft_endpoint_plans_template_changes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/template-changes/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count Template Changes Endpoint
+         * @description 変更依頼の件数（既定は承認待ち。メニューのバッジ用）。
+         */
+        get: operations["count_template_changes_endpoint_plans_template_changes_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/template-changes/{change_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Template Change Endpoint */
+        get: operations["get_template_change_endpoint_plans_template_changes__change_id__get"];
+        /**
+         * Edit Template Draft Endpoint
+         * @description 承認待ちの下書きを、書いた本人が直します（中身をまるごと置き換え。確かめ方は作成と同じ）。
+         *     種類と対象のテンプレートは変えられません。削除の下書きには直すところがありません。
+         *     本人以外は 403、承認・差し戻し・取り下げが済んだ下書きは 409 TEMPLATE_CHANGE_DECIDED。
+         */
+        put: operations["edit_template_draft_endpoint_plans_template_changes__change_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/template-changes/{change_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw Template Draft Endpoint
+         * @description 承認待ちの下書きを、書いた本人が取り下げます（記録は残る）。本人以外は 403。
+         */
+        post: operations["withdraw_template_draft_endpoint_plans_template_changes__change_id__withdraw_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/template-changes/{change_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Template Draft Endpoint
+         * @description 承認待ちの下書きを承認し、すぐに反映します（業務管理者。自分の下書きも承認できる）。
+         *     反映は直接の保存と同じ処理で、オーダーも同じように追従します。誤り（参照するシートが無いなど）は直接の保存と同じエラーで、
+         *     そのときは何も変わらず、下書きは承認待ちのまま。決まった下書きは 409 TEMPLATE_CHANGE_DECIDED。
+         */
+        post: operations["approve_template_draft_endpoint_plans_template_changes__change_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/template-changes/{change_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Template Draft Endpoint
+         * @description 承認待ちの下書きを差し戻します（業務管理者。理由は必須）。テンプレートは何も変わりません。
+         */
+        post: operations["reject_template_draft_endpoint_plans_template_changes__change_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/templates/{template_id}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Template History Endpoint
+         * @description テンプレートの変更履歴（新しい順。承認・差し戻し・取り下げ・業務管理者の直接の保存）。削除済みのテンプレートも読めます。
+         */
+        get: operations["get_template_history_endpoint_plans_templates__template_id__changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1136,6 +1300,29 @@ export interface paths {
          *     入力の誤りは、PATCH と同じエラーになります。リリース担当・業務管理者（保存そのものは業務管理者だけ）。
          */
         post: operations["preview_template_update_endpoint_ops_templates__template_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ops/template-changes/{change_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Template Draft Endpoint
+         * @description 承認待ちの下書きを、**今のデータで**当てはめたら何が起きるかを返します。**何も保存しません**（承認の画面用）。
+         *     承認と同じ処理・同じ順（項目 → 指定日、または削除）で試し実行するので、指定日の追加・削除やテンプレートの削除も確かめられます。
+         *     新規作成は `create`、変更・削除は `change` に入ります。決まった下書きは 409 TEMPLATE_CHANGE_DECIDED。
+         *     リリース担当・業務管理者（承認そのものは業務管理者だけ）。
+         */
+        post: operations["preview_template_draft_endpoint_ops_template_changes__change_id__preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2643,7 +2830,7 @@ export interface components {
          *     意味が直感的にわかるように、すべて大文字の文字列（スネークケース）で定義します。
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "FOUR_EYES" | "STAFF_NOT_ACTIVE" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "PASSWORD_CHANGE_REQUIRED" | "ACCOUNT_LOCKED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "ORDER_IN_PROGRESS" | "DELETE_FAILED_RECORD_IN_USE" | "INTERNAL_SERVER_ERROR";
+        ErrorCode: "BAD_REQUEST" | "IMMUTABLE_RECORD" | "UNAUTHORIZED" | "FORBIDDEN" | "FOUR_EYES" | "STAFF_NOT_ACTIVE" | "INVALID_CREDENTIALS" | "PASSWORD_EXPIRED" | "PASSWORD_CHANGE_REQUIRED" | "ACCOUNT_LOCKED" | "NOT_FOUND" | "RECORD_ALREADY_EXISTS" | "INSTANCE_ALREADY_VOIDED" | "ORDER_IN_PROGRESS" | "DELETE_FAILED_RECORD_IN_USE" | "TEMPLATE_DRAFT_PENDING" | "TEMPLATE_CHANGE_DECIDED" | "TEMPLATE_CHANGED_MEANWHILE" | "INTERNAL_SERVER_ERROR";
         /** ErrorResponse */
         ErrorResponse: {
             /**
@@ -2740,8 +2927,8 @@ export interface components {
             /** @description calendar styling (inherited by instances) */
             ui_metadata?: components["schemas"]["UIMetadata"] | null;
             /**
-             * Template Type
-             * @constant
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
             template_type: "explicit_dates";
             /**
@@ -3281,6 +3468,94 @@ export interface components {
             /** @description the instance regenerated from the rule (none if the rule no longer produces it within the materialized range) */
             restored_instance: components["schemas"]["PlanInstanceResponse"] | null;
         };
+        /**
+         * PlanTemplateChangeResponse
+         * @description テンプレートの変更依頼 1 件（下書き・承認済み・差し戻し・取り下げ）
+         */
+        PlanTemplateChangeResponse: {
+            /** Id */
+            id: number;
+            /** Biz Master Id */
+            biz_master_id: number;
+            /**
+             * Template Id
+             * @description null for a create draft until it is approved
+             */
+            template_id: number | null;
+            kind: components["schemas"]["TemplateChangeKind"];
+            status: components["schemas"]["TemplateChangeStatus"];
+            /**
+             * Is Direct
+             * @description an admin saved directly (recorded as drafted and approved at once)
+             */
+            is_direct: boolean;
+            /**
+             * Base Revision
+             * @description template revision when the draft was written (a record, not a check)
+             */
+            base_revision: number | null;
+            /**
+             * Changes
+             * @description create: full body / update: fields to change / delete: null
+             */
+            changes: {
+                [key: string]: unknown;
+            } | null;
+            /** Add Dates */
+            add_dates: string[];
+            /** Remove Dates */
+            remove_dates: string[];
+            /** Before Values */
+            before_values: {
+                [key: string]: unknown;
+            } | null;
+            /** Applied Revision */
+            applied_revision: number | null;
+            /** Drafted By Id */
+            drafted_by_id: number;
+            /**
+             * Drafted At
+             * Format: date-time
+             */
+            drafted_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Decided By Id */
+            decided_by_id: number | null;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decision Note */
+            decision_note: string | null;
+            /**
+             * Drafted By Name
+             * @description name of the staff member who wrote it
+             */
+            drafted_by_name?: string | null;
+            /**
+             * Decided By Name
+             * @description name of the admin who decided it (the drafter for a withdrawal)
+             */
+            decided_by_name?: string | null;
+            /** Client Code */
+            client_code?: string | null;
+            /** Business Code */
+            business_code?: string | null;
+            /** Business Name */
+            business_name?: string | null;
+            /**
+             * Template Name
+             * @description the template's current name; for a create draft not yet approved, the proposed name
+             */
+            template_name?: string | null;
+            /**
+             * Self Approved
+             * @description 業務管理者が自分の下書きを承認した（直接保存は含めない）
+             */
+            readonly self_approved: boolean;
+        };
         /** PlanTemplateResponse */
         PlanTemplateResponse: {
             /** Id */
@@ -3339,6 +3614,11 @@ export interface components {
              * @description start of the next live occurrence (null: nothing upcoming within 2 years)
              */
             next_occurrence_at?: string | null;
+            /**
+             * Pending Change Id
+             * @description id of the draft waiting for approval (null: none; the template cannot be changed meanwhile)
+             */
+            pending_change_id?: number | null;
         };
         /** PlanTemplateUpdate */
         PlanTemplateUpdate: {
@@ -3526,8 +3806,8 @@ export interface components {
             /** @description calendar styling (inherited by instances) */
             ui_metadata?: components["schemas"]["UIMetadata"] | null;
             /**
-             * Template Type
-             * @constant
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
             template_type: "rrule";
             /**
@@ -3830,8 +4110,8 @@ export interface components {
             /** @description calendar styling (inherited by instances) */
             ui_metadata?: components["schemas"]["UIMetadata"] | null;
             /**
-             * Template Type
-             * @constant
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
             template_type: "reference_sheet_based";
             /** Reference Sheet Id */
@@ -4368,6 +4648,24 @@ export interface components {
          * @enum {string}
          */
         StepState: "locked" | "todo" | "submitted" | "approved";
+        /** TemplateChangeApprove */
+        TemplateChangeApprove: {
+            /**
+             * Note
+             * @description optional comment on the approval
+             */
+            note?: string | null;
+        };
+        /** TemplateChangeCount */
+        TemplateChangeCount: {
+            /** Count */
+            count: number;
+        };
+        /**
+         * TemplateChangeKind
+         * @enum {string}
+         */
+        TemplateChangeKind: "create" | "update" | "delete";
         /**
          * TemplateChangePreview
          * @description テンプレートをこの内容で変えたら何が起きるか（何も保存されていない）
@@ -4424,6 +4722,32 @@ export interface components {
              */
             order_effects: components["schemas"]["PreviewOrderEffect"][];
         };
+        /** TemplateChangeReject */
+        TemplateChangeReject: {
+            /**
+             * Reason
+             * @description why the draft is sent back (required)
+             */
+            reason: string;
+        };
+        /**
+         * TemplateChangeStatus
+         * @enum {string}
+         */
+        TemplateChangeStatus: "draft" | "approved" | "rejected" | "withdrawn";
+        /** TemplateCreateDraft */
+        TemplateCreateDraft: {
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "create";
+            /**
+             * Template
+             * @description same body as POST /plans/templates
+             */
+            template: components["schemas"]["RRuleTemplateCreate"] | components["schemas"]["ExplicitDatesTemplateCreate"] | components["schemas"]["ReferenceSheetTemplateCreate"];
+        };
         /**
          * TemplateCreatePreview
          * @description テンプレートをこの内容で作ったらできる予定（何も保存されていない）
@@ -4449,11 +4773,56 @@ export interface components {
              */
             orders_created: number;
         };
+        /** TemplateDeleteDraft */
+        TemplateDeleteDraft: {
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "delete";
+            /** Template Id */
+            template_id: number;
+        };
+        /**
+         * TemplateDraftPreview
+         * @description 承認待ちの下書きを、今のデータで当てはめたら何が起きるか（何も保存されていない。承認の画面用）
+         */
+        TemplateDraftPreview: {
+            /** Change Id */
+            change_id: number;
+            kind: components["schemas"]["TemplateChangeKind"];
+            /** @description kind create: the occurrences the new template would get */
+            create: components["schemas"]["TemplateCreatePreview"] | null;
+            /** @description kind update / delete: what changes (a delete removes every future occurrence and cancels open orders) */
+            change: components["schemas"]["TemplateChangePreview"] | null;
+        };
         /**
          * TemplateType
          * @enum {string}
          */
         TemplateType: "rrule" | "explicit_dates" | "reference_sheet_based";
+        /** TemplateUpdateDraft */
+        TemplateUpdateDraft: {
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "update";
+            /** Template Id */
+            template_id: number;
+            /** @description same body as PATCH /plans/templates/{id} (only the fields to change) */
+            changes?: components["schemas"]["PlanTemplateUpdate"];
+            /**
+             * Add Dates
+             * @description specified dates to add (explicit_dates templates)
+             */
+            add_dates?: string[];
+            /**
+             * Remove Dates
+             * @description specified dates to remove
+             */
+            remove_dates?: string[];
+        };
         /**
          * TemporaryPasswordIn
          * @description システム管理者が設定する仮パスワード（本人は次のログインで変える）
@@ -9105,6 +9474,721 @@ export interface operations {
             };
         };
     };
+    list_template_changes_endpoint_plans_template_changes_get: {
+        parameters: {
+            query?: {
+                /** @description draft = waiting for approval */
+                status?: components["schemas"]["TemplateChangeStatus"] | null;
+                biz_id?: number | null;
+                template_id?: number | null;
+                /** @description staff id of the drafter (e.g. my own drafts) */
+                drafted_by?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTemplateChangeResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_template_draft_endpoint_plans_template_changes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateCreateDraft"] | components["schemas"]["TemplateUpdateDraft"] | components["schemas"]["TemplateDeleteDraft"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTemplateChangeResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    count_template_changes_endpoint_plans_template_changes_count_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["TemplateChangeStatus"] | null;
+                biz_id?: number | null;
+                drafted_by?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateChangeCount"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_template_change_endpoint_plans_template_changes__change_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTemplateChangeResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    edit_template_draft_endpoint_plans_template_changes__change_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateCreateDraft"] | components["schemas"]["TemplateUpdateDraft"] | components["schemas"]["TemplateDeleteDraft"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTemplateChangeResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    withdraw_template_draft_endpoint_plans_template_changes__change_id__withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTemplateChangeResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approve_template_draft_endpoint_plans_template_changes__change_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TemplateChangeApprove"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTemplateChangeResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reject_template_draft_endpoint_plans_template_changes__change_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateChangeReject"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTemplateChangeResponse"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_template_history_endpoint_plans_templates__template_id__changes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanTemplateChangeResponse"][];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_instances_endpoint_plans_templates__template_id__instances_get: {
         parameters: {
             query?: {
@@ -10333,6 +11417,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TemplateChangePreview"];
+                };
+            };
+            /** @description Bad Request(リクエスト不正) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized(ログインしていない・セッションの期限切れ) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden(ロールが無い・アカウントが利用開始前／利用停止中) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found(データが見つからない) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict (Record already exists etc.) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error(サーバーエラー) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_template_draft_endpoint_ops_template_changes__change_id__preview_post: {
+        parameters: {
+            query?: {
+                /** @description 今日から何か月先までを確認するか（生成済みの範囲のほうが長ければ、そこまで） */
+                months?: number;
+            };
+            header?: never;
+            path: {
+                change_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateDraftPreview"];
                 };
             };
             /** @description Bad Request(リクエスト不正) */

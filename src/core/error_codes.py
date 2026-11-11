@@ -29,6 +29,9 @@ class ErrorCode(str, Enum):
     INSTANCE_ALREADY_VOIDED = "INSTANCE_ALREADY_VOIDED"
     ORDER_IN_PROGRESS = "ORDER_IN_PROGRESS"  # 作業中のオーダーの予定は人が変更・取消できない
     DELETE_FAILED_RECORD_IN_USE = "DELETE_FAILED_RECORD_IN_USE"
+    TEMPLATE_DRAFT_PENDING = "TEMPLATE_DRAFT_PENDING"  # 承認待ちの下書きがあるテンプレートは、ほかの変更・下書きができない
+    TEMPLATE_CHANGE_DECIDED = "TEMPLATE_CHANGE_DECIDED"  # 承認・差し戻し・取り下げが済んだ下書きは、もう直せない
+    TEMPLATE_CHANGED_MEANWHILE = "TEMPLATE_CHANGED_MEANWHILE"  # 下書きを確かめている間にテンプレートが変わった（やり直す）
     
     # サーバー内部エラー (500)
     INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"

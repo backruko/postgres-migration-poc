@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from src.domain_ope.models import OrderStatus
-from src.domain_plan.models import InstanceOrigin, VoidReason
+from src.domain_plan.models import InstanceOrigin, TemplateChangeKind, VoidReason
 
 
 # ==========================================
@@ -199,3 +199,13 @@ class TemplateCreatePreview(BaseModel):
     range_end: datetime = Field(description="end of the previewed range (the requested months, or what creation generates if longer)")
     occurrences: list[PreviewOccurrence]
     orders_created: int = Field(description="orders that would be created for these occurrences")
+
+
+class TemplateDraftPreview(BaseModel):
+    """承認待ちの下書きを、今のデータで当てはめたら何が起きるか（何も保存されていない。承認の画面用）"""
+    change_id: int
+    kind: TemplateChangeKind
+    create: TemplateCreatePreview | None = Field(description="kind create: the occurrences the new template would get")
+    change: TemplateChangePreview | None = Field(
+        description="kind update / delete: what changes (a delete removes every future occurrence and cancels open orders)"
+    )

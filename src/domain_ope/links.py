@@ -13,6 +13,8 @@
   無ければ待ち先なしの行。上流のオーダーができた・動いた・取り消されたら、その後 lookback_days 日の間に
   開始する開始前の下流のオーダーを直し、下流が動いたら（時刻だけでも）その下流を直す。
 """
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -135,13 +137,47 @@ def _link(order: OpeOrder, dep: BizDependency, key: int | date | None, upstream_
 # ==========================================
 # きっかけごとの入口
 # ==========================================
-def refresh_order(db: Session, order: OpeOrder) -> None:
+_DEFS_CACHE_KEY = "ope_dependency_defs_cache"
+
+
+@contextmanager
+def definitions_cached(db: Session) -> Iterator[None]:
+    """
+    この中では、業務ごとの依存関係の定義を 1 回だけ読む（オーダーの追従: テンプレートの変更で数百のオーダーが一度に動く）。
+    定義はこの間に変わらない（定義の追加・削除は別の操作）。入れ子にしても外側のものを使う。
+    """
+    if _DEFS_CACHE_KEY in db.info:
+        yield
+        return
+    db.info[_DEFS_CACHE_KEY] = {}
+    try:
+        yield
+    finally:
+        db.info.pop(_DEFS_CACHE_KEY, None)
+
+
+def _definitions_for(db: Session, biz_id: int) -> list[BizDependency]:
+    cache: dict[int, list[BizDependency]] | None = db.info.get(_DEFS_CACHE_KEY)
+    if cache is None:
+        return biz_dependency_repo.get_for_biz(db, biz_id=biz_id)
+    if biz_id not in cache:
+        cache[biz_id] = biz_dependency_repo.get_for_biz(db, biz_id=biz_id)
+    return cache[biz_id]
+
+
+def refresh_order(db: Session, order: OpeOrder, only_time_based: bool = False) -> None:
     """
     オーダーができた・動いた・取り消されたときに呼ぶ。
     このオーダー自身のつながり（下流として）と、このオーダーを待ちうる下流のオーダー（上流として）を直す。
+    only_time_based: 時刻だけが動いた（発生枠のキー = ルール上の日付・シート日付は同じ）。同じシート日付・同じ日付の
+    つながりはキーだけで決まるので変わらない。予定開始で突き合わせる「直前の上流」だけを直す
+    （テンプレートの時刻の変更で数百のオーダーが動いても、つながりを 1 件ずつ読み直さない）。
     """
-    # 定義の無い業務（ほとんど）は1回の参照で終える（予定の生成で大量のオーダーが作られるため）
-    defs = biz_dependency_repo.get_for_biz(db, biz_id=order.biz_master_id)
+    # 定義の無い業務（ほとんど）は1回の参照で終える（予定の生成で大量のオーダーが作られるため）。
+    # オーダーの追従の中（definitions_cached）では、業務ごとに 1 回だけ読む
+    defs = _definitions_for(db, order.biz_master_id)
+    if only_time_based:
+        defs = [dep for dep in defs if dep.match_rule == DependencyMatchRule.LATEST_BEFORE]
     if not defs:
         return
     db.flush()

@@ -2,11 +2,12 @@ import json
 from datetime import date, datetime, time
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from src.domain_plan.engine import DayUnit, HolidayPolicy
 from src.domain_plan.models import (
-    DeadlineMode, InstanceOrigin, TemplateType, VoidReason, validate_rrule_text, validate_timezone_name,
+    DeadlineMode, InstanceOrigin, TemplateChangeKind, TemplateChangeStatus, TemplateType, VoidReason,
+    validate_rrule_text, validate_timezone_name,
 )
 
 HEX_COLOR_PATTERN = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
@@ -531,6 +532,103 @@ class ExplicitDatesAdd(BaseModel):
 
 
 # ==========================================
+# テンプレートの変更依頼（下書き → 承認 → 反映。Level 2）
+# 本文は kind で判別: 新規作成 / 変更（項目 + 指定日）/ 削除。中身は直接の保存と同じ本文
+# ==========================================
+class TemplateCreateDraft(BaseModel):
+    kind: Literal[TemplateChangeKind.CREATE]
+    template: PlanTemplateCreate = Field(..., description="same body as POST /plans/templates")
+
+
+class TemplateUpdateDraft(BaseModel):
+    kind: Literal[TemplateChangeKind.UPDATE]
+    template_id: int
+    changes: PlanTemplateUpdate = Field(
+        default_factory=PlanTemplateUpdate, description="same body as PATCH /plans/templates/{id} (only the fields to change)"
+    )
+    add_dates: list[date] = Field(default_factory=list, description="specified dates to add (explicit_dates templates)")
+    remove_dates: list[date] = Field(default_factory=list, description="specified dates to remove")
+
+    @model_validator(mode="after")
+    def check_dates(self):
+        both = sorted(set(self.add_dates) & set(self.remove_dates))
+        if both:
+            raise ValueError(f"dates both added and removed: {[d.isoformat() for d in both]}")
+        self.add_dates = sorted(set(self.add_dates))
+        self.remove_dates = sorted(set(self.remove_dates))
+        return self
+
+
+class TemplateDeleteDraft(BaseModel):
+    kind: Literal[TemplateChangeKind.DELETE]
+    template_id: int
+
+
+TemplateDraft = Annotated[
+    Union[TemplateCreateDraft, TemplateUpdateDraft, TemplateDeleteDraft],
+    Field(discriminator="kind"),
+]
+
+
+class TemplateChangeCount(BaseModel):
+    count: int
+
+
+class TemplateChangeApprove(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    note: str | None = Field(default=None, max_length=500, description="optional comment on the approval")
+
+
+class TemplateChangeReject(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reason: str = Field(..., min_length=1, max_length=500, description="why the draft is sent back (required)")
+
+
+class PlanTemplateChangeResponse(BaseModel):
+    """テンプレートの変更依頼 1 件（下書き・承認済み・差し戻し・取り下げ）"""
+    id: int
+    biz_master_id: int
+    template_id: int | None = Field(description="null for a create draft until it is approved")
+    kind: TemplateChangeKind
+    status: TemplateChangeStatus
+    is_direct: bool = Field(description="an admin saved directly (recorded as drafted and approved at once)")
+    base_revision: int | None = Field(description="template revision when the draft was written (a record, not a check)")
+    changes: dict[str, Any] | None = Field(description="create: full body / update: fields to change / delete: null")
+    add_dates: list[date]
+    remove_dates: list[date]
+    before_values: dict[str, Any] | None
+    applied_revision: int | None
+    drafted_by_id: int
+    drafted_at: datetime
+    updated_at: datetime
+    decided_by_id: int | None
+    decided_at: datetime | None
+    decision_note: str | None
+    # 画面用の名前（変更依頼の行には無い。一覧・履歴をそのまま表示できるように付ける）
+    drafted_by_name: str | None = Field(default=None, description="name of the staff member who wrote it")
+    decided_by_name: str | None = Field(default=None, description="name of the admin who decided it (the drafter for a withdrawal)")
+    client_code: str | None = Field(default=None)
+    business_code: str | None = Field(default=None)
+    business_name: str | None = Field(default=None)
+    template_name: str | None = Field(
+        default=None, description="the template's current name; for a create draft not yet approved, the proposed name"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def self_approved(self) -> bool:
+        """業務管理者が自分の下書きを承認した（直接保存は含めない）"""
+        return (
+            self.status == TemplateChangeStatus.APPROVED and not self.is_direct
+            and self.decided_by_id == self.drafted_by_id
+        )
+
+
+# ==========================================
 # 手動変更（オーバーライド / 取消 / 解除 / 単発追加）
 # ==========================================
 class _ManualTimeBase(BaseModel):
@@ -607,6 +705,9 @@ class PlanTemplateResponse(BaseModel):
     explicit_dates: list[PlanExplicitDateResponse]
     next_occurrence_at: datetime | None = Field(
         default=None, description="start of the next live occurrence (null: nothing upcoming within 2 years)"
+    )
+    pending_change_id: int | None = Field(
+        default=None, description="id of the draft waiting for approval (null: none; the template cannot be changed meanwhile)"
     )
 
     model_config = ConfigDict(from_attributes=True)

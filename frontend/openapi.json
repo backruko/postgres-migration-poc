@@ -5301,7 +5301,7 @@
           "plans"
         ],
         "summary": "Create Template Endpoint",
-        "description": "テンプレートを作成し、今から90日先までのインスタンスを生成します。\ntemplate_type により必須項目が変わります（rrule / explicit_dates / reference_sheet_based）。",
+        "description": "テンプレートを作成し、今から90日先までのインスタンスを生成します。\ntemplate_type により必須項目が変わります（rrule / explicit_dates / reference_sheet_based）。\n変更の履歴に「業務管理者の直接の保存」として残ります。",
         "operationId": "create_template_endpoint_plans_templates_post",
         "security": [
           {
@@ -5662,7 +5662,7 @@
           "plans"
         ],
         "summary": "Update Template Endpoint",
-        "description": "生成に影響する項目を変更するとリビジョンが上がり、未来のインスタンスが再照合されます（過去分は不変）。",
+        "description": "生成に影響する項目を変更するとリビジョンが上がり、未来のインスタンスが再照合されます（過去分は不変）。\n何かが変われば、変更の履歴に「業務管理者の直接の保存」として残ります。承認待ちの下書きがある間は 409。",
         "operationId": "update_template_endpoint_plans_templates__template_id__patch",
         "security": [
           {
@@ -5781,6 +5781,7 @@
           "plans"
         ],
         "summary": "Delete Template Endpoint",
+        "description": "論理削除。変更の履歴に残ります。承認待ちの下書きがある間は 409。",
         "operationId": "delete_template_endpoint_plans_templates__template_id__delete",
         "security": [
           {
@@ -6001,7 +6002,7 @@
           "plans"
         ],
         "summary": "Add Explicit Dates Endpoint",
-        "description": "顧客指定日を追加します(登録済みの日付は無視)。",
+        "description": "顧客指定日を追加します(登録済みの日付は無視)。足した日付は変更の履歴に残ります。",
         "operationId": "add_explicit_dates_endpoint_plans_templates__template_id__dates_post",
         "security": [
           {
@@ -6122,6 +6123,7 @@
           "plans"
         ],
         "summary": "Remove Explicit Date Endpoint",
+        "description": "顧客指定日を外します。変更の履歴に残ります。",
         "operationId": "remove_explicit_date_endpoint_plans_templates__template_id__dates__local_date__delete",
         "security": [
           {
@@ -6215,6 +6217,1089 @@
           },
           "403": {
             "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plans/template-changes": {
+      "get": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "List Template Changes Endpoint",
+        "description": "テンプレートの変更依頼の一覧（ログインしている職員なら誰でも）。承認待ち（status=draft）は古い順＝承認の順番待ち、\nそれ以外は新しい順。差し戻された新規作成の下書き（テンプレートが無い）も、drafted_by などで探せます。",
+        "operationId": "list_template_changes_endpoint_plans_template_changes_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TemplateChangeStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "draft = waiting for approval",
+              "title": "Status"
+            },
+            "description": "draft = waiting for approval"
+          },
+          {
+            "name": "biz_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Biz Id"
+            }
+          },
+          {
+            "name": "template_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "drafted_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "staff id of the drafter (e.g. my own drafts)",
+              "title": "Drafted By"
+            },
+            "description": "staff id of the drafter (e.g. my own drafts)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanTemplateChangeResponse"
+                  },
+                  "title": "Response List Template Changes Endpoint Plans Template Changes Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Create Template Draft Endpoint",
+        "description": "テンプレートの変更の下書きを作ります。kind で種類を選びます:\n- `create`: 新しいテンプレート（template = POST /plans/templates と同じ本文）\n- `update`: 項目の変更（changes = PATCH /plans/templates/{id} と同じ本文）と、指定日の追加・削除（add_dates / remove_dates）\n- `delete`: テンプレートの削除\n\n本物の保存と同じ処理で確かめ（何も保存しない試し実行）、誤りは直接の保存と同じエラーになります。何も変えない下書きは 400。\n承認待ちの下書きがあるテンプレートには書けません（409 TEMPLATE_DRAFT_PENDING）。",
+        "operationId": "create_template_draft_endpoint_plans_template_changes_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TemplateCreateDraft"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TemplateUpdateDraft"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TemplateDeleteDraft"
+                  }
+                ],
+                "title": "Draft"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanTemplateChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plans/template-changes/count": {
+      "get": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Count Template Changes Endpoint",
+        "description": "変更依頼の件数（既定は承認待ち。メニューのバッジ用）。",
+        "operationId": "count_template_changes_endpoint_plans_template_changes_count_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TemplateChangeStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "draft",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "biz_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Biz Id"
+            }
+          },
+          {
+            "name": "drafted_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Drafted By"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateChangeCount"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plans/template-changes/{change_id}": {
+      "get": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Get Template Change Endpoint",
+        "operationId": "get_template_change_endpoint_plans_template_changes__change_id__get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanTemplateChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Edit Template Draft Endpoint",
+        "description": "承認待ちの下書きを、書いた本人が直します（中身をまるごと置き換え。確かめ方は作成と同じ）。\n種類と対象のテンプレートは変えられません。削除の下書きには直すところがありません。\n本人以外は 403、承認・差し戻し・取り下げが済んだ下書きは 409 TEMPLATE_CHANGE_DECIDED。",
+        "operationId": "edit_template_draft_endpoint_plans_template_changes__change_id__put",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TemplateCreateDraft"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TemplateUpdateDraft"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TemplateDeleteDraft"
+                  }
+                ],
+                "title": "Draft"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanTemplateChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plans/template-changes/{change_id}/withdraw": {
+      "post": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Withdraw Template Draft Endpoint",
+        "description": "承認待ちの下書きを、書いた本人が取り下げます（記録は残る）。本人以外は 403。",
+        "operationId": "withdraw_template_draft_endpoint_plans_template_changes__change_id__withdraw_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanTemplateChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plans/template-changes/{change_id}/approve": {
+      "post": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Approve Template Draft Endpoint",
+        "description": "承認待ちの下書きを承認し、すぐに反映します（業務管理者。自分の下書きも承認できる）。\n反映は直接の保存と同じ処理で、オーダーも同じように追従します。誤り（参照するシートが無いなど）は直接の保存と同じエラーで、\nそのときは何も変わらず、下書きは承認待ちのまま。決まった下書きは 409 TEMPLATE_CHANGE_DECIDED。",
+        "operationId": "approve_template_draft_endpoint_plans_template_changes__change_id__approve_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateChangeApprove"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanTemplateChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plans/template-changes/{change_id}/reject": {
+      "post": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Reject Template Draft Endpoint",
+        "description": "承認待ちの下書きを差し戻します（業務管理者。理由は必須）。テンプレートは何も変わりません。",
+        "operationId": "reject_template_draft_endpoint_plans_template_changes__change_id__reject_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateChangeReject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanTemplateChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plans/templates/{template_id}/changes": {
+      "get": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Get Template History Endpoint",
+        "description": "テンプレートの変更履歴（新しい順。承認・差し戻し・取り下げ・業務管理者の直接の保存）。削除済みのテンプレートも読めます。",
+        "operationId": "get_template_history_endpoint_plans_templates__template_id__changes_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Template Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanTemplateChangeResponse"
+                  },
+                  "title": "Response Get Template History Endpoint Plans Templates  Template Id  Changes Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8177,6 +9262,131 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TemplateChangePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/template-changes/{change_id}/preview": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Preview Template Draft Endpoint",
+        "description": "承認待ちの下書きを、**今のデータで**当てはめたら何が起きるかを返します。**何も保存しません**（承認の画面用）。\n承認と同じ処理・同じ順（項目 → 指定日、または削除）で試し実行するので、指定日の追加・削除やテンプレートの削除も確かめられます。\n新規作成は `create`、変更・削除は `change` に入ります。決まった下書きは 409 TEMPLATE_CHANGE_DECIDED。\nリリース担当・業務管理者（承認そのものは業務管理者だけ）。",
+        "operationId": "preview_template_draft_endpoint_ops_template_changes__change_id__preview_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Change Id"
+            }
+          },
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 12,
+              "minimum": 1,
+              "description": "今日から何か月先までを確認するか（生成済みの範囲のほうが長ければ、そこまで）",
+              "default": 3,
+              "title": "Months"
+            },
+            "description": "今日から何か月先までを確認するか（生成済みの範囲のほうが長ければ、そこまで）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateDraftPreview"
                 }
               }
             }
@@ -13948,6 +15158,9 @@
           "INSTANCE_ALREADY_VOIDED",
           "ORDER_IN_PROGRESS",
           "DELETE_FAILED_RECORD_IN_USE",
+          "TEMPLATE_DRAFT_PENDING",
+          "TEMPLATE_CHANGE_DECIDED",
+          "TEMPLATE_CHANGED_MEANWHILE",
           "INTERNAL_SERVER_ERROR"
         ],
         "title": "ErrorCode",
@@ -15425,6 +16638,252 @@
         ],
         "title": "PlanRevertResponse"
       },
+      "PlanTemplateChangeResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "biz_master_id": {
+            "type": "integer",
+            "title": "Biz Master Id"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id",
+            "description": "null for a create draft until it is approved"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TemplateChangeKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TemplateChangeStatus"
+          },
+          "is_direct": {
+            "type": "boolean",
+            "title": "Is Direct",
+            "description": "an admin saved directly (recorded as drafted and approved at once)"
+          },
+          "base_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Revision",
+            "description": "template revision when the draft was written (a record, not a check)"
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changes",
+            "description": "create: full body / update: fields to change / delete: null"
+          },
+          "add_dates": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Add Dates"
+          },
+          "remove_dates": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Remove Dates"
+          },
+          "before_values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Values"
+          },
+          "applied_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Revision"
+          },
+          "drafted_by_id": {
+            "type": "integer",
+            "title": "Drafted By Id"
+          },
+          "drafted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Drafted At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "decided_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Id"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "drafted_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drafted By Name",
+            "description": "name of the staff member who wrote it"
+          },
+          "decided_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Name",
+            "description": "name of the admin who decided it (the drafter for a withdrawal)"
+          },
+          "client_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Code"
+          },
+          "business_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Code"
+          },
+          "business_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Name"
+          },
+          "template_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Name",
+            "description": "the template's current name; for a create draft not yet approved, the proposed name"
+          },
+          "self_approved": {
+            "type": "boolean",
+            "title": "Self Approved",
+            "description": "業務管理者が自分の下書きを承認した（直接保存は含めない）",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "biz_master_id",
+          "template_id",
+          "kind",
+          "status",
+          "is_direct",
+          "base_revision",
+          "changes",
+          "add_dates",
+          "remove_dates",
+          "before_values",
+          "applied_revision",
+          "drafted_by_id",
+          "drafted_at",
+          "updated_at",
+          "decided_by_id",
+          "decided_at",
+          "decision_note",
+          "self_approved"
+        ],
+        "title": "PlanTemplateChangeResponse",
+        "description": "テンプレートの変更依頼 1 件（下書き・承認済み・差し戻し・取り下げ）"
+      },
       "PlanTemplateResponse": {
         "properties": {
           "id": {
@@ -15634,6 +17093,18 @@
             ],
             "title": "Next Occurrence At",
             "description": "start of the next live occurrence (null: nothing upcoming within 2 years)"
+          },
+          "pending_change_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Change Id",
+            "description": "id of the draft waiting for approval (null: none; the template cannot be changed meanwhile)"
           }
         },
         "type": "object",
@@ -18041,6 +19512,47 @@
         "title": "StepState",
         "description": "ステップの状態。approved が最終状態（差し戻しは submitted → todo）"
       },
+      "TemplateChangeApprove": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "optional comment on the approval"
+          }
+        },
+        "type": "object",
+        "title": "TemplateChangeApprove"
+      },
+      "TemplateChangeCount": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "title": "TemplateChangeCount"
+      },
+      "TemplateChangeKind": {
+        "type": "string",
+        "enum": [
+          "create",
+          "update",
+          "delete"
+        ],
+        "title": "TemplateChangeKind"
+      },
       "TemplateChangePreview": {
         "properties": {
           "template_id": {
@@ -18135,6 +19647,70 @@
         "title": "TemplateChangePreview",
         "description": "テンプレートをこの内容で変えたら何が起きるか（何も保存されていない）"
       },
+      "TemplateChangeReject": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "description": "why the draft is sent back (required)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "TemplateChangeReject"
+      },
+      "TemplateChangeStatus": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "approved",
+          "rejected",
+          "withdrawn"
+        ],
+        "title": "TemplateChangeStatus"
+      },
+      "TemplateCreateDraft": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "create",
+            "title": "Kind"
+          },
+          "template": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RRuleTemplateCreate"
+              },
+              {
+                "$ref": "#/components/schemas/ExplicitDatesTemplateCreate"
+              },
+              {
+                "$ref": "#/components/schemas/ReferenceSheetTemplateCreate"
+              }
+            ],
+            "title": "Template",
+            "description": "same body as POST /plans/templates",
+            "discriminator": {
+              "propertyName": "template_type",
+              "mapping": {
+                "explicit_dates": "#/components/schemas/ExplicitDatesTemplateCreate",
+                "reference_sheet_based": "#/components/schemas/ReferenceSheetTemplateCreate",
+                "rrule": "#/components/schemas/RRuleTemplateCreate"
+              }
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "template"
+        ],
+        "title": "TemplateCreateDraft"
+      },
       "TemplateCreatePreview": {
         "properties": {
           "range_start": {
@@ -18172,6 +19748,67 @@
         "title": "TemplateCreatePreview",
         "description": "テンプレートをこの内容で作ったらできる予定（何も保存されていない）"
       },
+      "TemplateDeleteDraft": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "delete",
+            "title": "Kind"
+          },
+          "template_id": {
+            "type": "integer",
+            "title": "Template Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "template_id"
+        ],
+        "title": "TemplateDeleteDraft"
+      },
+      "TemplateDraftPreview": {
+        "properties": {
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TemplateChangeKind"
+          },
+          "create": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemplateCreatePreview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "kind create: the occurrences the new template would get"
+          },
+          "change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemplateChangePreview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "kind update / delete: what changes (a delete removes every future occurrence and cancels open orders)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "change_id",
+          "kind",
+          "create",
+          "change"
+        ],
+        "title": "TemplateDraftPreview",
+        "description": "承認待ちの下書きを、今のデータで当てはめたら何が起きるか（何も保存されていない。承認の画面用）"
+      },
       "TemplateType": {
         "type": "string",
         "enum": [
@@ -18180,6 +19817,47 @@
           "reference_sheet_based"
         ],
         "title": "TemplateType"
+      },
+      "TemplateUpdateDraft": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "update",
+            "title": "Kind"
+          },
+          "template_id": {
+            "type": "integer",
+            "title": "Template Id"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/PlanTemplateUpdate",
+            "description": "same body as PATCH /plans/templates/{id} (only the fields to change)"
+          },
+          "add_dates": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Add Dates",
+            "description": "specified dates to add (explicit_dates templates)"
+          },
+          "remove_dates": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Remove Dates",
+            "description": "specified dates to remove"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "template_id"
+        ],
+        "title": "TemplateUpdateDraft"
       },
       "TemporaryPasswordIn": {
         "properties": {

@@ -8,9 +8,11 @@ from src.domain_plan.schemas import PLAN_TEMPLATE_CREATE_EXAMPLES, PlanTemplateC
 from src.domain_staff.auth import require_active, require_roles
 from src.domain_staff.models import RoleCode
 from src.infrastructure.database import get_db
-from src.coordination.schemas import AttentionResponse, DailyDashboardResponse, SlaResponse, TemplateChangePreview, TemplateCreatePreview
+from src.coordination.schemas import (
+    AttentionResponse, DailyDashboardResponse, SlaResponse, TemplateChangePreview, TemplateCreatePreview, TemplateDraftPreview,
+)
 from src.coordination.services import get_attention, get_daily_dashboard, get_sla_report
-from src.coordination.template_preview import preview_template_create, preview_template_update
+from src.coordination.template_preview import preview_template_create, preview_template_draft, preview_template_update
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 
@@ -97,3 +99,19 @@ def preview_template_update_endpoint(
     入力の誤りは、PATCH と同じエラーになります。リリース担当・業務管理者（保存そのものは業務管理者だけ）。
     """
     return preview_template_update(db=db, template_id=template_id, template_in=template_in, months=months)
+
+
+@router.post("/template-changes/{change_id}/preview", response_model=TemplateDraftPreview, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles(PREVIEWERS)
+def preview_template_draft_endpoint(
+    change_id: int,
+    months: int = Query(3, ge=1, le=12, description="今日から何か月先までを確認するか（生成済みの範囲のほうが長ければ、そこまで）"),
+    db: Session = Depends(get_db),
+):
+    """
+    承認待ちの下書きを、**今のデータで**当てはめたら何が起きるかを返します。**何も保存しません**（承認の画面用）。
+    承認と同じ処理・同じ順（項目 → 指定日、または削除）で試し実行するので、指定日の追加・削除やテンプレートの削除も確かめられます。
+    新規作成は `create`、変更・削除は `change` に入ります。決まった下書きは 409 TEMPLATE_CHANGE_DECIDED。
+    リリース担当・業務管理者（承認そのものは業務管理者だけ）。
+    """
+    return preview_template_draft(db=db, change_id=change_id, months=months)
