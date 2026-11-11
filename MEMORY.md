@@ -4,8 +4,9 @@ Handoff for the next working session. Read this first, then the design doc (§2)
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
 `src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11** — Level 2 (template drafts +
 approval, templates only) is in progress on `feature/template-drafts`; D.1 (data model) committed, D.2 (drafts:
-create / edit / withdraw, blocking) and D.3 (approve / reject, direct-save rows, biz delete guard) committed, D.4
-(read endpoints, pending_change_id, preview of any draft) built and waiting for review
+create / edit / withdraw, blocking), D.3 (approve / reject, direct-save rows, biz delete guard) and D.4 (read
+endpoints, pending_change_id, preview of any draft) committed; D.5a (frontend data + logic for drafters) built and
+waiting for review
 (see the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
@@ -34,7 +35,43 @@ create / edit / withdraw, blocking) and D.3 (approve / reject, direct-save rows,
   calendar / sheet recalculation, which drafts do not block — so the blocking rule is the guard and `base_revision` is
   a record only; a separate settings counter was rejected as overengineering); Q7 承認待ち list on 予定の設定 + admin menu count badge, no
   notifications. **Releasers do not draft SOPs** in this phase (SOPs have their own versions). Design doc rev 110.
-- **D.4 as built (uncommitted, waiting for review; no migration).** User's decisions before D.4 (both as I
+- **D.5 = the drafter screens, split D.5a (data + logic) / D.5b (screens).** User's decisions 2026-11-11 (all four
+  as I recommended): **Q1 admins keep direct save only** (no draft button); **Q2 the releaser's draft flow mirrors the
+  admin's save** (edit that changes dates → the existing 保存の前の確認 window, button この内容で下書きを保存;
+  name / deadline / display edits save the draft directly; new template: optional 予定を確認 + 下書きとして保存;
+  fields + dates in ONE draft call); **Q3 rows with a pending draft**: 承認待ち tag (who / when), 編集 / 削除 disabled
+  for everyone with a tooltip (server would 409), 下書きを見る window (summary now → proposed, who / when; drafter
+  also 直す (form prefilled with the proposed values, save = PUT) / 取り下げる; D.6 adds 承認 / 差し戻し there),
+  releasers get 削除を依頼 on rows without a draft; **Q4 a 変更依頼 section above the table** for the selected
+  business: its pending drafts of every kind + my own drafts decided in the last 30 days (with 差し戻し reasons).
+- **D.5a as built (uncommitted, waiting for review; frontend only, no visible change):**
+  - `domain/plan/types`: `TemplateChange`, `TemplateChangeKind`, `TemplateChangeStatus`, `TemplateDraftInput`
+    (create / update / delete union), `TemplateUpdateDraftInput`, `TemplateDraftPreview`.
+  - `domain/plan/api/templateChangeApi.ts` (exported from `api/index.ts`): `list(filter)`, `count(filter)`, `get`,
+    `history(templateId)`, `create`, `edit`, `withdraw`, `preview(changeId, months)`.
+  - `domain/plan/lib/templateChanges.ts`: `CHANGE_STATUS_LABEL` (承認待ち / 承認済み / 差し戻し / 取り下げ) +
+    colors, `CHANGE_KIND_LABEL` (新規作成 / 変更 / 削除), `templateWriteMode(staff)` → direct (admin, also admin +
+    releaser) / draft (releaser without admin) / none, `canChangeOwnDraft`, `pendingDraftReason(template)`,
+    `decidedWithin(change, now, 30)`, `draftErrorText(e)` (Japanese for TEMPLATE_DRAFT_PENDING / CHANGE_DECIDED /
+    CHANGED_MEANWHILE / FORBIDDEN / "changes nothing").
+  - `features/plan-settings/templateDraft.ts`: `changedFields(updateInput, template)` (keeps only differing fields),
+    `updateDraftBody(form, template)` (null when nothing changes; dates via `diffDates`), `createDraftBody`,
+    `deleteDraftBody`, `proposedTemplate(change, template)`, `templateOfCreateDraft(change)`,
+    `formValuesOfDraft(change, template|null)` (prefill for 直す), `changeSummary(change, template, names?)` →
+    `{label, before, after}` lines (deadline fields grouped into one 締切 line; dates 指定日を追加 / 外す; create =
+    main fields with before "—"; delete = one line; sheet / calendar names via optional resolvers).
+  - **Found and fixed while checking:** an untouched form looked like a display change on 10 of the 19 `plan_check`
+    templates — the form always sends `ui_metadata.category`, older templates have none (or `ui_metadata` null).
+    `comparable()` now compares display settings with `categoryOf()` (missing = 定例).
+  - Checked: `npm run build`; esbuild harness `d5a_harness.ts` (scratchpad, imports `cookie_fetch.ts` first) against
+    uvicorn 8001 on `plan_check`, releaser 5 / admin 8: **33/33** (write modes, only changed fields, draft written,
+    pending_change_id + reason, summary lines, prefill + round trip, preview, edit, 409 + Japanese text, dates draft,
+    create draft round trip + summary + preview, delete summary, list / count / get, withdraw + decided text,
+    history); `d5a_all.ts`: unchanged form → no draft on **all 19** templates. Harness templates `HARNESS_D5A_*`
+    deleted at the end; its drafts withdrawn.
+  - **`README.md` is modified in the working tree by the user (project description in Japanese) — not mine; leave it
+    out of my commits.**
+- **D.4 committed `6dc1b15`.** As built (no migration). User's decisions before D.4 (both as I
   recommended): **reads open to any logged-in active staff** (like every `/plans` GET; `test_reads_need_a_login_but_no_role`
   covers them); **the approval preview covers every draft kind** (fields, specified dates, delete, create).
   - Reads (`src/domain_plan/router.py`): `GET /plans/template-changes?status=&biz_id=&template_id=&drafted_by=&limit=`

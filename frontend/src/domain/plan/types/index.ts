@@ -43,6 +43,20 @@ export type TemplateChangePreview = Schemas["TemplateChangePreview"];
 /** テンプレートをこの内容で作ったらできる予定 */
 export type TemplateCreatePreview = Schemas["TemplateCreatePreview"];
 
+// ---- テンプレートの変更依頼（下書き → 承認 → 反映。Level 2） ----
+export type TemplateChangeKind = Schemas["TemplateChangeKind"];
+export type TemplateChangeStatus = Schemas["TemplateChangeStatus"];
+/** 変更依頼 1 件（職員・業務・テンプレートの名前つき） */
+export type TemplateChange = Schemas["PlanTemplateChangeResponse"];
+/** 下書きの本文（kind で形が変わる判別共用体） */
+export type TemplateDraftInput =
+  | Schemas["TemplateCreateDraft"]
+  | Schemas["TemplateUpdateDraft"]
+  | Schemas["TemplateDeleteDraft"];
+export type TemplateUpdateDraftInput = Schemas["TemplateUpdateDraft"];
+/** 承認待ちの下書きを、今のデータで当てはめたら何が起きるか（新規作成は create、変更・削除は change） */
+export type TemplateDraftPreview = Schemas["TemplateDraftPreview"];
+
 // ---- 年間計画シート ----
 export type ReferenceSheet = Schemas["ReferenceSheetResponse"];
 export type ReferenceSheetMarker = Schemas["ReferenceSheetMarkerResponse"];
