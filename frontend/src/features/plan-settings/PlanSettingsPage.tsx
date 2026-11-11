@@ -1,31 +1,35 @@
-import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Select, Space, Table, Tag, Typography } from "antd";
+import { DeleteOutlined, EditOutlined, FileTextOutlined, PlusOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Empty, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import { bizOptions } from "../../domain/biz/lib/businesses";
 import { BizSettingsPanel } from "./BizSettingsPanel";
-import {
-  canEditPlanSettings,
-  canPreviewPlanSettings,
-  PLAN_SETTINGS_ADMIN_ONLY,
-  PLAN_SETTINGS_PREVIEW_ONLY,
-} from "../../domain/biz/lib/settings";
+import { canEditPlanSettings, PLAN_SETTINGS_ADMIN_ONLY } from "../../domain/biz/lib/settings";
 import { useCurrentStaff } from "../../domain/staff/hooks/useStaff";
-import { templateApi } from "../../domain/plan/api";
+import { templateApi, templateChangeApi } from "../../domain/plan/api";
 import { usePlanTemplates } from "../../domain/plan/hooks/usePlanTemplates";
+import { useBizChangeRequests } from "../../domain/plan/hooks/useTemplateChanges";
+import { DRAFT_SAVED_MESSAGE, draftErrorText, pendingDraftReason, templateWriteMode } from "../../domain/plan/lib/templateChanges";
 import { CATEGORY_LABEL, categoryOf, type TemplateCategory } from "../../domain/plan/lib/category";
 import { describeDeadline } from "../../domain/plan/lib/deadline";
 import { describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
-import type { PlanTemplate } from "../../domain/plan/types";
+import type { PlanTemplate, TemplateChange } from "../../domain/plan/types";
 import { ApiError } from "../../shared/api/http";
+import { TIMEZONE } from "../../shared/config";
 import { inZone } from "../../shared/lib/datetime";
 import { ReturnLink } from "../../shared/ui/ReturnLink";
 import { chipStyle } from "../calendar/lib/chipStyle";
+import { ChangeRequestsPanel } from "./ChangeRequestsPanel";
+import { DraftViewModal } from "./DraftViewModal";
+import { deleteDraftBody } from "./templateDraft";
 import { TemplateFormModal } from "./TemplateFormModal";
 
 const CATEGORY_COLOR: Record<TemplateCategory, string | undefined> = { regular: undefined, adhoc: "gold", special: "red" };
+
+/** 下書きを書く人（リリース担当）に見せる案内 */
+const DRAFT_MODE_NOTE = "変更は下書きとして保存し、業務管理者が承認します";
 
 const NO_UPCOMING_HINT =
   "2年以内に予定がありません。ルール・指定日・参照するシートの日付を確認してください（業務が終わった場合は削除できます）。";
@@ -95,11 +99,10 @@ export function PlanSettingsPage() {
   const parsedTemplate = Number(params.get("template"));
   const focusTemplateId = Number.isInteger(parsedTemplate) && parsedTemplate > 0 ? parsedTemplate : null;
 
-  // 作成・編集・削除と業務の設定の編集は業務管理者だけ（見るのは誰でも）
+  // 業務の設定の編集は業務管理者だけ。テンプレートは業務管理者が直接、リリース担当は下書きで変える（Level 2。見るのは誰でも）
   const me = useCurrentStaff();
   const canEdit = canEditPlanSettings(me.data);
-  // リリース担当は、フォームを開いて「何が変わるか」の確認まで（保存はできない）
-  const canPreview = canPreviewPlanSettings(me.data);
+  const writeMode = templateWriteMode(me.data);
 
   const bizes = useBizMasters();
   const options = useMemo(() => bizOptions(bizes.data ?? []), [bizes.data]);
@@ -108,15 +111,72 @@ export function PlanSettingsPage() {
   const unknownOption = bizId !== null && bizes.data && !selectedBiz ? [{ value: bizId, label: `業務ID ${bizId}` }] : [];
 
   const { data, loading, error, reload } = usePlanTemplates(bizId);
+  const changes = useBizChangeRequests(bizId, me.data?.id ?? null);
+  const reloadAll = () => {
+    reload();
+    changes.reload();
+  };
+  const pendingOf = useMemo(
+    () => new Map((changes.data?.pending ?? []).filter((c) => c.template_id !== null).map((c) => [c.template_id as number, c])),
+    [changes.data],
+  );
   const withoutUpcoming = (data ?? []).filter((t) => !t.next_occurrence_at).length;
   const focusLoaded = focusTemplateId !== null && (data ?? []).some((t) => t.id === focusTemplateId);
   useEffect(() => {
     if (!focusLoaded) return;
     document.querySelector(`.template-row-focus`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [focusLoaded, focusTemplateId]);
-  // 作成・編集モーダル（template が null なら新規作成）。閉じる間の表示が切り替わらないよう、閉じても template は残す
-  const [editor, setEditor] = useState<{ open: boolean; template: PlanTemplate | null }>({ open: false, template: null });
-  const openEditor = (template: PlanTemplate | null) => setEditor({ open: true, template });
+  // 作成・編集モーダル（template が null なら新規作成。draft は直す下書き）。閉じる間の表示が切り替わらないよう、閉じても残す
+  const [editor, setEditor] = useState<{ open: boolean; template: PlanTemplate | null; draft: TemplateChange | null }>({
+    open: false, template: null, draft: null,
+  });
+  const openEditor = (template: PlanTemplate | null, draft: TemplateChange | null = null) => setEditor({ open: true, template, draft });
+
+  // 下書きを見る窓
+  const [viewer, setViewer] = useState<{ open: boolean; change: TemplateChange | null }>({ open: false, change: null });
+  const openViewer = (change: TemplateChange) => setViewer({ open: true, change });
+  /** 一覧の行の「下書きを見る」: 読み込み済みの承認待ちに無ければ（読み込みのすれ違い）、その 1 件を読む */
+  const viewPending = async (t: PlanTemplate) => {
+    const loaded = pendingOf.get(t.id);
+    if (loaded) return openViewer(loaded);
+    if (t.pending_change_id == null) return;
+    try {
+      openViewer(await templateChangeApi.get(t.pending_change_id));
+    } catch (e) {
+      message.error(`下書きを読めませんでした: ${draftErrorText(e)}`);
+    }
+  };
+  const templateOf = (c: TemplateChange | null) =>
+    c?.template_id != null ? (data ?? []).find((t) => t.id === c.template_id) ?? null : null;
+  /** 窓の「直す」: 下書きの中身でフォームを開く（変更の下書きは、対象のテンプレートの今の値が要る） */
+  const editDraft = (c: TemplateChange) => {
+    const t = templateOf(c);
+    if (c.kind === "update" && !t) {
+      message.error("対象のテンプレートが見つかりません。画面を読み直してください。");
+      return;
+    }
+    setViewer((v) => ({ ...v, open: false }));
+    openEditor(t, c);
+  };
+
+  // リリース担当の「削除を依頼」: 削除の下書きを作る（承認されるまで、テンプレートも予定もそのまま）
+  const confirmDeleteRequest = (t: PlanTemplate) =>
+    modal.confirm({
+      title: `「${t.name}」の削除を依頼しますか？`,
+      content: "削除の下書きを作ります。業務管理者が承認すると、このテンプレートと未来の予定が削除されます。承認されるまでは今のままです。",
+      okText: "削除を依頼する",
+      okButtonProps: { danger: true },
+      cancelText: "キャンセル",
+      onOk: async () => {
+        try {
+          await templateChangeApi.create(deleteDraftBody(t));
+          message.success(DRAFT_SAVED_MESSAGE);
+        } catch (e) {
+          message.error(`依頼できませんでした: ${draftErrorText(e)}`, 8);
+        }
+        reloadAll();
+      },
+    });
 
   // 削除は確認してから。削除中は確認ダイアログの OK ボタンが読み込み中になり、終わると閉じる
   const confirmDelete = (t: PlanTemplate) =>
@@ -131,56 +191,81 @@ export function PlanSettingsPage() {
           await templateApi.delete(t.id);
           message.success("テンプレートを削除しました");
         } catch (e) {
-          message.error(`削除できませんでした: ${e instanceof ApiError ? e.message : "通信に失敗しました。"}`);
+          message.error(`削除できませんでした: ${e instanceof ApiError && e.code !== "TEMPLATE_DRAFT_PENDING" ? e.message : draftErrorText(e)}`);
         }
         // 失敗した場合も一覧を読み直す（別の画面で削除済みなど、一覧が古い可能性がある）
         reload();
       },
     });
 
-  const tableColumns: ColumnsType<PlanTemplate> = !canEdit && !canPreview ? columns : [
-    ...columns,
+  /** 予定名の列: 承認待ちの下書きがあれば「承認待ち」（だれが・いつ） */
+  const nameCell = (name: string, t: PlanTemplate) => {
+    const s = chipStyle(t.ui_metadata);
+    const p = pendingOf.get(t.id);
+    const who = p ? `: ${p.drafted_by_name ?? `職員 #${p.drafted_by_id}`}（${inZone(p.updated_at, TIMEZONE).format("M/D HH:mm")}）` : "";
+    return (
+      <span className="template-name">
+        <span className="swatch" style={{ background: s.background }} aria-hidden="true" />
+        {name}
+        {t.pending_change_id != null && (
+          <Tooltip title={`承認待ちの下書きがあります${who}`}>
+            <Tag color="gold" className="draft-tag">承認待ち</Tag>
+          </Tooltip>
+        )}
+      </span>
+    );
+  };
+
+  /** 承認待ちの間は、だれも直接変えられない（バックエンドは 409）。ボタンを無効にして理由を出す */
+  const blocked = (t: PlanTemplate, button: React.ReactElement) => {
+    const reason = pendingDraftReason(t);
+    return reason ? <Tooltip title={reason}><span>{button}</span></Tooltip> : button;
+  };
+
+  const tableColumns: ColumnsType<PlanTemplate> = [
+    ...columns.map((c) => ("dataIndex" in c && c.dataIndex === "name" ? { ...c, render: nameCell } : c)),
     {
       title: "操作",
       key: "actions",
-      width: 160,
+      width: 260,
       fixed: "right",
-      render: (_, t) =>
-        canEdit ? (
-          <Space size={0}>
-            <Button
-              type="link"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => openEditor(t)}
-              disabled={!selectedBiz}
-              aria-label={`「${t.name}」を編集`}
-            >
-              編集
-            </Button>
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => confirmDelete(t)}
-              aria-label={`「${t.name}」を削除`}
-            >
-              削除
-            </Button>
+      render: (_, t) => {
+        const pending = t.pending_change_id != null;
+        return (
+          <Space size={0} wrap>
+            {pending && (
+              <Button type="link" size="small" icon={<FileTextOutlined />} onClick={() => viewPending(t)}
+                aria-label={`「${t.name}」の下書きを見る`}>
+                下書きを見る
+              </Button>
+            )}
+            {writeMode === "direct" && blocked(t,
+              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEditor(t)} disabled={!selectedBiz || pending}
+                aria-label={`「${t.name}」を編集`}>
+                編集
+              </Button>,
+            )}
+            {writeMode === "direct" && blocked(t,
+              <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDelete(t)} disabled={pending}
+                aria-label={`「${t.name}」を削除`}>
+                削除
+              </Button>,
+            )}
+            {writeMode === "draft" && blocked(t,
+              <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEditor(t)} disabled={!selectedBiz || pending}
+                aria-label={`「${t.name}」の変更を下書き`}>
+                変更を下書き
+              </Button>,
+            )}
+            {writeMode === "draft" && blocked(t,
+              <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteRequest(t)} disabled={pending}
+                aria-label={`「${t.name}」の削除を依頼`}>
+                削除を依頼
+              </Button>,
+            )}
           </Space>
-        ) : (
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => openEditor(t)}
-            disabled={!selectedBiz}
-            aria-label={`「${t.name}」の変更を確認`}
-          >
-            変更を確認
-          </Button>
-        ),
+        );
+      },
     },
   ];
 
@@ -241,21 +326,28 @@ export function PlanSettingsPage() {
             <Alert type="warning" showIcon message={`今後の予定が無いテンプレートが ${withoutUpcoming} 件あります。`} description={NO_UPCOMING_HINT} />
           )}
           {selectedBiz && <BizSettingsPanel biz={selectedBiz} canEdit={canEdit} onSaved={bizes.reload} />}
+          <ChangeRequestsPanel
+            data={changes.data}
+            loading={changes.loading}
+            error={changes.error}
+            onReload={changes.reload}
+            onView={openViewer}
+          />
           <div className="table-head">
             <Typography.Text type="secondary">
               {selectedBiz ? `${selectedBiz.business_code} ${selectedBiz.name}` : `業務ID ${bizId}`} のテンプレート
               {data ? ` ${data.length} 件` : ""}
-              {!canEdit && ` ・ ${canPreview ? PLAN_SETTINGS_PREVIEW_ONLY : PLAN_SETTINGS_ADMIN_ONLY}`}
+              {writeMode !== "direct" && ` ・ ${writeMode === "draft" ? DRAFT_MODE_NOTE : PLAN_SETTINGS_ADMIN_ONLY}`}
             </Typography.Text>
             {/* 作成先は選択中の業務（一覧に無い業務IDの場合は作成・編集できない） */}
-            {canEdit && (
+            {writeMode === "direct" && (
               <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(null)} disabled={!selectedBiz}>
                 新規作成
               </Button>
             )}
-            {!canEdit && canPreview && (
-              <Button icon={<EyeOutlined />} onClick={() => openEditor(null)} disabled={!selectedBiz}>
-                新しいテンプレートの予定を確認
+            {writeMode === "draft" && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => openEditor(null)} disabled={!selectedBiz}>
+                新しいテンプレートを下書き
               </Button>
             )}
           </div>
@@ -272,14 +364,27 @@ export function PlanSettingsPage() {
           />
         </>
       )}
-      {selectedBiz && (canEdit || canPreview) && (
+      {selectedBiz && writeMode !== "none" && (
         <TemplateFormModal
           open={editor.open}
-          canSave={canEdit}
+          mode={writeMode}
+          draft={editor.draft}
           biz={selectedBiz}
           template={editor.template}
           onClose={() => setEditor((s) => ({ ...s, open: false }))}
-          onSaved={reload}
+          onSaved={reloadAll}
+        />
+      )}
+      {selectedBiz && (
+        <DraftViewModal
+          open={viewer.open}
+          change={viewer.change}
+          template={templateOf(viewer.change)}
+          clientCode={selectedBiz.client_code}
+          me={me.data}
+          onClose={() => setViewer((v) => ({ ...v, open: false }))}
+          onEdit={editDraft}
+          onChanged={reloadAll}
         />
       )}
     </div>

@@ -5,8 +5,8 @@ Handoff for the next working session. Read this first, then the design doc (§2)
 `src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11** — Level 2 (template drafts +
 approval, templates only) is in progress on `feature/template-drafts`; D.1 (data model) committed, D.2 (drafts:
 create / edit / withdraw, blocking), D.3 (approve / reject, direct-save rows, biz delete guard) and D.4 (read
-endpoints, pending_change_id, preview of any draft) committed; D.5a (frontend data + logic for drafters) built and
-waiting for review
+endpoints, pending_change_id, preview of any draft) and D.5a (frontend data + logic) committed; D.5b (drafter
+screens) committed; D.6 (admin approval screens) next
 (see the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
@@ -44,7 +44,38 @@ waiting for review
   also 直す (form prefilled with the proposed values, save = PUT) / 取り下げる; D.6 adds 承認 / 差し戻し there),
   releasers get 削除を依頼 on rows without a draft; **Q4 a 変更依頼 section above the table** for the selected
   business: its pending drafts of every kind + my own drafts decided in the last 30 days (with 差し戻し reasons).
-- **D.5a as built (uncommitted, waiting for review; frontend only, no visible change):**
+- **D.5b committed (frontend only; user browser-tested the releaser flow on the dev DB):**
+  - `TemplateFormModal`: prop `canSave` → **`mode: "direct" | "draft" | "preview"`** + optional `draft`
+    (`TemplateChange`; opens prefilled via `formValuesOfDraft`, save = `templateChangeApi.edit`). Draft mode: titles
+    「予定テンプレートの変更を下書き」 / 「新しい予定テンプレートを下書き」 / 「下書きを直す」, info `DRAFT_NOTE`, button
+    下書きとして保存, the confirmation window's button この内容で下書きを保存; `saveDraft` = `updateDraftBody` /
+    `createDraftBody` in ONE call, "変更がありません" when null, errors via `draftErrorText`, success
+    `DRAFT_SAVED_MESSAGE`. Same preview rule as admins (window only when `generation_changed`). Admin path unchanged.
+    **User's browser test (MOCK0002, dev DB):** a wrong time was drafted, then 直す set it back to the live value →
+    「変更がありません」 and the useless draft stayed pending. Fix (user approved the wording): when 直す makes the
+    draft equal to the live template, `saveDraft` asks 「今の設定と同じになりました。この下書きを取り下げますか？」
+    (取り下げる / 戻って直す) and withdraws on OK. Checked on `plan_check`: a +1 h draft on all 19 templates saves,
+    setting the time back gives `updateDraftBody` → null on all 19; the dialog itself only in the browser.
+  - `PlanSettingsPage`: `writeMode = templateWriteMode(me)`; name cell gets a gold 承認待ち tag (tooltip: drafter +
+    time from the loaded pending list); actions column always shown: 下書きを見る (anyone, when pending), direct →
+    編集 / 削除, draft → 変更を下書き / 削除を依頼 (confirm → delete draft); all four disabled with the
+    `pendingDraftReason` tooltip while pending. New button 新しいテンプレートを下書き for releasers. Header note
+    「変更は下書きとして保存し、業務管理者が承認します」. Admin delete error maps TEMPLATE_DRAFT_PENDING to Japanese.
+  - New `ChangeRequestsPanel.tsx` (the 変更依頼 section above the table; hidden when empty; pages of 10 when > 10
+    rows), `DraftViewModal.tsx` (状態 / 業務 / 書いた人 / 決めた人 / 理由, summary table 項目・今・下書きの内容 with
+    calendar + sheet names, drafter's 取り下げる (confirm) and 直す; "今 = the current value" note for decided ones;
+    D.6 adds 承認 / 差し戻し here), hook `domain/plan/hooks/useTemplateChanges.ts` (`loadBizChangeRequests` +
+    `useBizChangeRequests`: pending of the biz + my drafts decided within 30 days). CSS `.change-requests`,
+    `.draft-tag`, `.draft-meta`, `.draft-after`. The sheet page keeps the releaser check-only mode (sheets are out of
+    Level 2).
+  - Checked: `npm run build`; harness `d5b_harness.tsx` (esbuild `--jsx=automatic` + react / react-dom aliases to
+    `frontend/node_modules`, `--loader:.css=empty`) on `plan_check` **19/19**: each button's API path (変更を下書き with
+    and without the window, 直す, 削除を依頼, 新しいテンプレートを下書き, 取り下げる), admin 409 texts, the panel data
+    (pending, rejected reason, 30-day cut) and **the panel rendered with `react-dom/server`** (SSR inserts `<!-- -->`
+    between text parts — strip before matching). D.5a harness still 33/33. **No jsdom here → the modals, tooltips
+    and disabled buttons were not rendered; the user clicks through.** `plan_check` releaser 5 now has ~27 decided
+    drafts on biz 1 from harness runs.
+- **D.5a committed `34f37f8`.** As built (frontend only, no visible change):
   - `domain/plan/types`: `TemplateChange`, `TemplateChangeKind`, `TemplateChangeStatus`, `TemplateDraftInput`
     (create / update / delete union), `TemplateUpdateDraftInput`, `TemplateDraftPreview`.
   - `domain/plan/api/templateChangeApi.ts` (exported from `api/index.ts`): `list(filter)`, `count(filter)`, `get`,

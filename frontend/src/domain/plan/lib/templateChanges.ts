@@ -24,6 +24,13 @@ export const CHANGE_KIND_LABEL: Record<TemplateChangeKind, string> = {
   delete: "削除",
 };
 
+/** 下書きのフォームに出す説明 */
+export const DRAFT_NOTE =
+  "保存すると下書きになります。業務管理者が承認するまで、テンプレートは今の設定のままです（承認されるとすぐに反映されます）。";
+
+/** 下書きの保存が成功したときの知らせ */
+export const DRAFT_SAVED_MESSAGE = "下書きを保存しました。業務管理者の承認を待ちます。";
+
 const isActive = (s: Staff | null | undefined): s is Staff => s?.status === "active";
 
 /**

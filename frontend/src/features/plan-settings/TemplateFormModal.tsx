@@ -20,16 +20,18 @@ import {
 import { useEffect, useState } from "react";
 import { PREVIEW_ONLY_NOTE } from "../../domain/biz/lib/settings";
 import type { BizMaster } from "../../domain/biz/types";
-import { templateApi } from "../../domain/plan/api";
+import { templateApi, templateChangeApi } from "../../domain/plan/api";
 import { useBusinessCalendars } from "../../domain/plan/hooks/useClientCalendar";
 import { useReferenceSheets } from "../../domain/plan/hooks/useReferenceSheets";
 import { CATEGORY_LABEL, TEMPLATE_CATEGORIES } from "../../domain/plan/lib/category";
 import { DAY_OFFSET_OPTIONS, DEADLINE_MODE_HELP, DEADLINE_MODE_LABEL } from "../../domain/plan/lib/deadline";
 import { describeRrule, describeTemplate, POLICY_LABEL, TEMPLATE_TYPE_LABEL } from "../../domain/plan/lib/describe";
+import { DRAFT_NOTE, DRAFT_SAVED_MESSAGE, draftErrorText, type TemplateWriteMode } from "../../domain/plan/lib/templateChanges";
 import type {
   DeadlineMode,
   HolidayPolicy,
   PlanTemplate,
+  TemplateChange,
   TemplateChangePreview,
   TemplateCreatePreview,
   TemplateType,
@@ -48,6 +50,7 @@ import {
   toUpdateInput,
   type FormValues,
 } from "./templateForm";
+import { createDraftBody, formValuesOfDraft, updateDraftBody } from "./templateDraft";
 import { DEFAULT_PREVIEW_MONTHS } from "./templatePreview";
 import { TemplatePreviewPanel } from "./TemplatePreviewPanel";
 
@@ -59,13 +62,17 @@ type PreviewState =
 interface Props {
   open: boolean;
   /**
-   * 保存・作成できるか（業務管理者）。false（リリース担当）のときは「確認だけ」: 内容を入力して何が変わるかを見られるが、
-   * 保存のボタンは出ない（バックエンドも保存を拒否する）
+   * 保存のしかた（Level 2）。
+   * - direct: 業務管理者。これまでどおり直接保存・作成する
+   * - draft: リリース担当。保存すると下書きになり、業務管理者の承認を待つ（同じ確認の流れ）
+   * - preview: 確認だけ（保存のボタンは出ない）。今は使う人がいないが、形として残す
    */
-  canSave: boolean;
+  mode: Exclude<TemplateWriteMode, "none"> | "preview";
+  /** 直す下書き（本人の承認待ちの下書き）。指定するとその中身でフォームを開き、保存はその下書きの置き換えになる */
+  draft?: TemplateChange | null;
   /** テンプレートの業務（ページのドロップダウンで選択中のもの） */
   biz: BizMaster;
-  /** 編集するテンプレート。null なら新規作成 */
+  /** 編集するテンプレート（下書きを直すときは、その下書きの対象の今のテンプレート）。null なら新規作成 */
   template: PlanTemplate | null;
   onClose: () => void;
   /** 作成・保存したとき（一覧の再読み込み用）。一部だけ保存できた場合も呼ぶ */
@@ -77,8 +84,11 @@ interface Props {
  * 保存の前の確認（Level 1）: 編集で日付に関わる項目を変えたときは、保存の前に必ず「何が変わるか」（予定の違いとオーダーへの影響）を
  * 見せ、そこで保存を確定する。名前・締切・表示だけの変更は、これまでどおりそのまま保存する。新規作成では「予定を確認」で見られる（任意）。
  */
-export function TemplateFormModal({ open, canSave, biz, template, onClose, onSaved }: Props) {
-  const { message } = App.useApp();
+export function TemplateFormModal({ open, mode, draft = null, biz, template, onClose, onSaved }: Props) {
+  // 何かを保存できるか（直接、または下書きとして）。確認だけのときは保存のボタンを出さない
+  const canSave = mode !== "preview";
+  const drafting = mode === "draft";
+  const { message, modal } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ title: string; detail: string } | null>(null);
@@ -107,13 +117,13 @@ export function TemplateFormModal({ open, canSave, biz, template, onClose, onSav
   useEffect(() => {
     if (open) {
       form.resetFields();
-      form.setFieldsValue(template ? fromTemplate(template) : initialValues());
+      form.setFieldsValue(draft ? formValuesOfDraft(draft, template) : template ? fromTemplate(template) : initialValues());
       setCurrent(template);
       setError(null);
       setPreview(null);
       setMonths(DEFAULT_PREVIEW_MONTHS);
     }
-  }, [open, template, form]);
+  }, [open, template, draft, form]);
 
   // 振替・スキップ・営業日オフセットには営業日カレンダーが必要（バックエンドの検証と同じ条件）
   const calendarRequired = holidayPolicy !== "as_is" || (templateType === "reference_sheet_based" && offsetDayUnit === "business");
@@ -197,8 +207,61 @@ export function TemplateFormModal({ open, canSave, biz, template, onClose, onSav
     }
   };
 
+  /**
+   * 下書きとして保存する（リリース担当）。項目の変更と指定日の追加・削除を 1 つの下書きにまとめて 1 回で送る。
+   * 直すときは、その下書きを置き換える（種類と対象のテンプレートは同じ）。
+   */
+  const saveDraft = async (v: FormValues) => {
+    const body = current ? updateDraftBody(v, current) : createDraftBody(v, biz.id);
+    if (!body && draft) {
+      // 直した結果が今の設定と同じ（例: 間違えた時刻を元に戻した）: 保存するものは無い。下書きを残すと承認待ちのままなので、取り下げを勧める
+      setPreview(null);
+      modal.confirm({
+        title: "今の設定と同じになりました。この下書きを取り下げますか？",
+        content: "この下書きはテンプレートを何も変えません。取り下げると記録は残り、テンプレートはまた変更できるようになります。",
+        okText: "取り下げる",
+        okButtonProps: { danger: true },
+        cancelText: "戻って直す",
+        onOk: async () => {
+          try {
+            await templateChangeApi.withdraw(draft.id);
+            message.success("下書きを取り下げました");
+            form.resetFields();
+            onClose();
+          } catch (e) {
+            setError({ title: "取り下げられませんでした", detail: draftErrorText(e) });
+          } finally {
+            onSaved(); // 失敗しても読み直す（ほかの人が先に承認・差し戻しした場合など）
+          }
+        },
+      });
+      return;
+    }
+    if (!body) {
+      setPreview(null);
+      setError({ title: "下書きを保存できませんでした", detail: "変更がありません（今の設定と同じです）。" });
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await (draft ? templateChangeApi.edit(draft.id, body) : templateChangeApi.create(body));
+      message.success(DRAFT_SAVED_MESSAGE);
+      form.resetFields();
+      setPreview(null);
+      onClose();
+      onSaved();
+    } catch (e) {
+      setPreview(null); // エラーはフォームの上に出す
+      setError({ title: "下書きを保存できませんでした", detail: draftErrorText(e) });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const save = async (v: FormValues) => {
     if (!canSave) return; // 確認だけの人は保存しない（ボタンも出していない）
+    if (drafting) return saveDraft(v);
     setSubmitting(true);
     setError(null);
     let wrote = false;
@@ -237,9 +300,11 @@ export function TemplateFormModal({ open, canSave, biz, template, onClose, onSav
     <Modal
       open={open}
       title={
-        canSave
-          ? isEdit ? "予定テンプレートを編集" : "予定テンプレートを新規作成"
-          : isEdit ? "予定テンプレートの変更を確認（保存はできません）" : "新しい予定テンプレートを確認（作成はできません）"
+        drafting
+          ? draft ? "下書きを直す" : isEdit ? "予定テンプレートの変更を下書き" : "新しい予定テンプレートを下書き"
+          : canSave
+            ? isEdit ? "予定テンプレートを編集" : "予定テンプレートを新規作成"
+            : isEdit ? "予定テンプレートの変更を確認（保存はできません）" : "新しい予定テンプレートを確認（作成はできません）"
       }
       onCancel={onClose}
       width={640}
@@ -256,7 +321,7 @@ export function TemplateFormModal({ open, canSave, biz, template, onClose, onSav
               </Button>
             )}
             <Button type="primary" onClick={() => form.submit()} loading={submitting && preview === null} disabled={checking}>
-              {isEdit ? "保存する" : "作成する"}
+              {drafting ? "下書きとして保存" : isEdit ? "保存する" : "作成する"}
             </Button>
           </Space>
         ) : (
@@ -270,6 +335,7 @@ export function TemplateFormModal({ open, canSave, biz, template, onClose, onSav
       }
     >
       {!canSave && <Alert type="info" showIcon message={PREVIEW_ONLY_NOTE} className="modal-alert" />}
+      {drafting && <Alert type="info" showIcon message={DRAFT_NOTE} className="modal-alert" />}
       <Typography.Paragraph type="secondary" className="modal-note">
         業務: <span className="mono">{biz.business_code}</span> {biz.name}（顧客 {biz.client_code}）
         {template && (
@@ -517,7 +583,9 @@ export function TemplateFormModal({ open, canSave, biz, template, onClose, onSav
         open={preview !== null}
         title={
           canSave
-            ? preview?.mode === "update" ? "保存の前の確認: この変更で変わること" : "作成の前の確認: できる予定"
+            ? preview?.mode === "update"
+              ? `${drafting ? "下書きの" : ""}保存の前の確認: この変更で変わること`
+              : `${drafting ? "下書きの" : "作成の"}前の確認: できる予定`
             : preview?.mode === "update" ? "確認: この変更で変わること（保存はできません）" : "確認: できる予定（作成はできません）"
         }
         width={860}
@@ -530,7 +598,7 @@ export function TemplateFormModal({ open, canSave, biz, template, onClose, onSav
                 戻って直す
               </Button>
               <Button type="primary" loading={submitting} disabled={checking} onClick={() => preview && save(preview.values)}>
-                {preview?.mode === "update" ? "この内容で保存する" : "この内容で作成する"}
+                {drafting ? "この内容で下書きを保存" : preview?.mode === "update" ? "この内容で保存する" : "この内容で作成する"}
               </Button>
             </Space>
           ) : (
