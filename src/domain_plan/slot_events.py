@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Callable, Literal
 
-from sqlalchemy import event, select
+from sqlalchemy import event, or_, select
 from sqlalchemy.orm import Session
 
 from src.domain_plan.models import InstanceOrigin, PlanInstance, PlanInstanceVoid, VoidReason
@@ -124,6 +124,38 @@ def live_instance_for_slot(db: Session, slot: SlotKey) -> PlanInstance | None:
         .where(PlanInstance.template_id == slot.template_id, PlanInstanceVoid.instance_id.is_(None), condition)
     )
     return next((i for i in db.scalars(stmt) if slot_key_of(db, i) == slot), None)
+
+
+def live_instances_for_slots(db: Session, slots: list[SlotKey]) -> dict[SlotKey, PlanInstance]:
+    """
+    複数の発生枠の現在の有効なインスタンス（live_instance_for_slot と同じ規則を、テンプレートごとに 1 回の問い合わせで）。
+    無い枠はキーに含めない（枠が消えた・取り消された）。テンプレートの変更では全部の枠が一度に動くため、
+    枠ごとに問い合わせると、生成済みの範囲が長いテンプレート（2 年 = 730 枠）で遅くなる。
+    """
+    result: dict[SlotKey, PlanInstance] = {}
+    by_template: dict[int, list[SlotKey]] = {}
+    for slot in slots:
+        by_template.setdefault(slot.template_id, []).append(slot)
+    for template_id, group in by_template.items():
+        wanted = set(group)
+        sheet_ids = {s.ref for s in group if s.kind == "sheet_event"}
+        dates = {s.occurrence_date for s in group if s.kind != "sheet_event"}
+        conditions = []
+        if sheet_ids:
+            conditions.append(PlanInstance.source_sheet_event_id.in_(sheet_ids))
+        if dates:
+            conditions.append(PlanInstance.occurrence_date.in_(dates) & PlanInstance.source_sheet_event_id.is_(None))
+        stmt = (
+            select(PlanInstance)
+            .outerjoin(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .where(PlanInstance.template_id == template_id, PlanInstanceVoid.instance_id.is_(None), or_(*conditions))
+            .order_by(PlanInstance.id)
+        )
+        for instance in db.scalars(stmt):
+            key = slot_key_of(db, instance)
+            if key in wanted and key not in result:
+                result[key] = instance
+    return result
 
 
 # ==========================================

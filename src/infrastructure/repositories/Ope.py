@@ -3,7 +3,7 @@
 from datetime import date, datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from src.domain_biz.models import BizMaster, DependencyMatchRule, ReleaseMode
@@ -40,6 +40,40 @@ class OpeOrderRepository:
                 OpeOrder.one_off_instance_id.is_(None),
             )
         return db.scalars(stmt.with_for_update()).first()
+
+    def get_active_for_slots(
+        self,
+        db: Session,
+        *,
+        template_id: int,
+        occurrence_dates: set[date],
+        sheet_event_ids: set[int],
+        one_off_instance_ids: set[int],
+    ) -> list[OpeOrder]:
+        """
+        複数の発生枠の、取消されていないオーダー（get_active_for_slot と同じ規則を 1 回の問い合わせで。行ロック付き）。
+        ロックは id の順に取る（同時に動く処理どうしで、取る順がそろう）。
+        """
+        conditions = []
+        if sheet_event_ids:
+            conditions.append(OpeOrder.source_sheet_event_id.in_(sheet_event_ids))
+        if one_off_instance_ids:
+            conditions.append(OpeOrder.one_off_instance_id.in_(one_off_instance_ids))
+        if occurrence_dates:
+            conditions.append(
+                OpeOrder.occurrence_date.in_(occurrence_dates)
+                & OpeOrder.source_sheet_event_id.is_(None)
+                & OpeOrder.one_off_instance_id.is_(None)
+            )
+        if not conditions:
+            return []
+        stmt = (
+            select(OpeOrder)
+            .where(OpeOrder.template_id == template_id, OpeOrder.status != OrderStatus.CANCELED, or_(*conditions))
+            .order_by(OpeOrder.id)
+            .with_for_update()
+        )
+        return list(db.scalars(stmt))
 
     def get_active_by_instances(self, db: Session, *, instance_ids: list[int]) -> dict[int, OpeOrder]:
         """plan インスタンスごとの、取消されていないオーダー（ダッシュボードの一覧用。1回のクエリ）"""
