@@ -8,7 +8,30 @@ is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the 
 
 ## 1. Current status
 
-### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — start here
+### Finer permissions (branch `feature/finer-permissions` from `main` `e07649b`, 2026-11-11) — start here
+
+- **User chose it 2026-11-11** after batch orders. Design doc item "Finer permissions for settings" (rev 125, no new
+  comments). **Decisions (all my recommendations):** releasers do **all SOP draft edits, shared** (create / clone /
+  rename / delete / steps on any draft; approve + cancel stay admin); a **submit-for-approval** state (submit /
+  withdraw; admin approves with the effective date or sends back with a required reason; submitted drafts are
+  read-only; shown on 承認待ち + the admin badge); **release settings: releasers change them directly** through their
+  own endpoint (3 fields) with a **change history** written by every endpoint; **existing releaser role**, no new
+  role. Defaults I stated in the plan (user said go): admins approve any draft directly (submitted or not, own
+  included; self-approval marked); withdraw by the submitter or an admin; a release change applies at once (no
+  preview).
+- **Steps:** P.1 data model · P.2 SOP backend · P.3 release endpoint + history + reads (OpenAPI, gen:api) · P.4
+  frontend SOP · P.5 frontend release settings · P.6 harness + jsdom + manual + GO-LIVE + design doc + MEMORY.
+- **P.1 committed:** migration **`3ff92f646c92`** (after `e7f9acb3d34a`; **the user must run `alembic upgrade head`
+  on the dev DB**; `plan_check` is at it): `sop_version` + `created_by_id` / `updated_by_id` / `updated_at` /
+  `submitted_by_id` / `submitted_at` (CHECK `ck_sop_version_submitted`: both or neither, drafts only; partial index
+  `ix_sop_version_submitted`); `sop_version_event` (CREATED / SUBMITTED / WITHDRAWN / REJECTED (note required) /
+  APPROVED / CANCELLED; actor nullable; CASCADE with the draft; step edits not logged); `biz_release_change` (before /
+  after JSON of the 3 fields, CHECK changed). Autogenerate missed the CHECK on the existing table and the FK names —
+  added by hand (+ enum drop on downgrade). Repos `sop_version_event_repo` (add, list_for_version, list_submitted /
+  count_submitted — deleted businesses skipped by the soft-delete filter), `biz_release_change_repo`; `RELEASE_FIELDS`
+  in `domain_biz/models.py`. Tests `tests/test_sop_drafting_model.py` (5). Suite 297, pyright 0.
+
+### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — merged
 
 - **Status: merged into `main` as `c8bdec6` ("commit and merge", user, 2026-11-11), not pushed** (`0ef890c` B.1 ·
   `cee8ee2` B.2 · `471f683` B.3 · `1cee5c5` B.4 · `6ffa574` B.5 + this handoff commit). Next phase is open (finer permissions for SOP drafts + release
