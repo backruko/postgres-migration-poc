@@ -28,9 +28,11 @@ from src.domain_plan.schemas import (
     PlanOneOffCreate,
     PlanRevertResponse,
     PlanOccurrenceResponse,
+    PlanTemplateChangeResponse,
     PlanTemplateCreate,
     PlanTemplateResponse,
     PlanTemplateUpdate,
+    TemplateDraft,
     ReferenceSheetCreate,
     ReferenceSheetEventResponse,
     ReferenceSheetEventsCreate,
@@ -49,6 +51,8 @@ from src.domain_plan.services import (
     import_sheet, override_instance, revert_sheet_event, update_marker, rebuild_cache, remove_explicit_date, restore_template, revert_instance, update_sheet_event,
     update_template,
 )
+
+from src.domain_plan import template_changes
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 
@@ -227,6 +231,54 @@ def add_explicit_dates_endpoint(template_id: int, dates_in: ExplicitDatesAdd, db
 @require_roles([RoleCode.ADMIN])
 def remove_explicit_date_endpoint(template_id: int, local_date: date, db: Session = Depends(get_db)):
     return remove_explicit_date(db=db, template_id=template_id, local_date=local_date)
+
+# ==========================================
+# テンプレートの変更依頼（下書き → 承認 → 反映。Level 2）
+# 下書きはリリース担当・業務管理者が書ける。直す・取り下げるのは本人だけ。承認・差し戻しは業務管理者（別のエンドポイント）
+# ==========================================
+
+@router.post("/template-changes", response_model=PlanTemplateChangeResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+def create_template_draft_endpoint(
+    draft: TemplateDraft = Body(...),
+    db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    テンプレートの変更の下書きを作ります。kind で種類を選びます:
+    - `create`: 新しいテンプレート（template = POST /plans/templates と同じ本文）
+    - `update`: 項目の変更（changes = PATCH /plans/templates/{id} と同じ本文）と、指定日の追加・削除（add_dates / remove_dates）
+    - `delete`: テンプレートの削除
+
+    本物の保存と同じ処理で確かめ（何も保存しない試し実行）、誤りは直接の保存と同じエラーになります。何も変えない下書きは 400。
+    承認待ちの下書きがあるテンプレートには書けません（409 TEMPLATE_DRAFT_PENDING）。
+    """
+    return template_changes.create_draft(db=db, draft=draft, actor_id=current_staff.id)
+
+@router.put("/template-changes/{change_id}", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+def edit_template_draft_endpoint(
+    change_id: int,
+    draft: TemplateDraft = Body(...),
+    db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    承認待ちの下書きを、書いた本人が直します（中身をまるごと置き換え。確かめ方は作成と同じ）。
+    種類と対象のテンプレートは変えられません。削除の下書きには直すところがありません。
+    本人以外は 403、承認・差し戻し・取り下げが済んだ下書きは 409 TEMPLATE_CHANGE_DECIDED。
+    """
+    return template_changes.edit_draft(db=db, change_id=change_id, draft=draft, actor_id=current_staff.id)
+
+@router.post("/template-changes/{change_id}/withdraw", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+def withdraw_template_draft_endpoint(
+    change_id: int,
+    db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """承認待ちの下書きを、書いた本人が取り下げます（記録は残る）。本人以外は 403。"""
+    return template_changes.withdraw_draft(db=db, change_id=change_id, actor_id=current_staff.id)
 
 @router.get("/templates/{template_id}/instances", response_model=list[PlanInstanceResponse], responses={**COMMON_ERRORS})
 def get_instances_endpoint(template_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):

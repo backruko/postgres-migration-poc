@@ -1,8 +1,10 @@
 from collections import defaultdict
+from typing import Any
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -14,6 +16,7 @@ from src.infrastructure.repositories import (
     plan_instance_repo,
     plan_instance_void_repo,
     plan_slot_release_repo,
+    plan_template_change_repo,
     plan_template_repo,
     reference_sheet_repo,
 )
@@ -77,6 +80,7 @@ from src.domain_plan.schemas import (
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
 from src.domain_client.services import require_active_client
+from src.domain_staff.models import StaffUser
 
 # ローリングホライズン: テンプレート作成時に「今から何日先まで」インスタンスを生成するか
 MATERIALIZE_HORIZON = timedelta(days=90)
@@ -1008,6 +1012,44 @@ def _get_locked_template(db: Session, template_id: int) -> PlanTemplate:
     return template
 
 
+def refuse_if_draft_pending(db: Session, template_id: int, except_change_id: int | None = None) -> None:
+    """
+    承認待ちの下書きがあるテンプレートは、ほかの変更（直接の保存・削除・指定日・別の下書き）を受け付けない（409）。
+    テンプレートの行ロックを取ってから呼ぶ（下書きの作成も同じ行ロックを取るので、すれ違わない）。
+    except_change_id: 自分の下書きを直すときは、その下書きを数えない。
+    """
+    draft = plan_template_change_repo.get_draft_for_template(db, template_id=template_id)
+    if draft is None or draft.id == except_change_id:
+        return
+    drafter = db.get(StaffUser, draft.drafted_by_id)
+    raise DuplicatedRecordError(
+        f"PlanTemplate(id={template_id}) has a pending draft (change {draft.id} by "
+        f"{drafter.name if drafter else draft.drafted_by_id}); approve, reject or withdraw it first.",
+        error_code=ErrorCode.TEMPLATE_DRAFT_PENDING,
+    )
+
+
+def _get_locked_template_without_draft(db: Session, template_id: int) -> PlanTemplate:
+    """業務管理者の直接の変更用: 行ロックを取り、承認待ちの下書きがあれば断る"""
+    template = _get_locked_template(db, template_id)
+    refuse_if_draft_pending(db, template_id)
+    return template
+
+
+# 変更の前後を比べる・履歴に残すテンプレートの設定（生成・表示・締切に効く項目すべて。revision などの管理用は含めない）
+TEMPLATE_SETTING_FIELDS = (
+    "biz_master_id", "template_type", *PlanTemplateUpdate.model_fields.keys(),
+)
+
+
+def template_settings(template: PlanTemplate) -> dict[str, Any]:
+    """テンプレートの設定の写し（JSON にできる値。指定日は日付の一覧）。下書きの「何も変わらない」の判定と変更前の値に使う"""
+    values: dict[str, Any] = {field: getattr(template, field) for field in TEMPLATE_SETTING_FIELDS}
+    if template.template_type == TemplateType.EXPLICIT_DATES:
+        values["dates"] = sorted(d.local_date for d in template.explicit_dates)
+    return jsonable_encoder(values)
+
+
 def create_template(db: Session, template_in: PlanTemplateCreate) -> PlanTemplate:
     template = _apply_template_create(db, template_in)
     _commit(db, "PlanTemplate could not be created due to a conflicting record.")
@@ -1078,6 +1120,7 @@ def _check_deadline(template: PlanTemplate) -> None:
 
 
 def update_template(db: Session, template_id: int, template_in: PlanTemplateUpdate) -> PlanTemplate:
+    _get_locked_template_without_draft(db, template_id)
     template, _ = _apply_template_update(db, template_id, template_in)
     _commit(db, "PlanTemplate could not be updated due to a conflicting record.")
     db.refresh(template)
@@ -1219,14 +1262,8 @@ def dry_run_update(
 
 def delete_template(db: Session, template_id: int) -> PlanTemplate:
     """論理削除。未来のインスタンスは無効化し、過去のインスタンスは履歴として残します。"""
-    template = _get_locked_template(db, template_id)
-
-    future = plan_instance_repo.get_live_in_window(db, template_id=template.id, lower=_now(), upper=FAR_FUTURE)
-    future_ids = [i.id for i in future]
-    if future_ids:
-        plan_instance_void_repo.void_many(db, instance_ids=future_ids, reason=VoidReason.TEMPLATE_DELETED)
-        plan_cache_repo.purge(db, instance_ids=future_ids)
-    template.soft_delete()
+    _get_locked_template_without_draft(db, template_id)
+    _apply_template_delete(db, template_id)
     db.commit()
 
     # 全局scopeにより削除済みは通常の取得で見えないため、解除して読み直す
@@ -1235,10 +1272,27 @@ def delete_template(db: Session, template_id: int) -> PlanTemplate:
     return deleted
 
 
+def _apply_template_delete(db: Session, template_id: int) -> PlanTemplate:
+    """
+    テンプレートを論理削除します（コミットしない）。未来のインスタンスは無効化し、過去は履歴として残します。
+    直接の削除（delete_template）と、削除の下書きの確認・承認が使います。
+    """
+    template = _get_locked_template(db, template_id)
+    future = plan_instance_repo.get_live_in_window(db, template_id=template.id, lower=_now(), upper=FAR_FUTURE)
+    future_ids = [i.id for i in future]
+    if future_ids:
+        plan_instance_void_repo.void_many(db, instance_ids=future_ids, reason=VoidReason.TEMPLATE_DELETED)
+        plan_cache_repo.purge(db, instance_ids=future_ids)
+    template.soft_delete()
+    db.flush()
+    return template
+
+
 def restore_template(db: Session, template_id: int) -> PlanTemplate:
     template = plan_template_repo.get_locked(db, id=template_id, include_deleted=True)
     if not template or not template.is_deleted:
         raise NotFoundError(f"Deleted PlanTemplate(id={template_id}) not found.")
+    refuse_if_draft_pending(db, template_id)
 
     template.restore()
     # 削除期間中は生成していないため、今からホライズンまでを新しいリビジョンで生成し直す
@@ -1251,24 +1305,41 @@ def restore_template(db: Session, template_id: int) -> PlanTemplate:
     return _with_next_occurrence(db, [template])[0]
 
 
-def add_explicit_dates(db: Session, template_id: int, dates: list[date]) -> PlanTemplate:
+def _apply_explicit_dates(
+    db: Session, template_id: int, add: list[date] | tuple[()] = (), remove: list[date] | tuple[()] = ()
+) -> bool:
+    """
+    指定日を足す・外して、変わったら作り直します（コミットしない）。戻り値は変わったか。
+    足す日付が登録済みなら無視、外す日付が無ければ 404。足すのは指定日テンプレートだけ（400）。
+    直接の変更（add_explicit_dates / remove_explicit_date）と、下書きの確認・承認が使います。
+    """
     template = _get_locked_template(db, template_id)
-    if template.template_type != TemplateType.EXPLICIT_DATES:
+    if add and template.template_type != TemplateType.EXPLICIT_DATES:
         raise BadRequestError("Explicit dates can only be added to EXPLICIT_DATES templates.")
 
-    if plan_template_repo.add_explicit_dates(db, template=template, dates=dates):
+    changed = False
+    for local_date in remove:
+        if not plan_template_repo.remove_explicit_date(db, template=template, local_date=local_date):
+            raise NotFoundError(f"Date {local_date} not found on PlanTemplate(id={template_id}).")
+        changed = True
+    if add and plan_template_repo.add_explicit_dates(db, template=template, dates=add):
+        changed = True
+    if changed:
         _regenerate(db, template, VoidReason.SOURCE_DATE_CHANGED)
+    return changed
+
+
+def add_explicit_dates(db: Session, template_id: int, dates: list[date]) -> PlanTemplate:
+    template = _get_locked_template_without_draft(db, template_id)
+    if _apply_explicit_dates(db, template_id, add=dates):
         _commit(db, "Some dates already exist for this template.")
         db.refresh(template)
     return _with_next_occurrence(db, [template])[0]
 
 
 def remove_explicit_date(db: Session, template_id: int, local_date: date) -> PlanTemplate:
-    template = _get_locked_template(db, template_id)
-    if not plan_template_repo.remove_explicit_date(db, template=template, local_date=local_date):
-        raise NotFoundError(f"Date {local_date} not found on PlanTemplate(id={template_id}).")
-
-    _regenerate(db, template, VoidReason.SOURCE_DATE_CHANGED)
+    template = _get_locked_template_without_draft(db, template_id)
+    _apply_explicit_dates(db, template_id, remove=[local_date])
     db.commit()
     db.refresh(template)
     return _with_next_occurrence(db, [template])[0]

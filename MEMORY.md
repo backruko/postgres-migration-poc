@@ -3,7 +3,8 @@
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
 `src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11** — Level 2 (template drafts +
-approval, templates only) is in progress on `feature/template-drafts`; step D.1 (data model) built, waiting for review
+approval, templates only) is in progress on `feature/template-drafts`; D.1 (data model) committed, D.2 (drafts:
+create / edit / withdraw, blocking) built and waiting for review
 (see the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
@@ -13,7 +14,7 @@ approval, templates only) is in progress on `feature/template-drafts`; step D.1 
 - **Branch `feature/template-drafts` from `main` `306f34a`.** Step plan approved (user, 2026-11-11), one step at a
   time, stop for review after each: **D.1** data model (migration + model + repo) · D.2 drafts in the backend
   (create / edit / withdraw, releaser + admin; checked like a real save; one pending draft; template writes refused
-  while one is pending) · D.3 approve / reject (admin; applies through the existing `_apply_*`; `base_revision` check;
+  while one is pending) · D.3 approve / reject (admin; applies through the existing `_apply_*`; no revision check;
   self-approval; admin direct saves write an `is_direct` row) · D.4 read endpoints (pending by business / all + count,
   history per template, preview of a stored draft; OpenAPI + `npm run gen:api`) · D.5 frontend for drafters
   (下書きとして保存, draft badge, blocked edit state) · D.6 frontend for admins (approval window with the current
@@ -28,9 +29,41 @@ approval, templates only) is in progress on `feature/template-drafts`; step D.1 
   that template — not single-occurrence changes, sheets or calendars; drafter edits / withdraws, admin approves or
   rejects with a reason and **does not edit** the draft; Q6 the draft holds settings, not dates — the approval window
   re-runs the preview on current data, approval fails with the normal save errors if a referenced sheet / marker /
-  calendar is gone, `base_revision` guards the template; Q7 承認待ち list on 予定の設定 + admin menu count badge, no
+  calendar is gone; **no revision check at approval** (user chose A before D.2: `revision` also rises on holiday /
+  calendar / sheet recalculation, which drafts do not block — so the blocking rule is the guard and `base_revision` is
+  a record only; a separate settings counter was rejected as overengineering); Q7 承認待ち list on 予定の設定 + admin menu count badge, no
   notifications. **Releasers do not draft SOPs** in this phase (SOPs have their own versions). Design doc rev 110.
-- **D.1 as built (uncommitted, waiting for review):** migration **`e7f9acb3d34a`** (revises `b4e8d2a6c913`) →
+- **D.2 as built (uncommitted, waiting for review; no migration):**
+  - Endpoints (releaser + admin, login): `POST /plans/template-changes` (body switched by `kind`: `create` +
+    `template` = POST body / `update` + `template_id`, `changes` = PATCH body, `add_dates`, `remove_dates` / `delete` +
+    `template_id`) → 201 `PlanTemplateChangeResponse` (`self_approved` computed); `PUT /plans/template-changes/{id}`
+    (drafter replaces the whole draft; kind + template fixed → 400; delete draft → 400 "nothing to edit");
+    `POST /plans/template-changes/{id}/withdraw` (drafter). Not the drafter → 403 (admins too: they reject in D.3);
+    decided draft → 409 `TEMPLATE_CHANGE_DECIDED`.
+  - `src/domain_plan/template_changes.py`: `_check_draft` runs the real `_apply_template_create` /
+    `_apply_template_update` + `_apply_explicit_dates` / `_apply_template_delete` inside `dry_run` (rolled back; the
+    `after_rollback` hook of slot_events drops pending slot changes, so nothing reaches orders); "changes nothing"
+    = `template_settings()` equal before / after → 400. The dry-run rollback releases the row lock, so before saving it
+    re-locks the template, re-checks pending drafts and compares `template_settings` with the checked state → 409
+    `TEMPLATE_CHANGED_MEANWHILE`. A unique-index race on commit → 409 `TEMPLATE_DRAFT_PENDING`. Stored `changes`:
+    create = `model_dump(mode="json")`, update = `exclude_unset` (reads back with `model_validate`, tested).
+  - `services.py`: `refuse_if_draft_pending(db, template_id, except_change_id)` (409 `TEMPLATE_DRAFT_PENDING`, names
+    the change id + drafter) called under the template row lock by `update_template`, `delete_template`,
+    `add_explicit_dates`, `remove_explicit_date`, `restore_template`. New non-committing `_apply_explicit_dates(add,
+    remove)` (one regeneration) and `_apply_template_delete` (the public functions use them; behaviour unchanged).
+    `template_settings(template)` = JSON snapshot of `TEMPLATE_SETTING_FIELDS` (biz, type, every PATCH field) + `dates`
+    for specified-dates templates — D.3 uses it for `before_values`. Single-occurrence changes, one-offs, preview,
+    sheets and calendars are not blocked.
+  - New error codes `TEMPLATE_DRAFT_PENDING`, `TEMPLATE_CHANGE_DECIDED`, `TEMPLATE_CHANGED_MEANWHILE` (frontend
+    `schema.gen.ts` not regenerated yet — OpenAPI export + `npm run gen:api` is planned for D.4).
+  - Checked: `tests/test_template_drafts.py` 13 (nothing changes: settings, revision, instances, voids, orders, order
+    events; errors equal the real save; one pending draft blocks drafts + PATCH / DELETE / dates; single-occurrence
+    changes not blocked; edit / withdraw rules; route roles); `test_plan_settings_guard.py` allowlist gained the three
+    draft routes; full suite **253 passed**; pyright 0. HTTP harness `drafts_harness.py` (scratchpad) on `plan_check`
+    via uvicorn 8001, releaser 5 / admin 8 / operator 4: **29/29** (401 / 403 / 422s for body errors, 400 / 404 like
+    PATCH, 409s, preview still works, withdraw frees PATCH; every draft it wrote is withdrawn, template settings as
+    at the start — `plan_check` keeps the withdrawn change rows).
+- **D.1 committed `67d0d81`:** migration **`e7f9acb3d34a`** (revises `b4e8d2a6c913`) →
   **the user runs `alembic upgrade head`**. Table `plan_template_change` (`src/domain_plan/models.py` §6):
   `biz_master_id`, `template_id` (NULL for a create until approved), `kind` CREATE / UPDATE / DELETE, `status` DRAFT /
   APPROVED / REJECTED / WITHDRAWN (enums stored as member names), `is_direct`, `base_revision`, `changes` JSONB
