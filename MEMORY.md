@@ -2,13 +2,22 @@
 
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
-`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (late)** — **batch order creation
-is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the user pushes); Level 2 is merged into `main`
-(`5e1af2f`). See the first block of §1. The MVP pilot is postponed.
+`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (late)** — **finer permissions
+(releasers draft SOPs + change release settings) is built on `feature/finer-permissions` (P.1–P.6 committed), not
+merged, not pushed; it has migration `3ff92f646c92`** (the user runs `alembic upgrade head` on the dev DB). Batch order
+creation (`c8bdec6`) and Level 2 (`5e1af2f`) are merged into `main`, not pushed (`origin/main` = `6390c87`; the user
+pushes). See the first block of §1. The MVP pilot is postponed.
 
 ## 1. Current status
 
 ### Finer permissions (branch `feature/finer-permissions` from `main` `e07649b`, 2026-11-11) — start here
+
+- **Status: P.1–P.6 committed on `feature/finer-permissions`, not merged, not pushed** (`5de2110` P.1 · `d29aaa9` P.2 ·
+  `22b8124` P.3 · `c3bcb8f` P.4 · `e84e82d` P.5 · + the P.6 docs commit). **Migration `3ff92f646c92`**: the user runs
+  `alembic upgrade head` on the dev DB before trying it (the server's `app` container migrates at start). Next: the
+  user browser-tests (releaser: SOP 新しい版 → 承認を依頼 → 取り下げる; admin: 承認待ち → SOP の草稿 → 開く → 差し戻す… /
+  承認…, badge; releaser: 予定テンプレート設定 → リリースを編集 → 履歴) and merges ("commit and merge" like before).
+  Then the next phase is open (the pilot: rebuild the USB zip first — tree clean).
 
 - **User chose it 2026-11-11** after batch orders. Design doc item "Finer permissions for settings" (rev 125, no new
   comments). **Decisions (all my recommendations):** releasers do **all SOP draft edits, shared** (create / clone /
@@ -76,6 +85,13 @@ is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the 
   a save). `lib/settings.ts`: `canEditReleaseSettings`, `releaseText` (shared by panel + history). jsdom
   `release_dom.tsx` on biz 2 **9/9** twice (operator view-only, releaser form + save + panel + history, admin full
   form, restore recorded). biz 2 restored to manual / 03:00 / 0; its history rows stay on `plan_check`.
+- **P.6 (docs + checks):** `docs/OPERATION-MANUAL.md` — 1.4 roles (releaser: SOP drafts + submit, release settings;
+  admin: decides SOP drafts), 1.5 badge = template + SOP, 3.4 リリースを編集 + 履歴 + API (`PATCH /biz/{id}/release`,
+  `GET .../release-changes`), 3.5 roles, author line, ひとこと, the submit / withdraw / send-back flow, 履歴, rules, API
+  rows, 4.3 `SOP_DRAFT_SUBMITTED` / `SOP_DRAFT_NOT_SUBMITTED`, 5 QA rows 20–22, 6 limits (SOP approval / history,
+  release settings changed directly with history, no preview). Every quoted screen label grepped in the frontend.
+  `deploy/GO-LIVE.md` role table + 2 checklist lines. **Design doc rev 127** (finer-permissions item: the remaining
+  part built, not yet merged, with the decisions). Final: suite **308 passed**, pyright 0, `npm run build` passes.
 
 ### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — merged
 
@@ -150,7 +166,9 @@ is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the 
   limits); `deploy/GO-LIVE.md` D role table + checklist line "an admin to approve drafts". Every screen label quoted
   in the manual was grepped in the frontend. Design doc **rev 125** (Level 2 marked built and merged; finer-permissions item
   updated: template part done, SOP drafting + release settings still open).
-- **Open / offered, not decided:** (1) ~~batching order creation~~ — **merged (`c8bdec6`)** (block above); (2) finer permissions for SOP drafts and release settings (doc item);
+- **Open / offered, not decided:** (1) ~~batching order creation~~ — **merged (`c8bdec6`)**; (2) ~~finer permissions
+  for SOP drafts and release settings~~ — **built on `feature/finer-permissions`** (first block of §1); (4) moved
+  orders with a LATEST_BEFORE dependency still refresh links per order (told the user, not asked for);
   (3) biz delete doesn't lock the biz row (narrow race with a new-template draft, same as the existing template
   check — the user said leave it).
 - **`README.md` is the user's** (Japanese project description; the user committed it as `2038e4b`) — never include
