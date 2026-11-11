@@ -6,7 +6,7 @@ Handoff for the next working session. Read this first, then the design doc (§2)
 approval, templates only) is in progress on `feature/template-drafts`; D.1 (data model) committed, D.2 (drafts:
 create / edit / withdraw, blocking), D.3 (approve / reject, direct-save rows, biz delete guard) and D.4 (read
 endpoints, pending_change_id, preview of any draft) and D.5a (frontend data + logic) committed; D.5b (drafter
-screens) committed; D.6 (admin approval screens) next
+screens), D.6a (approval window) and the order-sync N+1 fix committed; D.6b (承認待ち page, badge, 履歴 drawer) in progress
 (see the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
@@ -44,7 +44,68 @@ screens) committed; D.6 (admin approval screens) next
   also 直す (form prefilled with the proposed values, save = PUT) / 取り下げる; D.6 adds 承認 / 差し戻し there),
   releasers get 削除を依頼 on rows without a draft; **Q4 a 変更依頼 section above the table** for the selected
   business: its pending drafts of every kind + my own drafts decided in the last 30 days (with 差し戻し reasons).
-- **D.5b committed (frontend only; user browser-tested the releaser flow on the dev DB):**
+- **D.6 = the admin screens, split D.6a / D.6b.** User's decisions 2026-11-11 (all as I recommended): **Q1 a new
+  承認待ち page in the 設定 menu** (all businesses, oldest first, client filter, row → approval window, link to the
+  business's template page); **Q2 a pending count badge for admins only** on the 設定 button and the 承認待ち entry,
+  refreshed every 2 min while the tab is visible and after a decision (`useAutoRefresh`); **Q3 extend the
+  下書きを見る window** (auto preview for pending drafts, admins + releasers; admin 承認 with an optional note and a
+  self-approval line, 差し戻し with a required reason); **Q4 a 履歴 button per template row → side drawer** (newest
+  first, approved changes compared with `before_values`, direct saves marked). D.6b then D.7 (manual + doc + MEMORY).
+- **D.6a committed (frontend; the N+1 fix is its own commit):**
+  - `templateChangeApi.approve(id, note?)` (trims; blank → null) and `reject(id, reason)`.
+  - `templateDraft.summaryBaseline(change, current)` → `{template, label: "変更前" | "今"}`: approved changes use
+    `before_values` (incl. `dates`, works when the template is gone), others the current template.
+  - `DraftViewModal` rewritten: preview of pending drafts loaded on open for `canPreviewPlanSettings` (admin +
+    releaser) via `templateChangeApi.preview` with `TemplatePreviewPanel` (create / update modes, 3 / 6 / 12 months);
+    a preview error is shown as "このままでは承認もできません"; admins (`templateWriteMode === "direct"`) get 差し戻す
+    (reason required, OK disabled while blank) and 承認する (optional note; warning line when it is their own draft;
+    disabled while the preview loads) in a small inner modal; decisions reload via `onChanged`; summary column title
+    = the baseline label. CSS `.draft-preview`.
+  - **User's browser test: "loading is too long when approving with a comment".** Measured on `plan_check`: approve
+    0.07–0.45 s ≈ a direct save, so approval itself is fine; **a running preview of the same template holds the
+    template row lock (dry run, FOR UPDATE) and approve waits for it** (approve during a 12-month preview: 3.36 s vs
+    0.45 s). Switching 3 / 6 / 12 months starts a new preview while the old one still runs on the server. Fix in
+    `DraftViewModal`: count in-flight previews (`running`), 承認する disabled until all have returned (stale results
+    ignored); while approving, an info line 「反映しています…」 and the dialog can't be cancelled / closed. (React
+    StrictMode is on, but it double-runs effects only on mount, and this window is mounted before it opens — not a
+    cause.) **The user retested: still ~10 s (MOCK0002, rrule) and asked for the backend root cause** → next bullet.
+  - **Root cause found and fixed (backend, `order_sync` N+1):** a template change moves every slot in the generated
+    range (the calendar extends `materialized_until` up to 2 years → a daily template = 730 slots), and
+    `order_sync._apply` ran 3 queries per slot: `live_instance_for_slot`, `get_active_for_slot` (FOR UPDATE) and
+    `links.refresh_order` → `biz_dependency_repo.get_for_biz` (same business every time). Profile on `plan_check`,
+    template 23 materialized 730 days: **approve 5.48 s / 2,211 statements → 0.67 s / 24**; preview 5.58 s → 0.48 s.
+    With a SAME_OCCURRENCE_DATE dependency on the downstream template the per-order link refresh (+ a `db.flush()`
+    per order that broke the batched UPDATE / INSERT) cost 4.1 s / 2,942 → **0.82 s / 24**. Fix:
+    `slot_events.live_instances_for_slots` (one query per template; same matching as the single version),
+    `ope_order_repo.get_active_for_slots` (one FOR UPDATE query per template, ordered by id),
+    `order_sync.apply_slot_changes` prefetches both and runs inside `links.definitions_cached(db)` (definitions read
+    once per business per follow-up, kept in `db.info`), `_apply(db, change, now, live, order)`; `_find_order` kept
+    for `create_missing_orders`; `links.refresh_order(..., only_time_based=True)` from `_slot_moved` when only times
+    changed — re-resolves only LATEST_BEFORE definitions (same-date / same-sheet-event links depend only on the slot
+    key, which a time change never alters). The preview holds row locks by design (it runs the real save and rolls
+    back — Level 1 decision), now only ~0.5 s. HTTP on `plan_check`: approve 0.56 s, 12-month preview 0.81 s (was
+    2.66 s). **Still per order (not fixed, told the user):** creating / cancelling hundreds of orders (a rule change,
+    e.g. MO/WE/FR → DAILY creates 417 orders: 1.2 s, with a dependency 3.4 s) — one INSERT per order for its id + link
+    resolution per order. Regression test `tests/test_order_sync_batching.py` (2; < 60 statements for ~400 moved
+    orders, links unchanged): **fails on the old code (1,221 / 2,819 statements)**, passes now. **User confirmed on
+    the dev DB: "lightning fast".**
+  - **Bug found by the user after that: the approve dialog stayed on 「反映しています…」 after success and could not
+    be closed.** Reproduced in jsdom (scratchpad `domtest/`: jsdom 24 + @testing-library/react 14 installed there, NOT
+    in the project; `dom_setup.ts` + `approve_dom.tsx` / `reject_dom.tsx`, esbuild with react / react-dom / antd
+    aliased to `frontend/node_modules`, `--external:jsdom`, run with `NODE_PATH=domtest/node_modules`). Cause:
+    **antd / rc-dialog does not re-render a closed modal's content (`MemoChildren shouldUpdate = visible ||
+    forceRender`)**; the decision modal was nested inside the 下書きを見る modal, both closed in one render, so the
+    inner one froze with busy=true. Fix: render the decision modal as a sibling (fragment). `TemplateFormModal`'s
+    nested preview modal is safe because the outer one has `forceRender`. **Lesson: never nest a modal whose state
+    changes while the outer modal closes, unless the outer has `forceRender`.** jsdom check after the fix: approve
+    and reject both close everything, server status approved / rejected. Full suite 278
+    (276 + 2) — the suite itself got faster (2 m 54 s vs ~4 m). `plan_check` template 23 is now materialized ~2 years.
+  - Checked: `npm run build`; harness `d6a_harness.ts` on `plan_check` **19/19** (releaser 403 on approve, releaser
+    preview, approve with trimmed note, applied at once, approved baseline = 変更前 (today's values would show
+    06:50→06:50), dates baseline + summary, blank reject 422, reject with reason, rejected baseline 今, self-approved,
+    approved delete summarised from before values after the template is gone, history order). **The window itself
+    (preview panel inside, inner modals, buttons) was not rendered — the user clicks through.**
+- **D.5b committed `98ad5d6` (frontend only; user browser-tested the releaser flow on the dev DB):**
   - `TemplateFormModal`: prop `canSave` → **`mode: "direct" | "draft" | "preview"`** + optional `draft`
     (`TemplateChange`; opens prefilled via `formValuesOfDraft`, save = `templateChangeApi.edit`). Draft mode: titles
     「予定テンプレートの変更を下書き」 / 「新しい予定テンプレートを下書き」 / 「下書きを直す」, info `DRAFT_NOTE`, button

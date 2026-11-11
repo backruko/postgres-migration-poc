@@ -116,6 +116,20 @@ export function templateOfCreateDraft(change: TemplateChange): PlanTemplate {
   } as unknown as PlanTemplate;
 }
 
+/**
+ * 要約の「前」に使うテンプレートと、その見出し。
+ * 承認された変更は、承認の直前の値（before_values）と比べる（履歴が「その時に何が変わったか」になる）。
+ * 承認待ち・差し戻し・取り下げは、今のテンプレートと比べる（before_values が無い）。
+ */
+export function summaryBaseline(
+  change: TemplateChange, current: PlanTemplate | null,
+): { template: PlanTemplate | null; label: "変更前" | "今" } {
+  const before = change.before_values as (Partial<PlanTemplate> & { dates?: string[] }) | null;
+  if (!before) return { template: current, label: "今" };
+  const base = current ?? ({ ...EMPTY_TEMPLATE_FIELDS, id: change.template_id ?? 0, explicit_dates: [] } as unknown as PlanTemplate);
+  return { template: { ...base, ...before, explicit_dates: asDates(before.dates ?? []) } as PlanTemplate, label: "変更前" };
+}
+
 /** 「直す」で開くフォームの値（下書きの中身。変更なら今のテンプレートに当てはめた姿） */
 export function formValuesOfDraft(change: TemplateChange, t: PlanTemplate | null): FormValues {
   if (change.kind === "create") return fromTemplate(templateOfCreateDraft(change));

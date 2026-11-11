@@ -65,6 +65,26 @@ export const templateChangeApi = {
   },
 
   /**
+   * 業務管理者が承認する（POST /plans/template-changes/{id}/approve）。すぐに反映され、オーダーも直接の保存と同じように追従する。
+   * 当てはめで誤りになれば（参照するシートが無いなど）何も変わらず、下書きは承認待ちのまま。自分の下書きも承認できる。
+   */
+  approve(changeId: number, note?: string | null): Promise<TemplateChange> {
+    return unwrap(
+      http.POST("/plans/template-changes/{change_id}/approve", {
+        params: { path: { change_id: changeId } },
+        body: { note: note?.trim() ? note.trim() : null },
+      }),
+    );
+  },
+
+  /** 業務管理者が差し戻す（理由は必須）。テンプレートは何も変わらない */
+  reject(changeId: number, reason: string): Promise<TemplateChange> {
+    return unwrap(
+      http.POST("/plans/template-changes/{change_id}/reject", { params: { path: { change_id: changeId } }, body: { reason } }),
+    );
+  },
+
+  /**
    * 承認待ちの下書きを、今のデータで当てはめたら何が起きるか（POST /ops/template-changes/{id}/preview）。何も保存されない。
    * 新規作成は create、変更（項目・指定日）・削除は change に入る。リリース担当・業務管理者。
    */
