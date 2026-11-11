@@ -39,6 +39,12 @@ block of §1). The MVP pilot is postponed.
   removed + reason normalised): a mutated cancelled fallback fails it. Count test both sides (B.1 code: 709 / 1,396).
   **Create with a dependency: 2,521–3,355 → 25–27 statements, ~1 s** (of which ~0.45 s SQL; same as no dependency —
   the rest is plan materialization + ORM objects). Test DB slower that day (unchanged cancel 0.28 → 0.43 s). Suite 286.
+- **B.3 committed:** `_cancel` appends to `_Deferred.cancelled` (holder with `new` / `cancelled`, passed `_apply` →
+  `_slot_removed` → `_cancel`) instead of `refresh_order` (its flush split UPDATE + event INSERT per order);
+  `apply_slot_changes` runs `links.refresh_orders(cancelled)` once after `create_orders`. **Cancel 417 with a
+  dependency: 854 / 2,939 → 22 / 26 statements, ~0.45 s.** 2 more oracle scenarios (downstream cancel, latest-before
+  upstream cancel); count test none / downstream / upstream (B.2 code: 478 / 1,623). Suite 291. **Left as is (told the
+  user):** moved orders with a LATEST_BEFORE definition still refresh per order (`_slot_moved`).
 
 ### Handoff 2026-11-11 — start here
 

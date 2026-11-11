@@ -7,6 +7,7 @@ links.refresh_orders（まとめて直す）の結果は、1 件ずつ refresh_o
 - 直前の上流（latest_before）: 上流側・下流側
 - 同じシート日付: 定義のあとにシートのテンプレートを作る（両側）+ キーの無い下流
 - 上流が取消済みしか無い日にできた下流は、最新の取消済みを待つ
+- 取消: 下流の取消 / 直前の上流の取消（下流は前の上流に付け替わる）
 ※ 顧客コードの先頭文字は空きがないため "I" を共有する
 """
 import json
@@ -153,9 +154,23 @@ def cancelled_upstream_fallback(w: World) -> None:
     w.rule(down, DAILY)  # 取消済みしか無い日の下流 → 最新の取消済みを待つ / 火木は生きている上流
 
 
+def date_downstream_cancelled(w: World) -> None:
+    w.template(w.up, "U", DAILY)
+    w.define(DATE)
+    down = w.template(w.down, "D", DAILY)
+    w.rule(down, MWF)  # 下流が取消（取消済みの下流のつながりは直さない）
+
+
+def latest_before_upstream_cancelled(w: World) -> None:
+    w.define(LATEST, lookback_days=3)
+    up = w.template(w.up, "U", DAILY)
+    w.template(w.down, "D", DAILY, at=time(10, 0))
+    w.rule(up, MWF)  # 上流が取消 → 下流の直前の上流が前の日に変わる（取消済みのまま待つものもある）
+
+
 @pytest.mark.parametrize("scenario", [
     date_downstream_rule_change, date_upstream_rule_change_and_second_upstream, latest_before_both_sides,
-    sheet_both_sides, cancelled_upstream_fallback,
+    sheet_both_sides, cancelled_upstream_fallback, date_downstream_cancelled, latest_before_upstream_cancelled,
 ], ids=lambda f: f.__name__)
 def test_batched_links_equal_one_by_one(db, monkeypatch, scenario):
     batched = World(db)
