@@ -517,6 +517,133 @@ class PlanOccurrenceCache(Base):
 
 
 # ==========================================
+# 6. PlanTemplateChange（テンプレートの変更依頼: 下書き → 承認 → 反映）
+# リリース担当は下書きを作り、業務管理者だけが承認・差し戻しする。承認するとすぐ反映される（予約日はない）。
+# 業務管理者の直接保存も「下書き即承認」（is_direct）として 1 行残し、テンプレートの変更履歴を兼ねる。
+# 下書きは「どう変えるか」（項目の値）だけを持ち、できる日付は持たない（承認時に今のデータで計算し直す）。
+# ==========================================
+class TemplateChangeKind(str, enum.Enum):
+    CREATE = "create"  # 新しいテンプレートを作る（承認までは template_id なし）
+    UPDATE = "update"  # 項目の変更・指定日の追加と削除
+    DELETE = "delete"  # テンプレートを削除する
+
+
+class TemplateChangeStatus(str, enum.Enum):
+    DRAFT = "draft"          # 承認待ち（テンプレートごとに 1 件まで。その間テンプレートのほかの変更はできない）
+    APPROVED = "approved"    # 承認され反映済み（直接保存も含む）
+    REJECTED = "rejected"    # 業務管理者が差し戻した（理由つき）
+    WITHDRAWN = "withdrawn"  # 下書きを書いた本人が取り下げた
+
+
+class PlanTemplateChange(Base):
+    __tablename__ = "plan_template_change"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    # 承認待ち一覧を業務ごとに出すため（新規作成の下書きは template_id がない）
+    biz_master_id: Mapped[int] = mapped_column(
+        ForeignKey("biz_master.id", ondelete="RESTRICT"), index=True, comment="対象の業務"
+    )
+    template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("plan_template.id", ondelete="RESTRICT"), index=True,
+        comment="対象のテンプレート（新規作成は承認されるまで NULL、承認で作られたテンプレート）",
+    )
+    kind: Mapped[TemplateChangeKind] = mapped_column(
+        Enum(TemplateChangeKind, name="plan_template_change_kind_enum"), nullable=False
+    )
+    status: Mapped[TemplateChangeStatus] = mapped_column(
+        Enum(TemplateChangeStatus, name="plan_template_change_status_enum"),
+        nullable=False, default=TemplateChangeStatus.DRAFT,
+    )
+    is_direct: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"),
+        comment="業務管理者が下書きを経ずに直接保存した（作成と同時に承認）",
+    )
+    base_revision: Mapped[int | None] = mapped_column(
+        comment="下書きを書いたときのテンプレートの revision（新規作成は NULL）。承認時に変わっていたら反映しない"
+    )
+
+    # --- 変更の中身（どう変えるか。できる日付は持たない） ---
+    # none_as_null: Python の None を JSON の null ではなく SQL の NULL にする（CHECK 制約が IS NULL で見るため）
+    changes: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), comment="CREATE: 作成の本文すべて / UPDATE: 変える項目だけ（PATCH の本文）/ DELETE: NULL"
+    )
+    add_dates: Mapped[list[date]] = mapped_column(
+        ARRAY(Date), nullable=False, default=list, server_default=text("'{}'"),
+        comment="UPDATE: 指定日テンプレートに足す日付",
+    )
+    remove_dates: Mapped[list[date]] = mapped_column(
+        ARRAY(Date), nullable=False, default=list, server_default=text("'{}'"),
+        comment="UPDATE: 指定日テンプレートから外す日付",
+    )
+
+    # --- 反映の記録（承認時に入る） ---
+    before_values: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), comment="反映直前のテンプレートの値（UPDATE / DELETE の承認時。履歴で変更前と比べる用）"
+    )
+    applied_revision: Mapped[int | None] = mapped_column(
+        comment="反映後のテンプレートの revision（承認時。インスタンスの template_revision と突き合わせられる）"
+    )
+
+    # --- 誰が・いつ ---
+    drafted_by_id: Mapped[int] = mapped_column(
+        ForeignKey("staff_user.id", ondelete="RESTRICT"), index=True, comment="下書きを書いた職員"
+    )
+    drafted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="下書きを最後に直した日時"
+    )
+    decided_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staff_user.id", ondelete="RESTRICT"),
+        comment="承認・差し戻しした業務管理者（取り下げは本人）",
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_note: Mapped[str | None] = mapped_column(Text, comment="差し戻しの理由（必須）・承認のひとこと")
+
+    # ※ SQLAlchemy の Enum はメンバー名を保存するため、CHECK では 'DRAFT' 等の名前で比較する
+    __table_args__ = (
+        # 承認待ちの下書きはテンプレートごとに 1 件まで（新規作成の下書きは template_id がないので対象外）
+        Index(
+            "uq_plan_template_change_one_draft", "template_id",
+            unique=True, postgresql_where=text("status = 'DRAFT'"),
+        ),
+        Index("ix_plan_template_change_status_biz", "status", "biz_master_id"),
+        # 新規作成以外は対象テンプレートがある。新規作成は承認されて初めてテンプレートを持つ
+        CheckConstraint(
+            "CASE WHEN kind = 'CREATE' THEN (template_id IS NOT NULL) = (status = 'APPROVED') "
+            "ELSE template_id IS NOT NULL END",
+            name="ck_plan_template_change_template",
+        ),
+        CheckConstraint("(kind = 'CREATE') = (base_revision IS NULL)", name="ck_plan_template_change_base_revision"),
+        CheckConstraint("(kind = 'DELETE') = (changes IS NULL)", name="ck_plan_template_change_changes"),
+        CheckConstraint(
+            "kind = 'UPDATE' OR (cardinality(add_dates) = 0 AND cardinality(remove_dates) = 0)",
+            name="ck_plan_template_change_dates",
+        ),
+        # 決まった変更（承認・差し戻し・取り下げ）は、誰がいつ決めたかを持つ。下書きは持たない
+        CheckConstraint(
+            "(status = 'DRAFT') = (decided_by_id IS NULL) AND (status = 'DRAFT') = (decided_at IS NULL)",
+            name="ck_plan_template_change_decided",
+        ),
+        CheckConstraint("status <> 'REJECTED' OR decision_note IS NOT NULL", name="ck_plan_template_change_reject_note"),
+        CheckConstraint(
+            "status <> 'WITHDRAWN' OR decided_by_id = drafted_by_id", name="ck_plan_template_change_withdrawn_by"
+        ),
+        CheckConstraint(
+            "NOT is_direct OR (status = 'APPROVED' AND decided_by_id = drafted_by_id)",
+            name="ck_plan_template_change_direct",
+        ),
+        # 反映の記録は承認されたものだけ（変更前の値は新規作成にはない）
+        CheckConstraint(
+            "(status = 'APPROVED') = (applied_revision IS NOT NULL)", name="ck_plan_template_change_applied"
+        ),
+        CheckConstraint(
+            "(status = 'APPROVED' AND kind <> 'CREATE') = (before_values IS NOT NULL)",
+            name="ck_plan_template_change_before",
+        ),
+    )
+
+
+# ==========================================
 # 不変性の強制（DBトリガー）
 # マイグレーション側にも同じSQLがあります。ここは create_all（テスト等）用です。
 # ==========================================

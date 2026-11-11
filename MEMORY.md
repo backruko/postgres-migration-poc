@@ -2,13 +2,53 @@
 
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
-`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-10 (end of day)** — milestone and
-handoff: sheet import, template preview, "started work keeps its occurrence" and the releaser check-only mode are all
-merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the first block of §1).
+`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11** — Level 2 (template drafts +
+approval, templates only) is in progress on `feature/template-drafts`; step D.1 (data model) built, waiting for review
+(see the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
 
-### Handoff 2026-11-10 — start here
+### Level 2 in progress (2026-11-11) — start here
+
+- **Branch `feature/template-drafts` from `main` `306f34a`.** Step plan approved (user, 2026-11-11), one step at a
+  time, stop for review after each: **D.1** data model (migration + model + repo) · D.2 drafts in the backend
+  (create / edit / withdraw, releaser + admin; checked like a real save; one pending draft; template writes refused
+  while one is pending) · D.3 approve / reject (admin; applies through the existing `_apply_*`; `base_revision` check;
+  self-approval; admin direct saves write an `is_direct` row) · D.4 read endpoints (pending by business / all + count,
+  history per template, preview of a stored draft; OpenAPI + `npm run gen:api`) · D.5 frontend for drafters
+  (下書きとして保存, draft badge, blocked edit state) · D.6 frontend for admins (approval window with the current
+  preview, 承認 / 差し戻し with a reason, 承認待ち list + menu badge, history drawer) · D.7 harness on `plan_check` +
+  manual + design doc + MEMORY.
+- **User's decisions 2026-11-11 (all my recommendations accepted):** Q1 data model **A** = a change-request table
+  next to the live template (not SOP-style version rows); Q2 a releaser drafts **every** template change (create,
+  any field incl. name / display, specified-date add / remove, delete; one draft holds fields + dates); Q3 admin
+  direct saves are recorded too (`is_direct`, drafted = approved by the same admin) → full change history; Q4 a person
+  holding admin counts as admin → may self-approve, history marks it self-approved (derived: approved, not direct,
+  decided_by = drafted_by); Q5 a pending draft blocks admin direct edits, other drafts, date changes and delete of
+  that template — not single-occurrence changes, sheets or calendars; drafter edits / withdraws, admin approves or
+  rejects with a reason and **does not edit** the draft; Q6 the draft holds settings, not dates — the approval window
+  re-runs the preview on current data, approval fails with the normal save errors if a referenced sheet / marker /
+  calendar is gone, `base_revision` guards the template; Q7 承認待ち list on 予定の設定 + admin menu count badge, no
+  notifications. **Releasers do not draft SOPs** in this phase (SOPs have their own versions). Design doc rev 110.
+- **D.1 as built (uncommitted, waiting for review):** migration **`e7f9acb3d34a`** (revises `b4e8d2a6c913`) →
+  **the user runs `alembic upgrade head`**. Table `plan_template_change` (`src/domain_plan/models.py` §6):
+  `biz_master_id`, `template_id` (NULL for a create until approved), `kind` CREATE / UPDATE / DELETE, `status` DRAFT /
+  APPROVED / REJECTED / WITHDRAWN (enums stored as member names), `is_direct`, `base_revision`, `changes` JSONB
+  (create = full body incl. `dates`; update = PATCH body with only set fields; delete = NULL), `add_dates` /
+  `remove_dates` DATE[] (update only), `before_values` JSONB + `applied_revision` (set on approval), drafted_by /
+  drafted_at / updated_at, decided_by / decided_at / `decision_note`. Partial unique index
+  `uq_plan_template_change_one_draft` (template_id WHERE DRAFT); 10 CHECK constraints spell the state rules (see the
+  model). **JSONB columns use `none_as_null=True`** — without it Python `None` is stored as JSON `null` and the
+  `IS NULL` checks break. FKs RESTRICT (history must not vanish). No rows for existing templates: history starts with
+  the first change after the migration. Repo `plan_template_change_repo` (`repositories/Plan.py`, flush only): `add`,
+  `get`, `get_locked`, `get_draft_for_template`, `get_draft_template_ids`, `get_drafts(biz_master_id?)`,
+  `count_drafts`, `get_history` (newest first by decided_at, else drafted_at).
+  Checked: tests `tests/test_template_change_model.py` 23 (client prefix **`"I"`, shared** with
+  `test_template_preview.py` — fine, the pool is per prefix per run); full suite **240 passed**; pyright 0;
+  on `plan_check`: upgrade → `alembic check` no drift → downgrade (both enum types dropped, checked in `pg_type`) →
+  upgrade; `plan_check` is at `e7f9acb3d34a`.
+
+### Handoff 2026-11-10
 
 - **`main` = merge `61f796f` + one handoff commit on top (local, NOT pushed; `origin/main` = `6390c87` — the user
   pushes).** Working tree clean, no open branch. **Tests 217**, pyright 0, frontend build passes, **no migration since
@@ -18,9 +58,13 @@ merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the 
 - **The user's decisions at the end of the day (2026-11-10):**
   - **The MVP pilot is postponed.** (The first server run was already postponed for IP configuration.) No go-live
     work is expected next session unless the user says so.
-  - **Next phase, primary goal = "Level 2": a Draft → Approve → Active lifecycle for the core settings that have no
-    version control — templates AND sheet imports — "just like SOPs".** The user wants to "spare no effort" on this
-    architectural gap. Start the next session with questions (with a recommended option) and a step plan, as always.
+  - **Next phase, primary goal = "Level 2": a Draft → Approve → Active lifecycle for TEMPLATES ONLY, "just like
+    SOPs".** The user wants to "spare no effort" on this architectural gap. Start the next session with questions
+    (with a recommended option) and a step plan, as always.
+  - **Corrected 2026-11-11 (user): sheet imports get NO draft state / version control** — sheets are updated very
+    rarely; the user had said so before and my 2026-11-10 note ("templates AND sheet imports") was wrong. Admins
+    import directly as today; releasers keep the check-only import window. Business settings are out of Level 2 too
+    ("Templates ONLY"). Fixed in the design doc rev 109.
 - **Level 2: what is already decided** (§2 "Safer changes"; design doc rev 107, open-questions item "Safer changes to
   businesses and templates"): releaser drafts, **only admin approves**; a non-admin drafter cannot approve their own
   draft; an admin may approve their own draft or apply directly; approval applies **immediately**; **one pending draft
@@ -29,18 +73,7 @@ merged; **the MVP pilot is postponed and the next phase is "Level 2"** (see the 
   **Do NOT propose effective-dated / scheduled versions for templates** — the user dropped that for good on
   2026-11-10 ("superfluous"). "Like SOPs" means the draft → approve → active states, not the SOP effective date; if
   the user now wants a start date after all, they must say so — ask, do not assume.
-- **Level 2: open questions to bring to the user first:**
-  1. Four-eyes when one person holds both releaser and admin (most of the flat team has several roles).
-  2. What a **draft of a sheet import** is: the uploaded JSON held until approval (simplest; the browser-side summary
-     already exists in `sheetImport.ts`, the server would need to store the file and its computed effect), or draft
-     dates on the sheet itself. Also whether single-date edits and rule markers on a sheet need the lifecycle.
-  3. Whether **business settings** (release mode / time / days-before) join the lifecycle — the user's 2026-11-10
-     wording is "all core settings"; earlier we said a business needs no draft state, only an affected-orders preview
-     and a change history. Re-ask.
-  4. How a draft stays valid when the live template / sheet changes before approval (the "one blocking draft" rule
-     covers templates; sheets and calendar changes are not covered).
-  5. Data model: a pending copy linked to the live template (my earlier sketch) vs version rows like `SOPVersion`.
-     Needs a migration either way → **remind the user to run `alembic upgrade head`**.
+- **Level 2 open questions:** all answered on 2026-11-11 (see the block above).
 - **Building blocks Level 2 can reuse:** the dry run (`src/infrastructure/dry_run.py`, `plan_services.dry_run_update /
   dry_run_create`, `coordination/template_preview.py`) gives the approval dialog its "what will change" for free;
   `canPreviewPlanSettings` / the `canSave` and `canImport` check-only modes are where "save as draft" buttons go;

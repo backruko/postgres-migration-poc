@@ -27,9 +27,11 @@ from src.domain_plan.models import (
     PlanOccurrenceCache,
     PlanSlotRelease,
     PlanTemplate,
+    PlanTemplateChange,
     ReferenceSheet,
     ReferenceSheetEvent,
     ReferenceSheetMarker,
+    TemplateChangeStatus,
     VoidReason,
     merge_ui_metadata,
 )
@@ -571,6 +573,75 @@ class PlanOccurrenceCacheRepository:
 
 
 # ==========================================
+#  PlanTemplateChange Repository（テンプレートの変更依頼: 下書き・承認・履歴）
+# ==========================================
+class PlanTemplateChangeRepository:
+
+    def add(self, db: Session, *, change: PlanTemplateChange) -> PlanTemplateChange:
+        """追加して flush します（承認待ちの重複は一意インデックスで IntegrityError になる）"""
+        db.add(change)
+        db.flush()
+        return change
+
+    def get(self, db: Session, *, id: int) -> PlanTemplateChange | None:
+        return db.get(PlanTemplateChange, id)
+
+    def get_locked(self, db: Session, *, id: int) -> PlanTemplateChange | None:
+        """行ロック付きで取得します（承認と取り下げ・修正が同時に走らないように）"""
+        stmt = (
+            select(PlanTemplateChange)
+            .where(PlanTemplateChange.id == id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return db.scalars(stmt).first()
+
+    def get_draft_for_template(self, db: Session, *, template_id: int) -> PlanTemplateChange | None:
+        """そのテンプレートの承認待ちの下書き（あれば 1 件）"""
+        stmt = select(PlanTemplateChange).where(
+            PlanTemplateChange.template_id == template_id,
+            PlanTemplateChange.status == TemplateChangeStatus.DRAFT,
+        )
+        return db.scalars(stmt).first()
+
+    def get_draft_template_ids(self, db: Session, *, template_ids: Sequence[int]) -> dict[int, int]:
+        """承認待ちの下書きがあるテンプレート → 下書きの id（一覧に「承認待ち」を付ける用）"""
+        if not template_ids:
+            return {}
+        stmt = select(PlanTemplateChange.template_id, PlanTemplateChange.id).where(
+            PlanTemplateChange.template_id.in_(template_ids),
+            PlanTemplateChange.status == TemplateChangeStatus.DRAFT,
+        )
+        return {template_id: change_id for template_id, change_id in db.execute(stmt) if template_id is not None}
+
+    def get_drafts(self, db: Session, *, biz_master_id: int | None = None) -> list[PlanTemplateChange]:
+        """承認待ちの下書き（古い順）。biz_master_id を省くと全業務"""
+        stmt = select(PlanTemplateChange).where(PlanTemplateChange.status == TemplateChangeStatus.DRAFT)
+        if biz_master_id is not None:
+            stmt = stmt.where(PlanTemplateChange.biz_master_id == biz_master_id)
+        return list(db.scalars(stmt.order_by(PlanTemplateChange.drafted_at, PlanTemplateChange.id)).all())
+
+    def count_drafts(self, db: Session) -> int:
+        """承認待ちの件数（メニューのバッジ用）"""
+        stmt = select(func.count()).select_from(PlanTemplateChange).where(
+            PlanTemplateChange.status == TemplateChangeStatus.DRAFT
+        )
+        return db.scalar(stmt) or 0
+
+    def get_history(self, db: Session, *, template_id: int) -> list[PlanTemplateChange]:
+        """テンプレートの変更履歴（すべての状態。新しい順: 決まった日時、承認待ちは書いた日時）"""
+        stmt = (
+            select(PlanTemplateChange)
+            .where(PlanTemplateChange.template_id == template_id)
+            .order_by(
+                func.coalesce(PlanTemplateChange.decided_at, PlanTemplateChange.drafted_at).desc(),
+                PlanTemplateChange.id.desc(),
+            )
+        )
+        return list(db.scalars(stmt).all())
+
+
+# ==========================================
 #  インスタンス化とエクスポート
 # ==========================================
 business_calendar_repo = BusinessCalendarRepository(BusinessCalendar)
@@ -580,3 +651,4 @@ plan_instance_repo = PlanInstanceRepository(PlanInstance)
 plan_instance_void_repo = PlanInstanceVoidRepository()
 plan_slot_release_repo = PlanSlotReleaseRepository()
 plan_cache_repo = PlanOccurrenceCacheRepository()
+plan_template_change_repo = PlanTemplateChangeRepository()
