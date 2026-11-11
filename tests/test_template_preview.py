@@ -351,7 +351,7 @@ def test_preview_endpoints_need_a_login_and_releaser_or_admin_while_saving_stays
         op = paths[path]["post"]
         assert needs_login(op) and {"401", "403"} <= set(op["responses"]), path
     routes = [r for r in router.routes if isinstance(r, APIRoute) and r.path.endswith("/preview")]
-    assert len(routes) == 2
+    assert len(routes) == 3  # 作成・変更の確認と、下書きの確認（Level 2、D.4）
     # 確認は何も保存しないので、リリース担当にも開く（2026-11-10）
     for route in routes:
         assert set(getattr(route.endpoint, "__required_roles__")) == {RoleCode.RELEASER, RoleCode.ADMIN}, route.path

@@ -33,6 +33,7 @@ from src.domain_plan.schemas import (
     PlanTemplateResponse,
     PlanTemplateUpdate,
     TemplateChangeApprove,
+    TemplateChangeCount,
     TemplateChangeReject,
     TemplateDraft,
     ReferenceSheetCreate,
@@ -55,6 +56,7 @@ from src.domain_plan.services import (
 )
 
 from src.domain_plan import template_changes
+from src.domain_plan.models import TemplateChangeStatus
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 
@@ -255,6 +257,39 @@ def remove_explicit_date_endpoint(
 # 下書きはリリース担当・業務管理者が書ける。直す・取り下げるのは本人だけ。承認・差し戻しは業務管理者（別のエンドポイント）
 # ==========================================
 
+@router.get("/template-changes", response_model=list[PlanTemplateChangeResponse], responses={**COMMON_ERRORS})
+def list_template_changes_endpoint(
+    change_status: TemplateChangeStatus | None = Query(None, alias="status", description="draft = waiting for approval"),
+    biz_id: int | None = Query(None),
+    template_id: int | None = Query(None),
+    drafted_by: int | None = Query(None, description="staff id of the drafter (e.g. my own drafts)"),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """
+    テンプレートの変更依頼の一覧（ログインしている職員なら誰でも）。承認待ち（status=draft）は古い順＝承認の順番待ち、
+    それ以外は新しい順。差し戻された新規作成の下書き（テンプレートが無い）も、drafted_by などで探せます。
+    """
+    return template_changes.list_changes(
+        db, status=change_status, biz_master_id=biz_id, template_id=template_id, drafted_by_id=drafted_by, limit=limit,
+    )
+
+@router.get("/template-changes/count", response_model=TemplateChangeCount, responses={**COMMON_ERRORS})
+def count_template_changes_endpoint(
+    change_status: TemplateChangeStatus | None = Query(TemplateChangeStatus.DRAFT, alias="status"),
+    biz_id: int | None = Query(None),
+    drafted_by: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """変更依頼の件数（既定は承認待ち。メニューのバッジ用）。"""
+    return TemplateChangeCount(count=template_changes.count_changes(
+        db, status=change_status, biz_master_id=biz_id, drafted_by_id=drafted_by,
+    ))
+
+@router.get("/template-changes/{change_id}", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS})
+def get_template_change_endpoint(change_id: int, db: Session = Depends(get_db)):
+    return template_changes.get_change(db, change_id)
+
 @router.post("/template-changes", response_model=PlanTemplateChangeResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
 @require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
 def create_template_draft_endpoint(
@@ -271,7 +306,7 @@ def create_template_draft_endpoint(
     本物の保存と同じ処理で確かめ（何も保存しない試し実行）、誤りは直接の保存と同じエラーになります。何も変えない下書きは 400。
     承認待ちの下書きがあるテンプレートには書けません（409 TEMPLATE_DRAFT_PENDING）。
     """
-    return template_changes.create_draft(db=db, draft=draft, actor_id=current_staff.id)
+    return template_changes.describe(db, [template_changes.create_draft(db=db, draft=draft, actor_id=current_staff.id)])[0]
 
 @router.put("/template-changes/{change_id}", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
 @require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
@@ -286,7 +321,7 @@ def edit_template_draft_endpoint(
     種類と対象のテンプレートは変えられません。削除の下書きには直すところがありません。
     本人以外は 403、承認・差し戻し・取り下げが済んだ下書きは 409 TEMPLATE_CHANGE_DECIDED。
     """
-    return template_changes.edit_draft(db=db, change_id=change_id, draft=draft, actor_id=current_staff.id)
+    return template_changes.describe(db, [template_changes.edit_draft(db=db, change_id=change_id, draft=draft, actor_id=current_staff.id)])[0]
 
 @router.post("/template-changes/{change_id}/withdraw", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
 @require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
@@ -296,7 +331,7 @@ def withdraw_template_draft_endpoint(
     current_staff: StaffUser = Depends(get_current_staff),
 ):
     """承認待ちの下書きを、書いた本人が取り下げます（記録は残る）。本人以外は 403。"""
-    return template_changes.withdraw_draft(db=db, change_id=change_id, actor_id=current_staff.id)
+    return template_changes.describe(db, [template_changes.withdraw_draft(db=db, change_id=change_id, actor_id=current_staff.id)])[0]
 
 @router.post("/template-changes/{change_id}/approve", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
 @require_roles([RoleCode.ADMIN])
@@ -311,7 +346,7 @@ def approve_template_draft_endpoint(
     反映は直接の保存と同じ処理で、オーダーも同じように追従します。誤り（参照するシートが無いなど）は直接の保存と同じエラーで、
     そのときは何も変わらず、下書きは承認待ちのまま。決まった下書きは 409 TEMPLATE_CHANGE_DECIDED。
     """
-    return template_changes.approve_draft(db=db, change_id=change_id, actor_id=current_staff.id, note=approve_in.note)
+    return template_changes.describe(db, [template_changes.approve_draft(db=db, change_id=change_id, actor_id=current_staff.id, note=approve_in.note)])[0]
 
 @router.post("/template-changes/{change_id}/reject", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
 @require_roles([RoleCode.ADMIN])
@@ -322,7 +357,12 @@ def reject_template_draft_endpoint(
     current_staff: StaffUser = Depends(get_current_staff),
 ):
     """承認待ちの下書きを差し戻します（業務管理者。理由は必須）。テンプレートは何も変わりません。"""
-    return template_changes.reject_draft(db=db, change_id=change_id, actor_id=current_staff.id, reason=reject_in.reason)
+    return template_changes.describe(db, [template_changes.reject_draft(db=db, change_id=change_id, actor_id=current_staff.id, reason=reject_in.reason)])[0]
+
+@router.get("/templates/{template_id}/changes", response_model=list[PlanTemplateChangeResponse], responses={**COMMON_ERRORS})
+def get_template_history_endpoint(template_id: int, db: Session = Depends(get_db)):
+    """テンプレートの変更履歴（新しい順。承認・差し戻し・取り下げ・業務管理者の直接の保存）。削除済みのテンプレートも読めます。"""
+    return template_changes.template_history(db, template_id)
 
 @router.get("/templates/{template_id}/instances", response_model=list[PlanInstanceResponse], responses={**COMMON_ERRORS})
 def get_instances_endpoint(template_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):

@@ -362,10 +362,16 @@ def _ensure_next_occurrence(db: Session, template: PlanTemplate) -> bool:
 
 
 def _with_next_occurrence(db: Session, templates: list[PlanTemplate]) -> list[PlanTemplate]:
-    """各テンプレートに next_occurrence_at（次の有効な予定の開始日時）を付けます（レスポンス用。DB には保存しない）。"""
-    next_starts = plan_cache_repo.next_starts(db, template_ids=[t.id for t in templates], after=_now())
+    """
+    各テンプレートに next_occurrence_at（次の有効な予定の開始日時）と pending_change_id（承認待ちの下書き）を付けます
+    （レスポンス用。DB には保存しない）。一覧でもそれぞれ 1 回の問い合わせ。
+    """
+    ids = [t.id for t in templates]
+    next_starts = plan_cache_repo.next_starts(db, template_ids=ids, after=_now())
+    drafts = plan_template_change_repo.get_draft_template_ids(db, template_ids=ids)
     for t in templates:
         t.next_occurrence_at = next_starts.get(t.id)  # type: ignore[attr-defined]
+        t.pending_change_id = drafts.get(t.id)  # type: ignore[attr-defined]
     return templates
 
 
@@ -1289,14 +1295,30 @@ def dry_run_create(
 
 
 def dry_run_update(
-    db: Session, template_id: int, template_in: PlanTemplateUpdate, since: datetime, until: datetime
+    db: Session, template_id: int, template_in: PlanTemplateUpdate, since: datetime, until: datetime,
+    add_dates: list[date] | None = None, remove_dates: list[date] | None = None,
 ) -> tuple[list[DryRunOccurrence], bool]:
     """
     【コミットしない】変更を当てはめて、[since, until) の有効な予定（変更の後の姿）と、日付の作り直しがあったかを返します。
     当てはめ方は update_template と同じ（人が変更・取消した日はそのまま残る）。入力の誤りは update_template と同じ例外になります。
+    add_dates / remove_dates: 指定日の追加・削除も当てはめる（下書きの確認用。直接の変更の /dates と同じ処理、項目の変更の後）。
     """
-    template, generation_changed = _apply_template_update(db, template_id, template_in)
+    generation_changed = False
+    if template_in.model_fields_set:
+        _, generation_changed = _apply_template_update(db, template_id, template_in)
+    if _apply_explicit_dates(db, template_id, add=add_dates or [], remove=remove_dates or []):
+        generation_changed = True
+    template = _get_locked_template(db, template_id)
     return _dry_run_occurrences(db, template, since, until), generation_changed
+
+
+def dry_run_delete(db: Session, template_id: int, since: datetime, until: datetime) -> list[DryRunOccurrence]:
+    """
+    【コミットしない】テンプレートを削除して、[since, until) に残る有効な予定を返します（未来の予定は無効化されるため、
+    ふつうは空）。削除の仕方は delete_template と同じ。
+    """
+    template = _apply_template_delete(db, template_id)
+    return _dry_run_occurrences(db, template, since, until)
 
 
 def delete_template(db: Session, template_id: int, actor_id: int | None = None) -> PlanTemplate:

@@ -4,8 +4,8 @@ Handoff for the next working session. Read this first, then the design doc (§2)
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
 `src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11** — Level 2 (template drafts +
 approval, templates only) is in progress on `feature/template-drafts`; D.1 (data model) committed, D.2 (drafts:
-create / edit / withdraw, blocking) committed, D.3 (approve / reject, direct-save rows, biz delete guard) built and
-waiting for review
+create / edit / withdraw, blocking) and D.3 (approve / reject, direct-save rows, biz delete guard) committed, D.4
+(read endpoints, pending_change_id, preview of any draft) built and waiting for review
 (see the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
@@ -34,7 +34,36 @@ waiting for review
   calendar / sheet recalculation, which drafts do not block — so the blocking rule is the guard and `base_revision` is
   a record only; a separate settings counter was rejected as overengineering); Q7 承認待ち list on 予定の設定 + admin menu count badge, no
   notifications. **Releasers do not draft SOPs** in this phase (SOPs have their own versions). Design doc rev 110.
-- **D.3 as built (uncommitted, waiting for review; no migration).** User's decisions before D.3: **A = pending
+- **D.4 as built (uncommitted, waiting for review; no migration).** User's decisions before D.4 (both as I
+  recommended): **reads open to any logged-in active staff** (like every `/plans` GET; `test_reads_need_a_login_but_no_role`
+  covers them); **the approval preview covers every draft kind** (fields, specified dates, delete, create).
+  - Reads (`src/domain_plan/router.py`): `GET /plans/template-changes?status=&biz_id=&template_id=&drafted_by=&limit=`
+    (1–500, default 100; **status=draft → oldest first** = approval queue, otherwise newest first by
+    coalesce(decided_at, drafted_at)) · `GET /plans/template-changes/count?status=draft&biz_id=&drafted_by=` →
+    `{count}` (default status draft; declared before `/{change_id}`) · `GET /plans/template-changes/{id}` ·
+    `GET /plans/templates/{id}/changes` (history newest first; deleted templates readable; unknown → 404).
+  - `PlanTemplateChangeResponse` + `drafted_by_name`, `decided_by_name`, `client_code`, `business_code`,
+    `business_name`, `template_name` (current name; for an unapproved create = the proposed `changes.name`), filled by
+    `template_changes.describe(db, changes)` (bulk: one query each for staff, biz incl. deleted, templates incl.
+    deleted). **Every draft endpoint (writes too) now returns described rows.** Repo `get_list` / `count` (shared
+    `_filtered`).
+  - `PlanTemplateResponse.pending_change_id` (null = none), set in `_with_next_occurrence` via
+    `get_draft_template_ids` (one query per list).
+  - Preview: `POST /ops/template-changes/{id}/preview?months=1..12` (releaser + admin = `PREVIEWERS`) →
+    `TemplateDraftPreview {change_id, kind, create: TemplateCreatePreview | null, change: TemplateChangePreview | null}`;
+    only DRAFT (else 409 `TEMPLATE_CHANGE_DECIDED`). `coordination/template_preview.py`: diff core extracted to
+    `_preview_change(db, template_id, months, apply)` (`apply(since, until)`; one `now` for before and after);
+    `preview_template_draft` applies like approval (fields → dates, or delete). Plan: `dry_run_update` gained
+    `add_dates` / `remove_dates` (skips the field update when no field is set); new public `dry_run_delete`.
+  - `test_template_preview.py` route count of `/ops/*/preview` 2 → 3. OpenAPI exported + `npm run gen:api` (also
+    brings D.2's error codes into `schema.gen.ts`); `npm run build` passes. Avoid `Result.tuples()` (deprecated in
+    SQLAlchemy 2.1 — it raised 12 warnings).
+  - Checked: `tests/test_template_change_reads.py` 9 (list order / filters / count / names, history after delete,
+    pending_change_id, **preview == approval result** for update, dates, delete, create; decided → 409; route roles);
+    full suite **276 passed**; pyright 0. HTTP harness `reads_harness.py` on `plan_check` **21/21** (operator reads,
+    401 without login, operator preview 403, dates / create / delete previews, approval matches the preview, own
+    template `HARNESS_READS` deleted at the end via an approved delete draft; the create draft withdrawn).
+- **D.3 committed `05a5acb`.** As built (no migration). User's decisions before D.3: **A = pending
   drafts block deleting their business**; all my calls approved (below).
   - `POST /plans/template-changes/{id}/approve` (admin; body `TemplateChangeApprove {note?}` optional — a POST with no
     body works) → `template_changes.approve_draft`: locks the draft, then (update / delete) the template; applies via

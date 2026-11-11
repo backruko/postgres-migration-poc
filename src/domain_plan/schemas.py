@@ -570,6 +570,10 @@ TemplateDraft = Annotated[
 ]
 
 
+class TemplateChangeCount(BaseModel):
+    count: int
+
+
 class TemplateChangeApprove(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -602,6 +606,15 @@ class PlanTemplateChangeResponse(BaseModel):
     decided_by_id: int | None
     decided_at: datetime | None
     decision_note: str | None
+    # 画面用の名前（変更依頼の行には無い。一覧・履歴をそのまま表示できるように付ける）
+    drafted_by_name: str | None = Field(default=None, description="name of the staff member who wrote it")
+    decided_by_name: str | None = Field(default=None, description="name of the admin who decided it (the drafter for a withdrawal)")
+    client_code: str | None = Field(default=None)
+    business_code: str | None = Field(default=None)
+    business_name: str | None = Field(default=None)
+    template_name: str | None = Field(
+        default=None, description="the template's current name; for a create draft not yet approved, the proposed name"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -692,6 +705,9 @@ class PlanTemplateResponse(BaseModel):
     explicit_dates: list[PlanExplicitDateResponse]
     next_occurrence_at: datetime | None = Field(
         default=None, description="start of the next live occurrence (null: nothing upcoming within 2 years)"
+    )
+    pending_change_id: int | None = Field(
+        default=None, description="id of the draft waiting for approval (null: none; the template cannot be changed meanwhile)"
     )
 
     model_config = ConfigDict(from_attributes=True)

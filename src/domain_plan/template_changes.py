@@ -11,16 +11,20 @@
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
 from src.domain_plan import services as plan_services
-from src.domain_plan.models import PlanTemplateChange, TemplateChangeKind, TemplateChangeStatus
+from src.domain_biz.models import BizMaster
+from src.domain_plan.models import PlanTemplate, PlanTemplateChange, TemplateChangeKind, TemplateChangeStatus
 from src.domain_plan.schemas import (
-    PlanTemplateUpdate, TemplateCreateDraft, TemplateDeleteDraft, TemplateDraft, TemplateUpdateDraft,
+    PlanTemplateChangeResponse, PlanTemplateUpdate, TemplateCreateDraft, TemplateDeleteDraft, TemplateDraft,
+    TemplateUpdateDraft,
 )
+from src.domain_staff.models import StaffUser
 from src.infrastructure.dry_run import dry_run
 from src.infrastructure.repositories import plan_template_change_repo
 
@@ -234,3 +238,82 @@ def withdraw_draft(db: Session, change_id: int, actor_id: int) -> PlanTemplateCh
     change.decided_by_id = actor_id
     change.decided_at = datetime.now(timezone.utc)
     return _save(db, change, change.template_id)
+
+
+# ==========================================
+# 読む: 一覧・件数・1 件・テンプレートの変更履歴（D.4。ログインしている有効な職員なら誰でも）
+# ==========================================
+def describe(db: Session, changes: list[PlanTemplateChange]) -> list[PlanTemplateChangeResponse]:
+    """
+    変更依頼を、画面にそのまま出せる形にします（職員の名前・業務・テンプレートの名前を付ける）。
+    名前はまとめて読む（職員・業務・テンプレートでそれぞれ 1 回。削除済みの業務・テンプレートも読む）。
+    """
+    staff_ids = {c.drafted_by_id for c in changes} | {c.decided_by_id for c in changes if c.decided_by_id is not None}
+    biz_ids = {c.biz_master_id for c in changes}
+    template_ids = {c.template_id for c in changes if c.template_id is not None}
+    names: dict[int, str] = {
+        row.id: row.name for row in db.execute(select(StaffUser.id, StaffUser.name).where(StaffUser.id.in_(staff_ids)))
+    } if staff_ids else {}
+    bizs = {
+        b.id: b for b in db.scalars(
+            select(BizMaster).where(BizMaster.id.in_(biz_ids)).execution_options(include_deleted=True)
+        )
+    } if biz_ids else {}
+    templates: dict[int, str] = {
+        row.id: row.name for row in db.execute(
+            select(PlanTemplate.id, PlanTemplate.name).where(PlanTemplate.id.in_(template_ids))
+            .execution_options(include_deleted=True)
+        )
+    } if template_ids else {}
+
+    result = []
+    for change in changes:
+        biz = bizs.get(change.biz_master_id)
+        if change.template_id is not None:
+            template_name = templates.get(change.template_id)
+        else:
+            template_name = (change.changes or {}).get("name")
+        response = PlanTemplateChangeResponse.model_validate(change)
+        result.append(response.model_copy(update={
+            "drafted_by_name": names.get(change.drafted_by_id),
+            "decided_by_name": names.get(change.decided_by_id) if change.decided_by_id is not None else None,
+            "client_code": biz.client_code if biz else None,
+            "business_code": biz.business_code if biz else None,
+            "business_name": biz.name if biz else None,
+            "template_name": template_name,
+        }))
+    return result
+
+
+def list_changes(
+    db: Session, *, status: TemplateChangeStatus | None = None, biz_master_id: int | None = None,
+    template_id: int | None = None, drafted_by_id: int | None = None, limit: int = 100,
+) -> list[PlanTemplateChangeResponse]:
+    """変更依頼の一覧。承認待ちは古い順（承認の順番待ち）、それ以外は新しい順。"""
+    return describe(db, plan_template_change_repo.get_list(
+        db, status=status, biz_master_id=biz_master_id, template_id=template_id, drafted_by_id=drafted_by_id, limit=limit,
+    ))
+
+
+def count_changes(
+    db: Session, *, status: TemplateChangeStatus | None = None, biz_master_id: int | None = None,
+    drafted_by_id: int | None = None,
+) -> int:
+    return plan_template_change_repo.count(db, status=status, biz_master_id=biz_master_id, drafted_by_id=drafted_by_id)
+
+
+def get_change(db: Session, change_id: int) -> PlanTemplateChangeResponse:
+    change = plan_template_change_repo.get(db, id=change_id)
+    if change is None:
+        raise NotFoundError(f"PlanTemplateChange(id={change_id}) not found.")
+    return describe(db, [change])[0]
+
+
+def template_history(db: Session, template_id: int) -> list[PlanTemplateChangeResponse]:
+    """テンプレートの変更履歴（新しい順。削除済みのテンプレートも読める）。無いテンプレートは 404。"""
+    exists = db.scalar(
+        select(PlanTemplate.id).where(PlanTemplate.id == template_id).execution_options(include_deleted=True)
+    )
+    if exists is None:
+        raise NotFoundError(f"PlanTemplate(id={template_id}) not found.")
+    return describe(db, plan_template_change_repo.get_history(db, template_id=template_id))

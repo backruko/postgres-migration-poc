@@ -628,6 +628,48 @@ class PlanTemplateChangeRepository:
         )
         return db.scalar(stmt) or 0
 
+    def _filtered(self, stmt, *, status, biz_master_id, template_id, drafted_by_id):
+        if status is not None:
+            stmt = stmt.where(PlanTemplateChange.status == status)
+        if biz_master_id is not None:
+            stmt = stmt.where(PlanTemplateChange.biz_master_id == biz_master_id)
+        if template_id is not None:
+            stmt = stmt.where(PlanTemplateChange.template_id == template_id)
+        if drafted_by_id is not None:
+            stmt = stmt.where(PlanTemplateChange.drafted_by_id == drafted_by_id)
+        return stmt
+
+    def get_list(
+        self, db: Session, *, status: TemplateChangeStatus | None = None, biz_master_id: int | None = None,
+        template_id: int | None = None, drafted_by_id: int | None = None, limit: int = 100,
+    ) -> list[PlanTemplateChange]:
+        """
+        変更依頼の一覧。承認待ち（status=DRAFT）は古い順（承認の順番待ち）、それ以外は新しい順
+        （決まった日時、承認待ちは書いた日時）。
+        """
+        stmt = self._filtered(
+            select(PlanTemplateChange), status=status, biz_master_id=biz_master_id, template_id=template_id,
+            drafted_by_id=drafted_by_id,
+        )
+        if status == TemplateChangeStatus.DRAFT:
+            stmt = stmt.order_by(PlanTemplateChange.drafted_at, PlanTemplateChange.id)
+        else:
+            stmt = stmt.order_by(
+                func.coalesce(PlanTemplateChange.decided_at, PlanTemplateChange.drafted_at).desc(),
+                PlanTemplateChange.id.desc(),
+            )
+        return list(db.scalars(stmt.limit(limit)).all())
+
+    def count(
+        self, db: Session, *, status: TemplateChangeStatus | None = None, biz_master_id: int | None = None,
+        template_id: int | None = None, drafted_by_id: int | None = None,
+    ) -> int:
+        stmt = self._filtered(
+            select(func.count()).select_from(PlanTemplateChange), status=status, biz_master_id=biz_master_id,
+            template_id=template_id, drafted_by_id=drafted_by_id,
+        )
+        return db.scalar(stmt) or 0
+
     def get_history(self, db: Session, *, template_id: int) -> list[PlanTemplateChange]:
         """テンプレートの変更履歴（すべての状態。新しい順: 決まった日時、承認待ちは書いた日時）"""
         stmt = (
