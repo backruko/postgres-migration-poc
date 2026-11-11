@@ -5,15 +5,17 @@ from sqlalchemy import func, select, and_, or_
 from sqlalchemy.exc import IntegrityError
 
 from src.infrastructure.repositories import (
-    biz_dependency_repo, biz_master_repo, client_repo, sop_version_event_repo, sop_version_repo, sop_step_repo,
+    biz_dependency_repo, biz_master_repo, biz_release_change_repo, client_repo, sop_version_event_repo, sop_version_repo,
+    sop_step_repo,
 )
 from src.domain_biz.models import (
-    BizDependency, BizMaster, CompletionMode, ExecutionType, SOPVersion, SOPVersionEventType, SOPStepTemplate, SOPStatus,
-    SopState,
+    RELEASE_FIELDS, BizDependency, BizMaster, CompletionMode, ExecutionType, SOPVersion, SOPVersionEventType,
+    SOPStepTemplate, SOPStatus, SopState,
 )
 from src.domain_biz.schemas import (
-    BizDependencyCreate, BizDependencyResponse, BizMasterCreate, BizMasterUpdate, BizRef, SOPVersionCreate,
-    SOPStepOrderIn, SOPStepTemplateCreate, SOPStepTemplateUpdate, SOPVersionUpdate,
+    BizDependencyCreate, BizDependencyResponse, BizMasterCreate, BizMasterUpdate, BizRef, BizReleaseChangeResponse,
+    BizReleaseUpdate, BizReleaseValues, SOPVersionCreate, SOPVersionEventResponse, SOPVersionResponse,
+    SOPStepOrderIn, SOPStepTemplateCreate, SOPStepTemplateUpdate, SOPVersionUpdate, SubmittedSOPDraftResponse,
 )
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
@@ -87,16 +89,87 @@ def _check_client_event_settings(db: Session, biz: BizMaster, biz_in: BizMasterU
             raise DuplicatedRecordError(f"Signal type '{signal}' is already used by {other.business_code} of client {biz.client_code}.")
 
 
-def update_biz(db: Session, biz_id: int, biz_in: BizMasterUpdate) -> BizMaster:
-    db_obj = biz_master_repo.get(db, id=biz_id)
-    if not db_obj:
-        raise NotFoundError(f"BizMaster(id={biz_id}) not found for update.")
+def update_biz(db: Session, biz_id: int, biz_in: BizMasterUpdate, actor_id: int | None = None) -> BizMaster:
+    """業務の設定を変えます（業務管理者）。リリース設定が変わったら、その履歴も同じトランザクションで残す"""
+    db_obj = _get_biz_locked(db, biz_id)
     _check_client_event_settings(db, db_obj, biz_in)
+    sent = biz_in.model_dump(exclude_unset=True)
+    _record_release_change(db, db_obj, {f: sent[f] for f in RELEASE_FIELDS if f in sent}, actor_id)
 
     try:
         return biz_master_repo.update(db, db_obj=db_obj, obj_in=biz_in)
     except IntegrityError:
         raise DuplicatedRecordError(f"Update failed: Unique constraint violation.")
+
+
+# ==========================================
+# リリース設定（細かな権限、P.3、2026-11-11）: リリース担当も変えられる。どの API で変えても履歴を残す
+# ==========================================
+def _get_biz_locked(db: Session, biz_id: int) -> BizMaster:
+    """業務を行ロック付きで（変更前の値を確かに読むため。同時の変更は順に）"""
+    biz = db.scalars(select(BizMaster).where(BizMaster.id == biz_id).with_for_update()).first()
+    if not biz:
+        raise NotFoundError(f"BizMaster(id={biz_id}) not found for update.")
+    return biz
+
+
+def _release_values(mode, release_time, days_before) -> dict:
+    """リリース設定の 3 項目を JSON にできる形で（履歴の before / after）"""
+    return {
+        "release_mode": mode.value if hasattr(mode, "value") else str(mode),
+        "release_time": release_time.isoformat(),
+        "release_days_before": int(days_before),
+    }
+
+
+def _record_release_change(db: Session, biz: BizMaster, changes: dict, actor_id: int | None) -> None:
+    """リリース設定の変更（送られた値）が今の値と違えば、履歴を 1 行足す（書き出しは呼び出し側のコミットで）"""
+    if not changes:
+        return
+    current = {f: getattr(biz, f) for f in RELEASE_FIELDS}
+    before = _release_values(*(current[f] for f in RELEASE_FIELDS))
+    after = _release_values(*(changes.get(f, current[f]) for f in RELEASE_FIELDS))
+    if before != after:
+        biz_release_change_repo.add(db, biz_id=biz.id, changed_by_id=actor_id, before=before, after=after)
+
+
+def update_release(db: Session, biz_id: int, release_in: BizReleaseUpdate, actor_id: int | None) -> BizMaster:
+    """業務のリリース設定（モード・時刻・何日前）だけを変えます（リリース担当・業務管理者）。すぐに効く"""
+    biz = _get_biz_locked(db, biz_id)
+    changes = release_in.model_dump(exclude_unset=True)
+    _record_release_change(db, biz, changes, actor_id)
+    for field, value in changes.items():
+        setattr(biz, field, value)
+    db.commit()
+    db.refresh(biz)
+    return biz
+
+
+def list_release_changes(db: Session, biz_id: int) -> list[BizReleaseChangeResponse]:
+    """業務のリリース設定の変更履歴（新しい順。削除された業務は 404）"""
+    get_biz(db, biz_id)
+    rows = biz_release_change_repo.list_for_biz(db, biz_id=biz_id)
+    names = staff_names(db, {r.changed_by_id for r in rows})
+    return [
+        BizReleaseChangeResponse(
+            id=r.id, biz_master_id=r.biz_master_id, changed_by_id=r.changed_by_id, changed_by_name=names.get(r.changed_by_id),
+            changed_at=r.changed_at, before=BizReleaseValues.model_validate(r.before_values),
+            after=BizReleaseValues.model_validate(r.after_values),
+        )
+        for r in rows
+    ]
+
+
+# ==========================================
+# 職員の名前（記録・一覧に付ける。まとめて 1 回で読む）
+# ==========================================
+def staff_names(db: Session, ids: set[int | None]) -> dict[int | None, str]:
+    from src.domain_staff.models import StaffUser  # biz → staff は名前を読むだけ（モデルの循環を避ける）
+
+    wanted = {i for i in ids if i is not None}
+    if not wanted:
+        return {}
+    return {row.id: row.name for row in db.execute(select(StaffUser.id, StaffUser.name).where(StaffUser.id.in_(wanted)))}
 
 def delete_biz(db: Session, biz_id: int) -> BizMaster:
     """
@@ -568,6 +641,65 @@ def cancel_future_version(db: Session, biz_id: int, future_version_id: int, acto
     db.commit()
     db.refresh(version)
     return version
+
+# ==========================================
+# SOP の版を返す形・記録・承認待ち（P.3、2026-11-11）
+# ==========================================
+def describe_versions(db: Session, versions: list[SOPVersion]) -> list[SOPVersionResponse]:
+    """版に職員の名前を付けて返す形に（名前はまとめて 1 回で読む）"""
+    names = staff_names(db, {i for v in versions for i in (v.created_by_id, v.updated_by_id, v.submitted_by_id)})
+    return [
+        SOPVersionResponse.model_validate(v).model_copy(update={
+            "created_by_name": names.get(v.created_by_id), "updated_by_name": names.get(v.updated_by_id),
+            "submitted_by_name": names.get(v.submitted_by_id),
+        })
+        for v in versions
+    ]
+
+
+def describe_version(db: Session, version: SOPVersion) -> SOPVersionResponse:
+    return describe_versions(db, [version])[0]
+
+
+def list_version_events(db: Session, version_id: int) -> list[SOPVersionEventResponse]:
+    """版の記録（古い順。承認の記録には誰の草稿かの名前も）"""
+    get_version(db, version_id)
+    events = sop_version_event_repo.list_for_version(db, version_id=version_id)
+    drafted = {e.id: (e.detail or {}).get("drafted_by_id") for e in events}
+    names = staff_names(db, {e.actor_id for e in events} | set(drafted.values()))
+    return [
+        SOPVersionEventResponse.model_validate(e).model_copy(update={
+            "actor_name": names.get(e.actor_id), "drafted_by_name": names.get(drafted[e.id]),
+        })
+        for e in events
+    ]
+
+
+def list_submitted_drafts(db: Session, client_code: str | None = None) -> list[SubmittedSOPDraftResponse]:
+    """承認を依頼された草稿（すべての業務。依頼の古い順。削除された業務のものは出ない）"""
+    drafts = sop_version_event_repo.list_submitted(db, client_code=client_code)
+    bizes = {b.id: b for b in db.scalars(select(BizMaster).where(BizMaster.id.in_({d.biz_master_id for d in drafts})))}
+    steps = dict(db.execute(
+        select(SOPStepTemplate.sop_version_id, func.count()).where(SOPStepTemplate.sop_version_id.in_([d.id for d in drafts]))
+        .group_by(SOPStepTemplate.sop_version_id)
+    ).all())
+    names = staff_names(db, {i for d in drafts for i in (d.submitted_by_id, d.created_by_id)})
+    result = []
+    for d in drafts:
+        b = bizes[d.biz_master_id]
+        assert d.submitted_by_id is not None and d.submitted_at is not None
+        result.append(SubmittedSOPDraftResponse(
+            version_id=d.id, version_tag=d.version_tag, biz_master_id=b.id, business_code=b.business_code, biz_name=b.name,
+            client_code=b.client_code, step_count=steps.get(d.id, 0), submitted_by_id=d.submitted_by_id,
+            submitted_by_name=names.get(d.submitted_by_id), submitted_at=d.submitted_at,
+            created_by_id=d.created_by_id, created_by_name=names.get(d.created_by_id),
+        ))
+    return result
+
+
+def count_submitted_drafts(db: Session) -> int:
+    return sop_version_event_repo.count_submitted(db)
+
 
 # ==========================================
 # 業務間の依存関係（Phase 6）

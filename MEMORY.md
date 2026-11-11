@@ -41,6 +41,17 @@ is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the 
   admin (router passes `is_admin` from `role_codes`), else 403; approve works submitted or not and clears it.
   `SOPVersionResponse` + the 5 id / time fields (names in P.3). Tests `tests/test_sop_drafting.py` (7) +
   `test_plan_settings_guard.py` RELEASER_OR_ADMIN list + the 10 drafting routes. Suite 304, pyright 0.
+- **P.3 committed:** `PATCH /biz/{id}/release` (releaser + admin; `BizReleaseUpdate` extra=forbid, ≥ 1 field, no
+  nulls; row lock `_get_biz_locked`; applies at once); `update_biz(..., actor_id)` (admin PATCH) also records;
+  `_record_release_change` writes a row only when a value really changes (before / after = enum value, `HH:MM:SS`,
+  int). Reads: `GET /biz/{id}/release-changes` (newest first + `changed_by_name`), `GET /biz/versions/{id}/events`
+  (oldest first + `actor_name`, approved: `drafted_by_name`), `GET /biz/sop-drafts/submitted?client_code=` +
+  `/count` (`SubmittedSOPDraftResponse`: business code / name, client, step_count, submitter + creator names). Every
+  version-returning endpoint goes through `describe_version(s)` → `created_by_name` / `updated_by_name` /
+  `submitted_by_name` (names via `staff_names()` batch lookup, **not ORM relationships to StaffUser** — scripts that
+  never import the staff models would break mapper config). OpenAPI + `gen:api`; build passes. Tests
+  `tests/test_biz_release_and_reads.py` (4) + guard list + release route. HTTP harness scratchpad `p3_harness.py`
+  on `plan_check` 8001 **20/20** (cleans up its draft, restores biz 2 release; 2 history rows stay). Suite 308.
 
 ### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — merged
 

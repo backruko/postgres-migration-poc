@@ -35,6 +35,8 @@ RELEASER_OR_ADMIN = {
     ("/biz/steps/{step_id}", "delete"),
     ("/biz/versions/{version_id}/submit", "post"),
     ("/biz/versions/{version_id}/withdraw", "post"),
+    # 業務のリリース設定だけ（P.3）: リリース担当も変えられる（ほかの業務の設定は admin のみ）
+    ("/biz/{biz_id}/release", "patch"),
 }
 
 
