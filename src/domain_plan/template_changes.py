@@ -1,5 +1,5 @@
 """
-テンプレートの変更依頼（下書き）: 作る・直す・取り下げる（Level 2、D.2）。承認・差し戻しは D.3。
+テンプレートの変更依頼（下書き）: 作る・直す・取り下げる（Level 2、D.2）、承認する・差し戻す（D.3）。
 
 - 下書きはリリース担当・業務管理者が書ける。直す・取り下げるのは書いた本人だけ
 - 下書きは「どう変えるか」（直接の保存と同じ本文）だけを持つ。できる日付は持たない
@@ -18,7 +18,9 @@ from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
 from src.domain_plan import services as plan_services
 from src.domain_plan.models import PlanTemplateChange, TemplateChangeKind, TemplateChangeStatus
-from src.domain_plan.schemas import TemplateCreateDraft, TemplateDeleteDraft, TemplateDraft, TemplateUpdateDraft
+from src.domain_plan.schemas import (
+    PlanTemplateUpdate, TemplateCreateDraft, TemplateDeleteDraft, TemplateDraft, TemplateUpdateDraft,
+)
 from src.infrastructure.dry_run import dry_run
 from src.infrastructure.repositories import plan_template_change_repo
 
@@ -153,6 +155,75 @@ def edit_draft(db: Session, change_id: int, draft: TemplateDraft, actor_id: int)
     change.biz_master_id = biz_master_id
     for field, value in _content(draft).items():
         setattr(change, field, value)
+    return _save(db, change, change.template_id)
+
+
+def _get_pending_draft(db: Session, change_id: int) -> PlanTemplateChange:
+    """行ロック付きで、承認待ちの下書きを取得します（承認・差し戻し用。だれの下書きでもよい）"""
+    change = plan_template_change_repo.get_locked(db, id=change_id)
+    if change is None:
+        raise NotFoundError(f"PlanTemplateChange(id={change_id}) not found.")
+    if change.status != TemplateChangeStatus.DRAFT:
+        raise DuplicatedRecordError(
+            f"PlanTemplateChange(id={change_id}) is already {change.status.value}.",
+            error_code=ErrorCode.TEMPLATE_CHANGE_DECIDED,
+        )
+    return change
+
+
+def approve_draft(db: Session, change_id: int, actor_id: int, note: str | None = None) -> PlanTemplateChange:
+    """
+    業務管理者が下書きを承認し、すぐに反映します（1 つのトランザクション）。
+    下書き → テンプレートの順にロックを取り、変更前の値を残してから、直接の保存と同じ処理で当てはめます
+    （オーダーも直接の保存と同じように追従する）。当てはめで誤り（参照するシートが無いなど）になれば何も変えず、
+    下書きは承認待ちのまま残ります。改訂番号は確かめません（承認待ちの間はテンプレートを変えられないため）。
+    自分の下書きの承認もできます（履歴では self_approved）。
+    """
+    change = _get_pending_draft(db, change_id)
+    # 下書きの行の値は、当てはめが終わってからまとめて変える（途中の autoflush で
+    # 「承認待ちなのに変更前の値がある」行を書くと、DB の CHECK 制約に断られるため）
+    before: dict[str, Any] | None = None
+    try:
+        if change.kind == TemplateChangeKind.CREATE:
+            assert change.changes is not None
+            body = TemplateCreateDraft.model_validate({"kind": TemplateChangeKind.CREATE, "template": change.changes})
+            template = plan_services._apply_template_create(db, body.template)
+        else:
+            assert change.template_id is not None
+            template = plan_services._get_locked_template(db, change.template_id)
+            before = plan_services.template_settings(template)
+            if change.kind == TemplateChangeKind.DELETE:
+                plan_services._apply_template_delete(db, change.template_id)
+            else:
+                update = PlanTemplateUpdate.model_validate(change.changes or {})
+                if update.model_fields_set:
+                    plan_services._apply_template_update(db, change.template_id, update)
+                plan_services._apply_explicit_dates(
+                    db, change.template_id, add=list(change.add_dates), remove=list(change.remove_dates)
+                )
+        change.template_id = template.id
+        change.before_values = before
+        change.applied_revision = template.revision
+        change.status = TemplateChangeStatus.APPROVED
+        change.decided_by_id = actor_id
+        change.decided_at = datetime.now(timezone.utc)
+        change.decision_note = note
+        db.flush()
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise DuplicatedRecordError("The change conflicts with an existing record; nothing was applied.")
+    db.refresh(change)
+    return change
+
+
+def reject_draft(db: Session, change_id: int, actor_id: int, reason: str) -> PlanTemplateChange:
+    """業務管理者が下書きを差し戻します（理由は必須。記録は残る）。テンプレートは何も変わりません。"""
+    change = _get_pending_draft(db, change_id)
+    change.status = TemplateChangeStatus.REJECTED
+    change.decided_by_id = actor_id
+    change.decided_at = datetime.now(timezone.utc)
+    change.decision_note = reason
     return _save(db, change, change.template_id)
 
 

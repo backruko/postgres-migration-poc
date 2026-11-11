@@ -4,7 +4,8 @@ Handoff for the next working session. Read this first, then the design doc (§2)
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
 `src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11** — Level 2 (template drafts +
 approval, templates only) is in progress on `feature/template-drafts`; D.1 (data model) committed, D.2 (drafts:
-create / edit / withdraw, blocking) built and waiting for review
+create / edit / withdraw, blocking) committed, D.3 (approve / reject, direct-save rows, biz delete guard) built and
+waiting for review
 (see the first block of §1). The MVP pilot is postponed.
 
 ## 1. Current status
@@ -33,7 +34,39 @@ create / edit / withdraw, blocking) built and waiting for review
   calendar / sheet recalculation, which drafts do not block — so the blocking rule is the guard and `base_revision` is
   a record only; a separate settings counter was rejected as overengineering); Q7 承認待ち list on 予定の設定 + admin menu count badge, no
   notifications. **Releasers do not draft SOPs** in this phase (SOPs have their own versions). Design doc rev 110.
-- **D.2 as built (uncommitted, waiting for review; no migration):**
+- **D.3 as built (uncommitted, waiting for review; no migration).** User's decisions before D.3: **A = pending
+  drafts block deleting their business**; all my calls approved (below).
+  - `POST /plans/template-changes/{id}/approve` (admin; body `TemplateChangeApprove {note?}` optional — a POST with no
+    body works) → `template_changes.approve_draft`: locks the draft, then (update / delete) the template; applies via
+    `_apply_template_create` / `_apply_template_update` (if fields) + `_apply_explicit_dates` / `_apply_template_delete`
+    in one transaction (orders follow like a direct save); then sets `template_id` (create), `before_values`,
+    `applied_revision`, status, decided_by / at, note **all at the end** (setting `before_values` early made autoflush
+    write a DRAFT row with before values → CHECK violation; the constraints caught it). A failing apply → nothing
+    changes, draft stays DRAFT (tested by making the dates step fail after the field update). No revision check.
+    Self-approval allowed (`self_approved` in the response).
+  - `POST /plans/template-changes/{id}/reject` (admin; `TemplateChangeReject {reason}` required, stripped, 1–500) → REJECTED,
+    template untouched. Decided drafts → 409 `TEMPLATE_CHANGE_DECIDED` for approve / reject too.
+  - Direct saves: `create_template` / `update_template` / `delete_template` / `add_explicit_dates` /
+    `remove_explicit_date` take `actor_id: int | None = None`; the API passes `current_staff.id` → `_record_direct_change`
+    writes an APPROVED `is_direct` row (drafted = decided = admin, `base_revision` + `before_values` for update / delete,
+    `applied_revision`). Rows only when something changed (`template_settings` before ≠ after; dates: only the new ones
+    are listed). No actor (tests, service calls) → no row. Restore records nothing.
+  - `coordination/master_guards.business_template_drafts_pending` → biz delete refused: "N template draft(s) waiting
+    for approval; approve, reject or withdraw them first". (Existing narrow race, same as the template check: biz delete
+    doesn't lock the biz row.)
+  - **Bug found by the HTTP harness and fixed here (it was in committed D.2):** a draft changing only the name (or only
+    display / deadline-warning fields) was refused as "changes nothing". Sessions run with `autoflush=False`; a
+    name-only update writes nothing, and the following `_apply_explicit_dates([], [])` re-locked the template with
+    `populate_existing`, which reloaded the row and dropped the unflushed rename. Fix: `_apply_template_update` ends with
+    `db.flush()`; `_apply_explicit_dates` returns early when there is nothing to add / remove. **Lesson: any
+    `get_locked(... populate_existing)` after unflushed changes silently discards them — flush first.**
+  - Checked: `tests/test_template_approval.py` 14 (update / create / delete / dates approvals with orders following;
+    name / display / warn-only drafts applied (regression); self-approval; failing approval atomic; reject; decided →
+    409; direct rows only on change and only with an actor; dates rows list only new dates; biz delete refused while a
+    draft waits; approve / reject admin-only); full suite **267 passed**; pyright 0. HTTP harness `approval_harness.py`
+    on `plan_check` **16/16** (its own template `HARNESS_APPROVAL`, deleted at the end through an approved delete
+    draft; the aborted first run's template 53 deleted by admin DELETE).
+- **D.2 committed `bab603f`.** As built (no migration):
   - Endpoints (releaser + admin, login): `POST /plans/template-changes` (body switched by `kind`: `create` +
     `template` = POST body / `update` + `template_id`, `changes` = PATCH body, `add_dates`, `remove_dates` / `delete` +
     `template_id`) → 201 `PlanTemplateChangeResponse` (`self_approved` computed); `PUT /plans/template-changes/{id}`

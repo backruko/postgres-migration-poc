@@ -570,6 +570,18 @@ TemplateDraft = Annotated[
 ]
 
 
+class TemplateChangeApprove(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    note: str | None = Field(default=None, max_length=500, description="optional comment on the approval")
+
+
+class TemplateChangeReject(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reason: str = Field(..., min_length=1, max_length=500, description="why the draft is sent back (required)")
+
+
 class PlanTemplateChangeResponse(BaseModel):
     """テンプレートの変更依頼 1 件（下書き・承認済み・差し戻し・取り下げ）"""
     id: int

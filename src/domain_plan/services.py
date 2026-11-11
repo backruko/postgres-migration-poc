@@ -35,9 +35,12 @@ from src.domain_plan.models import (
     PlanInstanceVoid,
     PlanOccurrenceCache,
     PlanTemplate,
+    PlanTemplateChange,
     ReferenceSheet,
     ReferenceSheetEvent,
     ReferenceSheetMarker,
+    TemplateChangeKind,
+    TemplateChangeStatus,
     TemplateType,
     VoidReason,
 )
@@ -1042,6 +1045,25 @@ TEMPLATE_SETTING_FIELDS = (
 )
 
 
+def _record_direct_change(
+    db: Session, template: PlanTemplate, kind: TemplateChangeKind, actor_id: int, *,
+    base_revision: int | None, before: dict[str, Any] | None, changes: dict[str, Any] | None,
+    add_dates: list[date] | None = None, remove_dates: list[date] | None = None,
+) -> None:
+    """
+    業務管理者の直接の保存を、変更の履歴に「下書き即承認」（is_direct）として 1 行残します（コミットしない）。
+    API からの保存だけが actor_id を渡す（テスト・サービスの直接の呼び出しでは残さない）。
+    """
+    now = _now()
+    plan_template_change_repo.add(db, change=PlanTemplateChange(
+        biz_master_id=template.biz_master_id, template_id=template.id, kind=kind,
+        status=TemplateChangeStatus.APPROVED, is_direct=True, base_revision=base_revision,
+        changes=changes, add_dates=add_dates or [], remove_dates=remove_dates or [],
+        before_values=before, applied_revision=template.revision,
+        drafted_by_id=actor_id, drafted_at=now, decided_by_id=actor_id, decided_at=now,
+    ))
+
+
 def template_settings(template: PlanTemplate) -> dict[str, Any]:
     """テンプレートの設定の写し（JSON にできる値。指定日は日付の一覧）。下書きの「何も変わらない」の判定と変更前の値に使う"""
     values: dict[str, Any] = {field: getattr(template, field) for field in TEMPLATE_SETTING_FIELDS}
@@ -1050,8 +1072,13 @@ def template_settings(template: PlanTemplate) -> dict[str, Any]:
     return jsonable_encoder(values)
 
 
-def create_template(db: Session, template_in: PlanTemplateCreate) -> PlanTemplate:
+def create_template(db: Session, template_in: PlanTemplateCreate, actor_id: int | None = None) -> PlanTemplate:
     template = _apply_template_create(db, template_in)
+    if actor_id is not None:
+        _record_direct_change(
+            db, template, TemplateChangeKind.CREATE, actor_id,
+            base_revision=None, before=None, changes=template_in.model_dump(mode="json"),
+        )
     _commit(db, "PlanTemplate could not be created due to a conflicting record.")
     db.refresh(template)
     return _with_next_occurrence(db, [template])[0]
@@ -1119,9 +1146,18 @@ def _check_deadline(template: PlanTemplate) -> None:
             )
 
 
-def update_template(db: Session, template_id: int, template_in: PlanTemplateUpdate) -> PlanTemplate:
-    _get_locked_template_without_draft(db, template_id)
+def update_template(
+    db: Session, template_id: int, template_in: PlanTemplateUpdate, actor_id: int | None = None
+) -> PlanTemplate:
+    locked = _get_locked_template_without_draft(db, template_id)
+    base_revision, before = locked.revision, template_settings(locked)
     template, _ = _apply_template_update(db, template_id, template_in)
+    # 何も変わらない保存（今と同じ値）は履歴に残さない
+    if actor_id is not None and template_settings(template) != before:
+        _record_direct_change(
+            db, template, TemplateChangeKind.UPDATE, actor_id, base_revision=base_revision, before=before,
+            changes=template_in.model_dump(mode="json", exclude_unset=True),
+        )
     _commit(db, "PlanTemplate could not be updated due to a conflicting record.")
     db.refresh(template)
     return _with_next_occurrence(db, [template])[0]
@@ -1189,6 +1225,9 @@ def _apply_template_update(db: Session, template_id: int, template_in: PlanTempl
     if deadline_changed:
         db.flush()
         template_events.notify_deadline_changed(db, template)
+    # セッションは autoflush しない。名前・表示だけの変更は何も書き込まないまま残るため、ここで書き出す
+    # （このあと行ロックを取り直す処理（populate_existing）が、書き出していない変更を DB の値で上書きして消すため）
+    db.flush()
     return template, generation_changed
 
 
@@ -1260,10 +1299,15 @@ def dry_run_update(
     return _dry_run_occurrences(db, template, since, until), generation_changed
 
 
-def delete_template(db: Session, template_id: int) -> PlanTemplate:
+def delete_template(db: Session, template_id: int, actor_id: int | None = None) -> PlanTemplate:
     """論理削除。未来のインスタンスは無効化し、過去のインスタンスは履歴として残します。"""
-    _get_locked_template_without_draft(db, template_id)
-    _apply_template_delete(db, template_id)
+    locked = _get_locked_template_without_draft(db, template_id)
+    base_revision, before = locked.revision, template_settings(locked)
+    template = _apply_template_delete(db, template_id)
+    if actor_id is not None:
+        _record_direct_change(
+            db, template, TemplateChangeKind.DELETE, actor_id, base_revision=base_revision, before=before, changes=None,
+        )
     db.commit()
 
     # 全局scopeにより削除済みは通常の取得で見えないため、解除して読み直す
@@ -1313,6 +1357,8 @@ def _apply_explicit_dates(
     足す日付が登録済みなら無視、外す日付が無ければ 404。足すのは指定日テンプレートだけ（400）。
     直接の変更（add_explicit_dates / remove_explicit_date）と、下書きの確認・承認が使います。
     """
+    if not add and not remove:
+        return False
     template = _get_locked_template(db, template_id)
     if add and template.template_type != TemplateType.EXPLICIT_DATES:
         raise BadRequestError("Explicit dates can only be added to EXPLICIT_DATES templates.")
@@ -1329,17 +1375,30 @@ def _apply_explicit_dates(
     return changed
 
 
-def add_explicit_dates(db: Session, template_id: int, dates: list[date]) -> PlanTemplate:
+def add_explicit_dates(db: Session, template_id: int, dates: list[date], actor_id: int | None = None) -> PlanTemplate:
     template = _get_locked_template_without_draft(db, template_id)
+    base_revision, before = template.revision, template_settings(template)
+    new_dates = sorted(set(dates) - {d.local_date for d in template.explicit_dates})
     if _apply_explicit_dates(db, template_id, add=dates):
+        if actor_id is not None:
+            _record_direct_change(
+                db, template, TemplateChangeKind.UPDATE, actor_id, base_revision=base_revision, before=before,
+                changes={}, add_dates=new_dates,
+            )
         _commit(db, "Some dates already exist for this template.")
         db.refresh(template)
     return _with_next_occurrence(db, [template])[0]
 
 
-def remove_explicit_date(db: Session, template_id: int, local_date: date) -> PlanTemplate:
+def remove_explicit_date(db: Session, template_id: int, local_date: date, actor_id: int | None = None) -> PlanTemplate:
     template = _get_locked_template_without_draft(db, template_id)
+    base_revision, before = template.revision, template_settings(template)
     _apply_explicit_dates(db, template_id, remove=[local_date])
+    if actor_id is not None:
+        _record_direct_change(
+            db, template, TemplateChangeKind.UPDATE, actor_id, base_revision=base_revision, before=before,
+            changes={}, remove_dates=[local_date],
+        )
     db.commit()
     db.refresh(template)
     return _with_next_occurrence(db, [template])[0]
