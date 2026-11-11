@@ -1187,6 +1187,7 @@
           "biz"
         ],
         "summary": "Update Biz Endpoint",
+        "description": "業務の設定を変えます（業務管理者）。リリース設定が変わったときは、その変更履歴も残ります。",
         "operationId": "update_biz_endpoint_biz__biz_id__patch",
         "security": [
           {
@@ -1388,6 +1389,222 @@
           },
           "403": {
             "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/biz/{biz_id}/release": {
+      "patch": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "Update Release Endpoint",
+        "description": "業務のリリース設定（release_mode / release_time / release_days_before）だけを変えます（リリース担当・業務管理者。P.3）。\n送った項目だけ変わり、すぐに効きます（まだリリースされていないオーダーの自動リリースの日時も）。\nほかの項目は受け付けません（422）。値が変わったときは変更履歴が残ります。",
+        "operationId": "update_release_endpoint_biz__biz_id__release_patch",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "biz_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Biz Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BizReleaseUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BizMasterResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/biz/{biz_id}/release-changes": {
+      "get": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "List Release Changes Endpoint",
+        "description": "業務のリリース設定の変更履歴（新しい順。どの API で変えたものも）",
+        "operationId": "list_release_changes_endpoint_biz__biz_id__release_changes_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "biz_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Biz Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BizReleaseChangeResponse"
+                  },
+                  "title": "Response List Release Changes Endpoint Biz  Biz Id  Release Changes Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1960,7 +2177,7 @@
           "biz"
         ],
         "summary": "Rename Draft Endpoint",
-        "description": "草稿のタグを変えます（承認済みの版は 400）。",
+        "description": "草稿のタグを変えます（承認済みの版は 400、承認を依頼中は 409 SOP_DRAFT_SUBMITTED）。",
         "operationId": "rename_draft_endpoint_biz_versions__version_id__patch",
         "security": [
           {
@@ -2079,7 +2296,7 @@
           "biz"
         ],
         "summary": "Delete Draft Endpoint",
-        "description": "草稿をステップごと削除します（承認済みの版は 400）。",
+        "description": "草稿をステップごと削除します（承認済みの版は 400、承認を依頼中は 409 SOP_DRAFT_SUBMITTED）。記録も消えます。",
         "operationId": "delete_draft_endpoint_biz_versions__version_id__delete",
         "security": [
           {
@@ -2184,6 +2401,273 @@
         }
       }
     },
+    "/biz/versions/{version_id}/events": {
+      "get": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "List Version Events Endpoint",
+        "description": "版の記録（古い順）: 作成（写し元）・承認の依頼・取り下げ・差し戻し（理由）・承認（誰の草稿か）・承認の取消",
+        "operationId": "list_version_events_endpoint_biz_versions__version_id__events_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SOPVersionEventResponse"
+                  },
+                  "title": "Response List Version Events Endpoint Biz Versions  Version Id  Events Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/biz/sop-drafts/submitted": {
+      "get": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "List Submitted Drafts Endpoint",
+        "description": "承認を依頼された SOP の草稿（すべての業務。依頼の古い順。client_code で顧客を絞る）",
+        "operationId": "list_submitted_drafts_endpoint_biz_sop_drafts_submitted_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Client Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubmittedSOPDraftResponse"
+                  },
+                  "title": "Response List Submitted Drafts Endpoint Biz Sop Drafts Submitted Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/biz/sop-drafts/submitted/count": {
+      "get": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "Count Submitted Drafts Endpoint",
+        "description": "承認を依頼された SOP の草稿の数（業務管理者のメニューの件数）",
+        "operationId": "count_submitted_drafts_endpoint_biz_sop_drafts_submitted_count_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmittedSOPDraftCount"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/biz/{biz_id}/versions/current-active": {
       "get": {
         "tags": [
@@ -2281,7 +2765,7 @@
           "biz"
         ],
         "summary": "Approve And Schedule Version Endpoint",
-        "description": "【業務管理者】草稿を承認し、effective_date（明日以降）の 0:00（日本時間）から有効にします（状態は「予定」）。\n予定の版は業務ごとに 1 つまで。ステップの無い草稿は承認できません。今有効な版は、この発効日時で終わります。",
+        "description": "【業務管理者】草稿を承認し、effective_date（明日以降）の 0:00（日本時間）から有効にします（状態は「予定」）。\n予定の版は業務ごとに 1 つまで。ステップの無い草稿は承認できません。今有効な版は、この発効日時で終わります。\n承認を依頼された草稿も、依頼されていない草稿も承認できます（自分の草稿も。記録に残る）。note は任意のひとこと。",
         "operationId": "approve_and_schedule_version_endpoint_biz__biz_id__versions__draft_version_id__approve_post",
         "security": [
           {
@@ -2924,6 +3408,349 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SOPStepTemplateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/biz/versions/{version_id}/submit": {
+      "post": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "Submit Draft Endpoint",
+        "description": "草稿の承認を業務管理者に依頼します。依頼中は誰も直せません（409 SOP_DRAFT_SUBMITTED）。\nステップの無い草稿は 400、もう依頼中なら 409 SOP_DRAFT_SUBMITTED。",
+        "operationId": "submit_draft_endpoint_biz_versions__version_id__submit_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SOPVersionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/biz/versions/{version_id}/withdraw": {
+      "post": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "Withdraw Draft Endpoint",
+        "description": "承認の依頼を取り下げ、草稿に戻します（依頼した本人か業務管理者。ほかの人は 403。依頼中でなければ 409 SOP_DRAFT_NOT_SUBMITTED）。",
+        "operationId": "withdraw_draft_endpoint_biz_versions__version_id__withdraw_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SOPVersionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request(リクエスト不正)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found(データが見つからない)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (Record already exists etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error(サーバーエラー)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized(ログインしていない・セッションの期限切れ)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden(ロールが無い・アカウントが利用開始前／利用停止中)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/biz/versions/{version_id}/reject": {
+      "post": {
+        "tags": [
+          "biz"
+        ],
+        "summary": "Reject Draft Endpoint",
+        "description": "依頼された草稿を差し戻し、草稿に戻します（業務管理者。理由は必須。依頼中でなければ 409 SOP_DRAFT_NOT_SUBMITTED）。",
+        "operationId": "reject_draft_endpoint_biz_versions__version_id__reject_post",
+        "security": [
+          {
+            "APIKeyCookie": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SOPVersionReject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SOPVersionResponse"
                 }
               }
             }
@@ -13896,6 +14723,132 @@
         ],
         "title": "BizRef"
       },
+      "BizReleaseChangeResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "biz_master_id": {
+            "type": "integer",
+            "title": "Biz Master Id"
+          },
+          "changed_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By Id"
+          },
+          "changed_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed By Name"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Changed At"
+          },
+          "before": {
+            "$ref": "#/components/schemas/BizReleaseValues"
+          },
+          "after": {
+            "$ref": "#/components/schemas/BizReleaseValues"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "biz_master_id",
+          "changed_by_id",
+          "changed_at",
+          "before",
+          "after"
+        ],
+        "title": "BizReleaseChangeResponse",
+        "description": "リリース設定の変更 1 件（P.3）"
+      },
+      "BizReleaseUpdate": {
+        "properties": {
+          "release_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReleaseMode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MANUAL_APPROVAL or AUTOMATIC"
+          },
+          "release_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Time",
+            "description": "automatic release time of day (JST)"
+          },
+          "release_days_before": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 30.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Days Before",
+            "description": "automatic release N days before the scheduled day"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BizReleaseUpdate",
+        "description": "業務のリリース設定だけの変更（P.3。リリース担当・業務管理者）: 送った項目だけ変える。ほかの項目は受け付けない"
+      },
+      "BizReleaseValues": {
+        "properties": {
+          "release_mode": {
+            "$ref": "#/components/schemas/ReleaseMode"
+          },
+          "release_time": {
+            "type": "string",
+            "format": "time",
+            "title": "Release Time"
+          },
+          "release_days_before": {
+            "type": "integer",
+            "title": "Release Days Before"
+          }
+        },
+        "type": "object",
+        "required": [
+          "release_mode",
+          "release_time",
+          "release_days_before"
+        ],
+        "title": "BizReleaseValues",
+        "description": "リリース設定の 3 項目（履歴の変更前・変更後）"
+      },
       "BusinessCalendarCreate": {
         "properties": {
           "code": {
@@ -15161,6 +16114,8 @@
           "TEMPLATE_DRAFT_PENDING",
           "TEMPLATE_CHANGE_DECIDED",
           "TEMPLATE_CHANGED_MEANWHILE",
+          "SOP_DRAFT_SUBMITTED",
+          "SOP_DRAFT_NOT_SUBMITTED",
           "INTERNAL_SERVER_ERROR"
         ],
         "title": "ErrorCode",
@@ -18621,6 +19576,101 @@
             "title": "Expired At",
             "description": "end (exclusive): the next version's effective_at"
           },
+          "created_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Id",
+            "description": "staff who created the version (null before 2026-11-11)"
+          },
+          "updated_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By Id",
+            "description": "staff who last changed the draft"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "when the draft was last changed"
+          },
+          "submitted_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted By Id",
+            "description": "staff who asked for approval (only while it waits)"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At",
+            "description": "when approval was asked for (only while it waits)"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "updated_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By Name"
+          },
+          "submitted_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted By Name"
+          },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/SOPStepTemplateResponse"
@@ -18643,6 +19693,121 @@
         ],
         "title": "SOPVersionDetailResponse",
         "description": "バージョンとそのステップ（番号順）"
+      },
+      "SOPVersionEventResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/SOPVersionEventType"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "reason of a rejection / comment on an approval"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail",
+            "description": "created: cloned_from_version_id / cloned_from_tag; approved: effective_date, drafted_by_id (self-approval when it equals actor_id)"
+          },
+          "drafted_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drafted By Name",
+            "description": "approved: name of the staff whose draft it was"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "actor_id",
+          "occurred_at",
+          "note",
+          "detail"
+        ],
+        "title": "SOPVersionEventResponse",
+        "description": "SOP の版の記録 1 件（P.3）"
+      },
+      "SOPVersionEventType": {
+        "type": "string",
+        "enum": [
+          "created",
+          "submitted",
+          "withdrawn",
+          "rejected",
+          "approved",
+          "cancelled"
+        ],
+        "title": "SOPVersionEventType"
+      },
+      "SOPVersionReject": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "description": "why the draft is sent back (required)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "SOPVersionReject",
+        "description": "依頼された草稿の差し戻し（P.2）: 理由は必須"
       },
       "SOPVersionResponse": {
         "properties": {
@@ -18694,6 +19859,101 @@
             ],
             "title": "Expired At",
             "description": "end (exclusive): the next version's effective_at"
+          },
+          "created_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Id",
+            "description": "staff who created the version (null before 2026-11-11)"
+          },
+          "updated_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By Id",
+            "description": "staff who last changed the draft"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "when the draft was last changed"
+          },
+          "submitted_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted By Id",
+            "description": "staff who asked for approval (only while it waits)"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At",
+            "description": "when approval was asked for (only while it waits)"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "updated_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By Name"
+          },
+          "submitted_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted By Name"
           }
         },
         "type": "object",
@@ -18716,6 +19976,19 @@
             "format": "date",
             "title": "Effective Date",
             "description": "first day (JST) the version applies to; tomorrow or later"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "optional comment on the approval (kept in the version's history)"
           }
         },
         "type": "object",
@@ -19511,6 +20784,110 @@
         ],
         "title": "StepState",
         "description": "ステップの状態。approved が最終状態（差し戻しは submitted → todo）"
+      },
+      "SubmittedSOPDraftCount": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "title": "SubmittedSOPDraftCount"
+      },
+      "SubmittedSOPDraftResponse": {
+        "properties": {
+          "version_id": {
+            "type": "integer",
+            "title": "Version Id"
+          },
+          "version_tag": {
+            "type": "string",
+            "title": "Version Tag"
+          },
+          "biz_master_id": {
+            "type": "integer",
+            "title": "Biz Master Id"
+          },
+          "business_code": {
+            "type": "string",
+            "title": "Business Code"
+          },
+          "biz_name": {
+            "type": "string",
+            "title": "Biz Name"
+          },
+          "client_code": {
+            "type": "string",
+            "title": "Client Code"
+          },
+          "step_count": {
+            "type": "integer",
+            "title": "Step Count"
+          },
+          "submitted_by_id": {
+            "type": "integer",
+            "title": "Submitted By Id"
+          },
+          "submitted_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted By Name"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "created_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Id"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_id",
+          "version_tag",
+          "biz_master_id",
+          "business_code",
+          "biz_name",
+          "client_code",
+          "step_count",
+          "submitted_by_id",
+          "submitted_by_name",
+          "submitted_at",
+          "created_by_id",
+          "created_by_name"
+        ],
+        "title": "SubmittedSOPDraftResponse",
+        "description": "承認を依頼された SOP の草稿（承認待ちの一覧の 1 行。P.3）"
       },
       "TemplateChangeApprove": {
         "properties": {

@@ -3,6 +3,7 @@ import { Alert, Badge, Button, Dropdown, Spin, Typography } from "antd";
 import type { MenuProps } from "antd";
 import { DownOutlined } from "@ant-design/icons";
 import { Link, Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
+import { useSubmittedSopDraftCount } from "../domain/biz/hooks/useSopApprovals";
 import { usePendingDraftCount } from "../domain/plan/hooks/useTemplateChanges";
 import { templateWriteMode } from "../domain/plan/lib/templateChanges";
 import { useCurrentStaff } from "../domain/staff/hooks/useStaff";
@@ -56,10 +57,12 @@ export function AppLayout() {
   lastSearch.current[location.pathname] = location.search;
   const to = (p: Page) => ({ pathname: p.path, search: lastSearch.current[p.path] ?? "" });
 
-  // 承認待ちの件数（業務管理者だけ。決めた直後と 2 分ごとに読み直す）。ほかの人には出さない（読まない）
+  // 承認待ちの件数（業務管理者だけ。決めた直後と 2 分ごとに読み直す）。ほかの人には出さない（読まない）。
+  // テンプレートの下書きと、承認を依頼された SOP の草稿の合計（P.4）
   const isAdmin = templateWriteMode(me.data) === "direct";
   const pending = usePendingDraftCount(isAdmin);
-  const pendingCount = isAdmin ? pending.data ?? 0 : 0;
+  const pendingSop = useSubmittedSopDraftCount(isAdmin);
+  const pendingCount = isAdmin ? (pending.data ?? 0) + (pendingSop.data ?? 0) : 0;
 
   const activeSetting = currentSettingsPage(location.pathname);
   const settingsMenu: MenuProps = {
@@ -114,7 +117,7 @@ export function AppLayout() {
             <button type="button" className={activeSetting ? "nav-link nav-menu active" : "nav-link nav-menu"} aria-haspopup="menu">
               設定{activeSetting && <span className="nav-menu-current">：{activeSetting.label}</span>}
               {pendingCount > 0 && (
-                <Badge count={pendingCount} size="small" className="nav-badge" title={`承認待ちの下書き ${pendingCount} 件`} />
+                <Badge count={pendingCount} size="small" className="nav-badge" title={`承認待ち ${pendingCount} 件（予定テンプレートの下書き・SOP の草稿）`} />
               )}
               <DownOutlined className="nav-menu-caret" />
             </button>

@@ -4,9 +4,11 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.domain_biz.models import CompletionMode, DependencyKind, DependencyMatchRule, ExecutionType, ReleaseMode, SOPStatus, SopState
+from src.domain_biz.models import (
+    RELEASE_FIELDS, CompletionMode, DependencyKind, DependencyMatchRule, ExecutionType, ReleaseMode, SOPStatus,
+    SOPVersionEventType, SopState,
+)
 
-RELEASE_FIELDS = ("release_mode", "release_time", "release_days_before")
 # 明示的な null を受け付けない項目（signal_type は null で解除できる）
 NOT_NULL_FIELDS = (*RELEASE_FIELDS, "execution_type", "completion_mode")
 
@@ -94,7 +96,58 @@ class SOPVersionUpdate(SOPVersionCreate):
 
 class SOPVersionScheduleIn(BaseModel):
     """草稿の承認（M2.1）: この日の 0:00（日本時間）から有効にする。明日以降"""
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     effective_date: date = Field(..., description="first day (JST) the version applies to; tomorrow or later")
+    note: str | None = Field(default=None, max_length=500, description="optional comment on the approval (kept in the version's history)")
+
+    @field_validator("note")
+    @classmethod
+    def blank_note_is_none(cls, v: str | None) -> str | None:
+        return v or None
+
+
+class BizReleaseUpdate(BaseModel):
+    """業務のリリース設定だけの変更（P.3。リリース担当・業務管理者）: 送った項目だけ変える。ほかの項目は受け付けない"""
+    model_config = ConfigDict(extra="forbid")
+
+    release_mode: ReleaseMode | None = Field(None, description="MANUAL_APPROVAL or AUTOMATIC")
+    release_time: time | None = Field(None, description="automatic release time of day (JST)")
+    release_days_before: int | None = Field(None, ge=0, le=30, description="automatic release N days before the scheduled day")
+
+    @model_validator(mode="after")
+    def check_not_null(self):
+        nulls = sorted(f for f in RELEASE_FIELDS if f in self.model_fields_set and getattr(self, f) is None)
+        if nulls:
+            raise ValueError(f"{nulls} must not be null")
+        if not self.model_fields_set:
+            raise ValueError("send at least one of " + ", ".join(RELEASE_FIELDS))
+        return self
+
+
+class BizReleaseValues(BaseModel):
+    """リリース設定の 3 項目（履歴の変更前・変更後）"""
+    release_mode: ReleaseMode
+    release_time: time
+    release_days_before: int
+
+
+class BizReleaseChangeResponse(BaseModel):
+    """リリース設定の変更 1 件（P.3）"""
+    id: int
+    biz_master_id: int
+    changed_by_id: int | None
+    changed_by_name: str | None = None
+    changed_at: datetime
+    before: BizReleaseValues
+    after: BizReleaseValues
+
+
+class SOPVersionReject(BaseModel):
+    """依頼された草稿の差し戻し（P.2）: 理由は必須"""
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reason: str = Field(..., min_length=1, max_length=500, description="why the draft is sent back (required)")
 
 class SOPVersionResponse(BaseModel):
     id: int
@@ -105,8 +158,54 @@ class SOPVersionResponse(BaseModel):
     state: SopState = Field(description="draft / scheduled (approved, not yet in effect) / current / past, from the dates")
     effective_at: datetime | None
     expired_at: datetime | None = Field(description="end (exclusive): the next version's effective_at")
+    # P.2: 誰が作った・直した・承認を依頼した（この機能より前の版は null）
+    created_by_id: int | None = Field(default=None, description="staff who created the version (null before 2026-11-11)")
+    updated_by_id: int | None = Field(default=None, description="staff who last changed the draft")
+    updated_at: datetime | None = Field(default=None, description="when the draft was last changed")
+    submitted_by_id: int | None = Field(default=None, description="staff who asked for approval (only while it waits)")
+    submitted_at: datetime | None = Field(default=None, description="when approval was asked for (only while it waits)")
+    # P.3: 名前（版を返す API はすべて付ける。職員が見つからなければ null）
+    created_by_name: str | None = None
+    updated_by_name: str | None = None
+    submitted_by_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SOPVersionEventResponse(BaseModel):
+    """SOP の版の記録 1 件（P.3）"""
+    id: int
+    event_type: SOPVersionEventType
+    actor_id: int | None
+    actor_name: str | None = None
+    occurred_at: datetime
+    note: str | None = Field(description="reason of a rejection / comment on an approval")
+    detail: dict[str, Any] | None = Field(
+        description="created: cloned_from_version_id / cloned_from_tag; approved: effective_date, drafted_by_id (self-approval when it equals actor_id)"
+    )
+    drafted_by_name: str | None = Field(default=None, description="approved: name of the staff whose draft it was")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SubmittedSOPDraftCount(BaseModel):
+    count: int
+
+
+class SubmittedSOPDraftResponse(BaseModel):
+    """承認を依頼された SOP の草稿（承認待ちの一覧の 1 行。P.3）"""
+    version_id: int
+    version_tag: str
+    biz_master_id: int
+    business_code: str
+    biz_name: str
+    client_code: str
+    step_count: int
+    submitted_by_id: int
+    submitted_by_name: str | None
+    submitted_at: datetime
+    created_by_id: int | None
+    created_by_name: str | None
 
 
 # ==========================================

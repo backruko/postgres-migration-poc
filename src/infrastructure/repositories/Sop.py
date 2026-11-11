@@ -6,7 +6,11 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from src.infrastructure.repositories.base import CRUDBase  
-from src.domain_biz.models import SOPVersion, SOPStepTemplate, SOPStatus
+from typing import Any
+
+from sqlalchemy import func
+
+from src.domain_biz.models import BizMaster, SOPVersion, SOPVersionEvent, SOPVersionEventType, SOPStepTemplate, SOPStatus
 from src.domain_biz.schemas import (
     SOPVersionCreate, SOPVersionUpdate,
     SOPStepTemplateCreate, SOPStepTemplateUpdate
@@ -78,7 +82,50 @@ class SOPStepTemplateRepository(CRUDBase[SOPStepTemplate, SOPStepTemplateCreate,
 
 
 # ==========================================
+#  SOPVersionEvent Repository（版の記録。追記のみ）と承認待ち
+# ==========================================
+class SOPVersionEventRepository:
+
+    def add(
+        self, db: Session, *, version: SOPVersion, event_type: SOPVersionEventType, actor_id: int | None,
+        note: str | None = None, detail: dict[str, Any] | None = None,
+    ) -> SOPVersionEvent:
+        """記録を足す（書き出しは呼び出し側のコミットで）"""
+        event = SOPVersionEvent(
+            sop_version_id=version.id, event_type=event_type, actor_id=actor_id, note=note, detail=detail,
+        )
+        db.add(event)
+        return event
+
+    def list_for_version(self, db: Session, *, version_id: int) -> list[SOPVersionEvent]:
+        """版の記録（古い順）"""
+        stmt = select(SOPVersionEvent).where(SOPVersionEvent.sop_version_id == version_id)
+        return list(db.scalars(stmt.order_by(SOPVersionEvent.occurred_at, SOPVersionEvent.id)).all())
+
+    def list_submitted(self, db: Session, *, biz_master_id: int | None = None, client_code: str | None = None) -> list[SOPVersion]:
+        """承認を依頼された草稿（依頼の古い順。削除された業務のものは除く）"""
+        stmt = (
+            select(SOPVersion).join(BizMaster, BizMaster.id == SOPVersion.biz_master_id)
+            .where(SOPVersion.submitted_at.is_not(None))
+        )
+        if biz_master_id is not None:
+            stmt = stmt.where(SOPVersion.biz_master_id == biz_master_id)
+        if client_code is not None:
+            stmt = stmt.where(BizMaster.client_code == client_code)
+        return list(db.scalars(stmt.order_by(SOPVersion.submitted_at, SOPVersion.id)).all())
+
+    def count_submitted(self, db: Session) -> int:
+        """承認を依頼された草稿の数（削除された業務のものは除く。業務管理者のメニューの件数）"""
+        stmt = (
+            select(func.count()).select_from(SOPVersion).join(BizMaster, BizMaster.id == SOPVersion.biz_master_id)
+            .where(SOPVersion.submitted_at.is_not(None))
+        )
+        return db.scalar(stmt) or 0
+
+
+# ==========================================
 #  インスタンス化とエクスポート
 # ==========================================
 sop_version_repo = SOPVersionRepository(SOPVersion)
 sop_step_repo = SOPStepTemplateRepository(SOPStepTemplate)
+sop_version_event_repo = SOPVersionEventRepository()

@@ -285,6 +285,22 @@ class SOPVersion(Base):
         nullable=True, 
         comment="有効終了日時（この日時を過ぎたら自動で無効化）"
     )
+    # 誰が作った・直した・承認を依頼した（P.1、2026-11-11。リリース担当も草稿を書く。これより前の版は NULL）
+    created_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staff_user.id", ondelete="RESTRICT"), comment="版（草稿）を作った職員"
+    )
+    updated_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staff_user.id", ondelete="RESTRICT"), comment="草稿（タグ・ステップ）を最後に直した職員"
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="草稿を最後に直した日時")
+    # 承認の依頼: 依頼中の草稿は直せない（取り下げ・差し戻しで草稿に戻る。承認で外れる）
+    submitted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staff_user.id", ondelete="RESTRICT"), comment="承認を依頼した職員（依頼中のときだけ）"
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="承認を依頼した日時（依頼中のときだけ。承認待ちの一覧の並び）"
+    )
+
     # リレーション
     biz_master: Mapped["BizMaster"] = relationship("BizMaster", back_populates="sop_versions")
     
@@ -319,6 +335,13 @@ class SOPVersion(Base):
         CheckConstraint(
             "expired_at IS NULL OR (effective_at IS NOT NULL AND expired_at > effective_at)", name="ck_sop_version_expired_after"
         ),
+        # 承認の依頼は草稿だけ。依頼した人と日時はそろって持つ
+        CheckConstraint(
+            "(submitted_at IS NULL) = (submitted_by_id IS NULL) AND (status = 'DRAFT' OR submitted_at IS NULL)",
+            name="ck_sop_version_submitted",
+        ),
+        # 承認待ちの一覧（依頼中の草稿だけ）
+        Index("ix_sop_version_submitted", "submitted_at", postgresql_where=text("submitted_at IS NOT NULL")),
     )
 
     def state_at(self, now: datetime) -> SopState:
@@ -437,4 +460,67 @@ class BizDependency(Base):
         CheckConstraint("lookback_days IS NULL OR lookback_days BETWEEN 1 AND 366", name="ck_biz_dependency_lookback_range"),
         # 同じ組み合わせの定義は1件（循環は保存時にサービスで確かめる）
         Index("uq_biz_dependency_pair", "upstream_biz_id", "downstream_biz_id", unique=True),
+    )
+
+
+# ==========================================
+# SOP の版の記録（P.1、2026-11-11）: リリース担当が草稿を書き、業務管理者が承認する流れの履歴
+# ==========================================
+class SOPVersionEventType(str, enum.Enum):
+    CREATED = "created"      # 草稿を作った（新規 / 承認済みの版の写し: detail.cloned_from_version_id）
+    SUBMITTED = "submitted"  # 承認を依頼した
+    WITHDRAWN = "withdrawn"  # 依頼を取り下げた（草稿に戻る）
+    REJECTED = "rejected"    # 業務管理者が差し戻した（草稿に戻る。note = 理由、必須）
+    APPROVED = "approved"    # 業務管理者が承認した（detail.effective_date。note = ひとこと）
+    CANCELLED = "cancelled"  # 予定の版の承認を取り消した（草稿に戻る）
+
+
+class SOPVersionEvent(Base):
+    """
+    SOP の版の記録（追記のみ）。草稿のステップの細かな編集は記録しない（版の updated_by / updated_at に最後の人と日時）。
+    草稿を削除すると、その記録も消える（草稿は作業中の写しのため）。
+    """
+    __tablename__ = "sop_version_event"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sop_version_id: Mapped[int] = mapped_column(ForeignKey("sop_version.id", ondelete="CASCADE"), index=True)
+    event_type: Mapped[SOPVersionEventType] = mapped_column(
+        Enum(SOPVersionEventType, name="sop_version_event_type_enum"), nullable=False
+    )
+    actor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staff_user.id", ondelete="RESTRICT"), comment="操作した職員（スクリプトなど職員の無い呼び出しは NULL）"
+    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, comment="差し戻しの理由（必須）・承認のひとこと")
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+
+    __table_args__ = (
+        CheckConstraint("event_type <> 'REJECTED' OR note IS NOT NULL", name="ck_sop_version_event_reject_note"),
+    )
+
+
+# ==========================================
+# 業務のリリース設定の変更履歴（P.1、2026-11-11）: リリース担当も変えられるため、誰がいつ何を変えたかを残す
+# ==========================================
+RELEASE_FIELDS = ("release_mode", "release_time", "release_days_before")
+
+
+class BizReleaseChange(Base):
+    """
+    リリース設定（release_mode / release_time / release_days_before）を変えた記録（追記のみ）。
+    どの API で変えても、値が実際に変わったときだけ 1 行。before / after は 3 項目すべて（JSON の文字列・数値）。
+    """
+    __tablename__ = "biz_release_change"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    biz_master_id: Mapped[int] = mapped_column(ForeignKey("biz_master.id", ondelete="RESTRICT"), index=True)
+    changed_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staff_user.id", ondelete="RESTRICT"), comment="変えた職員（スクリプトなど職員の無い呼び出しは NULL）"
+    )
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    before_values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, comment="変更前のリリース設定 3 項目")
+    after_values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, comment="変更後のリリース設定 3 項目")
+
+    __table_args__ = (
+        CheckConstraint("before_values <> after_values", name="ck_biz_release_change_changed"),
     )

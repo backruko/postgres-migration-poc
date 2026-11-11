@@ -1,13 +1,62 @@
 import type { Staff } from "../../staff/types";
-import type { SopState, SopStep, SopStepCreate, SopStepUpdate, SopVersion } from "../types";
+import type { SopState, SopStep, SopStepCreate, SopStepUpdate, SopVersion, SopVersionEvent, SopVersionEventType } from "../types";
 
 /**
  * SOP の画面のルールと表示（表示用。最終的な判定はバックエンド: src/domain_biz/services.py）。
  * 版は草稿か承認済み。承認済みの「予定 / 現行 / 過去」は日付から決まる（バックエンドの state をそのまま出す）。
  */
 
-/** 版の作成・編集・承認・削除ができるか（業務管理者） */
-export const canManageSop = (s: Staff | null | undefined) => s?.status === "active" && s.roles.includes("admin");
+const isActive = (s: Staff | null | undefined): s is Staff => s?.status === "active";
+
+/** 草稿を作る・直す・削除する・承認を依頼するか（リリース担当・業務管理者。P.2） */
+export const canDraftSop = (s: Staff | null | undefined) => isActive(s) && (s.roles.includes("releaser") || s.roles.includes("admin"));
+
+/** 承認する・差し戻す・予定の承認を取り消すか（業務管理者） */
+export const canDecideSop = (s: Staff | null | undefined) => isActive(s) && s.roles.includes("admin");
+
+/** 承認を依頼中の草稿（誰も直せない。取り下げか判断を待つ） */
+export const isSubmitted = (v: Pick<SopVersion, "state" | "submitted_at">) => v.state === "draft" && !!v.submitted_at;
+
+/**
+ * 承認を依頼するボタンを出すか: 業務管理者でないリリース担当だけ（業務管理者は自分で承認する。2026-11-11 の決定）。
+ * 依頼していない草稿だけ
+ */
+export const canSubmitSop = (v: Pick<SopVersion, "state" | "submitted_at">, s: Staff | null | undefined) =>
+  canDraftSop(s) && !canDecideSop(s) && v.state === "draft" && !v.submitted_at;
+
+/** 依頼できない理由（なければ null）: ステップの無い草稿は依頼できない（承認できないため） */
+export const submitBlockedReason = (stepCount: number): string | null =>
+  stepCount === 0 ? "ステップが無い草稿は依頼できません（ステップを追加してください）" : null;
+
+/** 依頼を取り下げられるか（依頼した本人か業務管理者） */
+export const canWithdrawSop = (v: Pick<SopVersion, "state" | "submitted_at" | "submitted_by_id">, s: Staff | null | undefined) =>
+  isSubmitted(v) && canDraftSop(s) && (v.submitted_by_id === s!.id || canDecideSop(s));
+
+/** 業務管理者が承認しようとしている草稿が自分のものか（依頼した人、依頼されていなければ作った人） */
+export const isOwnDraft = (v: Pick<SopVersion, "submitted_by_id" | "created_by_id">, s: Staff | null | undefined) =>
+  !!s && (v.submitted_by_id ?? v.created_by_id) === s.id;
+
+export const SOP_EVENT_LABEL: Record<SopVersionEventType, string> = {
+  created: "作成",
+  submitted: "承認を依頼",
+  withdrawn: "依頼を取り下げ",
+  rejected: "差し戻し",
+  approved: "承認",
+  cancelled: "承認を取消",
+};
+
+export const SOP_EVENT_COLOR: Record<SopVersionEventType, string> = {
+  created: "default",
+  submitted: "gold",
+  withdrawn: "default",
+  rejected: "red",
+  approved: "green",
+  cancelled: "orange",
+};
+
+/** 承認の記録が、自分の草稿の承認か（誰の草稿か = 承認した人） */
+export const isSelfApproval = (e: Pick<SopVersionEvent, "event_type" | "actor_id" | "detail">) =>
+  e.event_type === "approved" && e.actor_id != null && e.detail?.drafted_by_id === e.actor_id;
 
 export const SOP_STATE_LABEL: Record<SopState, string> = {
   draft: "草稿",

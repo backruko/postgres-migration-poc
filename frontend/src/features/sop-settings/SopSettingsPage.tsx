@@ -1,4 +1,7 @@
-import { ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, DeleteOutlined, EditOutlined, PlusOutlined, UndoOutlined } from "@ant-design/icons";
+import {
+  ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, DeleteOutlined, EditOutlined, HistoryOutlined, PlusOutlined, RollbackOutlined,
+  SendOutlined, UndoOutlined,
+} from "@ant-design/icons";
 import { Alert, App, Button, Empty, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
@@ -7,7 +10,8 @@ import { sopApi } from "../../domain/biz/api/sopApi";
 import { useBizMasters } from "../../domain/biz/hooks/useBizMasters";
 import { bizOptions } from "../../domain/biz/lib/businesses";
 import {
-  approveBlockedReason, canManageSop, conditionText, defaultVersion, hasNumberGaps, movedStepIds, SOP_STATE_COLOR, SOP_STATE_LABEL,
+  approveBlockedReason, canDecideSop, canDraftSop, canSubmitSop, canWithdrawSop, conditionText, defaultVersion, hasNumberGaps,
+  isSubmitted, movedStepIds, SOP_STATE_COLOR, SOP_STATE_LABEL, submitBlockedReason,
 } from "../../domain/biz/lib/sop";
 import { periodText } from "../../domain/biz/lib/sopVersions";
 import type { SopStep, SopVersion } from "../../domain/biz/types";
@@ -19,14 +23,20 @@ import { inZone } from "../../shared/lib/datetime";
 import { ReturnLink } from "../../shared/ui/ReturnLink";
 import { ApproveModal } from "./ApproveModal";
 import { NewDraftModal } from "./NewDraftModal";
+import { RejectDraftModal } from "./RejectDraftModal";
 import { RenameDraftModal } from "./RenameDraftModal";
+import { SopHistoryDrawer } from "./SopHistoryDrawer";
 import { StepFormModal } from "./StepFormModal";
 
 const formatDate = (iso: string) => inZone(iso, TIMEZONE).format("YYYY/M/D");
+const formatTime = (iso: string) => inZone(iso, TIMEZONE).format("YYYY/M/D HH:mm");
+const staffName = (name: string | null | undefined, id: number | null | undefined) => name ?? (id != null ? `職員 #${id}` : null);
 
 /**
  * SOP（作業手順）の画面（業務ごと）。版の一覧（草稿も含む）と、選んだ版のステップ。
- * 見るのは誰でも。新しい版・草稿の削除は業務管理者だけ（バックエンドが判定する）。承認済みの版は変えられない。
+ * 見るのは誰でも。草稿を作る・直す・削除するのはリリース担当と業務管理者（P.4）。承認済みの版は変えられない。
+ * リリース担当は草稿の承認を依頼し（依頼中は誰も直せない。依頼した本人か業務管理者が取り下げられる）、業務管理者が
+ * 承認するか理由を付けて差し戻す。業務管理者は依頼の無い草稿もそのまま承認できる（バックエンドが判定する）。
  * 草稿は、この画面でタグ・ステップ（追加・編集・削除・並べ替え）を変えられる（M2.5）。
  * 草稿の承認は発効日と影響（どのオーダーが新しい版を使うか）を見てから。予定の版は発効日の前なら取り消せる（M2.6）。
  * 選んだ業務と版は URL の ?biz= / ?version= に保持する。
@@ -37,7 +47,8 @@ export function SopSettingsPage() {
   const bizId = Number(params.get("biz")) || null;
   const versionParam = Number(params.get("version")) || null;
   const me = useCurrentStaff();
-  const canManage = canManageSop(me.data);
+  const canDraft = canDraftSop(me.data);
+  const canDecide = canDecideSop(me.data);
 
   const bizes = useBizMasters();
   const options = useMemo(() => bizOptions(bizes.data ?? []), [bizes.data]);
@@ -54,6 +65,9 @@ export function SopSettingsPage() {
   const [stepEditor, setStepEditor] = useState<{ open: boolean; step: SopStep | null }>({ open: false, step: null });
   const [moving, setMoving] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const steps = detail.data?.id === versionId ? detail.data.steps : [];
 
@@ -121,9 +135,9 @@ export function SopSettingsPage() {
     { title: "タグ", dataIndex: "version_tag", className: "mono" },
     {
       title: "状態",
-      dataIndex: "state",
-      width: 72,
-      render: (s: SopVersion["state"]) => <Tag color={SOP_STATE_COLOR[s]}>{SOP_STATE_LABEL[s]}</Tag>,
+      key: "state",
+      width: 96,
+      render: (_, v) => (isSubmitted(v) ? <Tag color="gold">承認待ち</Tag> : <Tag color={SOP_STATE_COLOR[v.state]}>{SOP_STATE_LABEL[v.state]}</Tag>),
     },
     { title: "有効期間", key: "period", className: "mono", render: (_, v) => periodText(v, formatDate) },
   ];
@@ -147,9 +161,58 @@ export function SopSettingsPage() {
   ];
 
   const selected = rows.find((v) => v.id === versionId) ?? null;
-  const editable = canManage && selected?.state === "draft";
+  const submitted = selected !== null && isSubmitted(selected);
+  // 直せるのは、依頼していない草稿だけ（依頼中は誰も直せない）
+  const editable = canDraft && selected?.state === "draft" && !submitted;
   const currentVersion = rows.find((v) => v.state === "current") ?? null;
-  const approveBlocked = selected && editable && detail.data?.id === selected.id ? approveBlockedReason(selected, rows, steps.length) : null;
+  const stepsLoaded = selected !== null && detail.data?.id === selected.id;
+  const approveBlocked = selected && canDecide && selected.state === "draft" && stepsLoaded ? approveBlockedReason(selected, rows, steps.length) : null;
+  const submitBlocked = stepsLoaded ? submitBlockedReason(steps.length) : null;
+
+  const afterDecision = () => {
+    versions.reload();
+    detail.reload();
+  };
+
+  const confirmSubmit = (v: SopVersion) =>
+    modal.confirm({
+      title: `${v.version_tag} の承認を依頼しますか？`,
+      content: "業務管理者が承認するか差し戻すまで、この草稿は誰も直せません（取り下げると、また直せます）。",
+      okText: "承認を依頼",
+      cancelText: "キャンセル",
+      onOk: async () => {
+        setBusy(true);
+        try {
+          await sopApi.submit(v.id);
+          message.success(`${v.version_tag} の承認を依頼しました。業務管理者の判断を待ちます。`);
+        } catch (e) {
+          message.error(`依頼できませんでした: ${e instanceof ApiError ? e.message : "通信に失敗しました。"}`);
+        } finally {
+          setBusy(false);
+        }
+        afterDecision();
+      },
+    });
+
+  const confirmWithdraw = (v: SopVersion) =>
+    modal.confirm({
+      title: `${v.version_tag} の承認の依頼を取り下げますか？`,
+      content: "草稿に戻り、また直せるようになります。",
+      okText: "取り下げる",
+      cancelText: "キャンセル",
+      onOk: async () => {
+        setBusy(true);
+        try {
+          await sopApi.withdraw(v.id);
+          message.success(`${v.version_tag} の依頼を取り下げました。`);
+        } catch (e) {
+          message.error(`取り下げられませんでした: ${e instanceof ApiError ? e.message : "通信に失敗しました。"}`);
+        } finally {
+          setBusy(false);
+        }
+        afterDecision();
+      },
+    });
 
   const confirmCancelApproval = (v: SopVersion) =>
     modal.confirm({
@@ -232,9 +295,9 @@ export function SopSettingsPage() {
             <section>
               <div className="table-head">
                 <Typography.Text type="secondary">
-                  版 {rows.length} 件{!canManage && " ・ 変更は業務管理者だけができます"}
+                  版 {rows.length} 件{!canDraft && " ・ 変更はリリース担当・業務管理者ができます"}
                 </Typography.Text>
-                {canManage && (
+                {canDraft && (
                   <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setNewDraftOpen(true)} disabled={!versions.data}>
                     新しい版
                   </Button>
@@ -255,46 +318,92 @@ export function SopSettingsPage() {
 
             <section>
               {selected === null ? (
-                <Empty description={rows.length ? "版を選んでください" : canManage ? "「新しい版」で最初の草稿を作ってください" : "まだ版がありません"} />
+                <Empty description={rows.length ? "版を選んでください" : canDraft ? "「新しい版」で最初の草稿を作ってください" : "まだ版がありません"} />
               ) : (
                 <>
                   <div className="table-head">
                     <Space size={8} wrap>
                       <Typography.Title level={4} style={{ margin: 0 }} className="mono">{selected.version_tag}</Typography.Title>
                       <Tag color={SOP_STATE_COLOR[selected.state]}>{SOP_STATE_LABEL[selected.state]}</Tag>
+                      {submitted && <Tag color="gold">承認待ち</Tag>}
                       <span className="muted mono">{periodText(selected, formatDate)}</span>
                     </Space>
-                    {editable && (
-                      <Space size={8} wrap>
-                        <Button size="small" onClick={() => setRenameOpen(true)}>タグを変更</Button>
-                        <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setStepEditor({ open: true, step: null })}>
-                          ステップを追加
+                    <Space size={8} wrap>
+                      {editable && (
+                        <>
+                          <Button size="small" onClick={() => setRenameOpen(true)}>タグを変更</Button>
+                          <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setStepEditor({ open: true, step: null })}>
+                            ステップを追加
+                          </Button>
+                          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteDraft(selected)}>
+                            草稿を削除
+                          </Button>
+                        </>
+                      )}
+                      {editable && canSubmitSop(selected, me.data) && (
+                        <Button
+                          size="small"
+                          type="primary"
+                          icon={<SendOutlined />}
+                          loading={busy}
+                          disabled={submitBlocked !== null || !stepsLoaded}
+                          title={submitBlocked ?? undefined}
+                          onClick={() => confirmSubmit(selected)}
+                        >
+                          承認を依頼
                         </Button>
-                        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteDraft(selected)}>
-                          草稿を削除
+                      )}
+                      {submitted && canWithdrawSop(selected, me.data) && (
+                        <Button size="small" icon={<RollbackOutlined />} loading={busy} onClick={() => confirmWithdraw(selected)}>
+                          取り下げる
                         </Button>
+                      )}
+                      {submitted && canDecide && (
+                        <Button size="small" danger onClick={() => setRejectOpen(true)}>差し戻す…</Button>
+                      )}
+                      {canDecide && selected.state === "draft" && (
                         <Button
                           size="small"
                           type="primary"
                           icon={<CheckOutlined />}
-                          disabled={approveBlocked !== null || detail.data?.id !== selected.id}
+                          disabled={approveBlocked !== null || !stepsLoaded}
                           title={approveBlocked ?? undefined}
                           onClick={() => setApproveOpen(true)}
                         >
                           承認…
                         </Button>
-                      </Space>
-                    )}
-                    {canManage && selected.state === "scheduled" && (
-                      <Button size="small" danger icon={<UndoOutlined />} onClick={() => confirmCancelApproval(selected)}>
-                        予定を取り消す
-                      </Button>
-                    )}
+                      )}
+                      {canDecide && selected.state === "scheduled" && (
+                        <Button size="small" danger icon={<UndoOutlined />} onClick={() => confirmCancelApproval(selected)}>
+                          予定を取り消す
+                        </Button>
+                      )}
+                      <Button size="small" icon={<HistoryOutlined />} onClick={() => setHistoryOpen(true)}>履歴</Button>
+                    </Space>
                   </div>
+                  <Typography.Paragraph type="secondary" className="sop-authors">
+                    {[
+                      staffName(selected.created_by_name, selected.created_by_id) && `作成 ${staffName(selected.created_by_name, selected.created_by_id)}`,
+                      selected.updated_at && `最終編集 ${staffName(selected.updated_by_name, selected.updated_by_id) ?? "—"} ${formatTime(selected.updated_at)}`,
+                    ].filter(Boolean).join(" ・ ") || "作成・編集の記録はありません（2026-11-11 より前の版）"}
+                  </Typography.Paragraph>
+                  {submitted && (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message={`${staffName(selected.submitted_by_name, selected.submitted_by_id)} が ${formatTime(selected.submitted_at!)} に承認を依頼しました。`}
+                      description={
+                        canDecide
+                          ? "内容を確かめて、承認するか、理由を付けて差し戻してください。依頼中は誰も直せません。"
+                          : "業務管理者が承認するか差し戻すまで、誰も直せません。直すときは取り下げてください（依頼した本人か業務管理者）。"
+                      }
+                    />
+                  )}
                   {selected.state !== "draft" && (
                     <Typography.Paragraph type="secondary">承認済みの版は変えられません。変えるときは「新しい版」で草稿を作ります。</Typography.Paragraph>
                   )}
-                  {editable && approveBlocked && <Typography.Paragraph type="secondary">承認できません: {approveBlocked}</Typography.Paragraph>}
+                  {approveBlocked && <Typography.Paragraph type="secondary">承認できません: {approveBlocked}</Typography.Paragraph>}
                   {editable && hasNumberGaps(steps) && (
                     <Alert
                       type="info"
@@ -318,7 +427,7 @@ export function SopSettingsPage() {
               )}
             </section>
           </div>
-          {canManage && versionId !== null && (
+          {canDraft && versionId !== null && (
             <>
               <StepFormModal
                 open={stepEditor.open}
@@ -326,17 +435,6 @@ export function SopSettingsPage() {
                 step={stepEditor.step}
                 onClose={() => setStepEditor((x) => ({ ...x, open: false }))}
                 onSaved={detail.reload}
-              />
-              <ApproveModal
-                open={approveOpen}
-                bizId={bizId}
-                draft={selected}
-                current={currentVersion}
-                onClose={() => setApproveOpen(false)}
-                onApproved={() => {
-                  versions.reload();
-                  detail.reload();
-                }}
               />
               <RenameDraftModal
                 open={renameOpen}
@@ -347,7 +445,22 @@ export function SopSettingsPage() {
               />
             </>
           )}
-          {canManage && (
+          {canDecide && versionId !== null && (
+            <>
+              <ApproveModal
+                open={approveOpen}
+                bizId={bizId}
+                draft={selected}
+                current={currentVersion}
+                me={me.data}
+                onClose={() => setApproveOpen(false)}
+                onApproved={afterDecision}
+              />
+              <RejectDraftModal open={rejectOpen} draft={selected} onClose={() => setRejectOpen(false)} onRejected={afterDecision} />
+            </>
+          )}
+          <SopHistoryDrawer open={historyOpen} version={selected} onClose={() => setHistoryOpen(false)} />
+          {canDraft && (
             <NewDraftModal
               open={newDraftOpen}
               bizId={bizId}

@@ -2,13 +2,98 @@
 
 Handoff for the next working session. Read this first, then the design doc (§2), `deploy/README.md` (server runbook),
 `frontend/README.md` (frontend details), `src/domain_plan/`, `src/coordination/`, `src/domain_ope/`, `src/domain_biz/`,
-`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (late)** — **batch order creation
-is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the user pushes); Level 2 is merged into `main`
-(`5e1af2f`). See the first block of §1. The MVP pilot is postponed.
+`src/domain_client/` and `src/domain_staff/` (backend). Last updated: **2026-11-11 (late)** — **finer permissions
+(releasers draft SOPs + change release settings) is built on `feature/finer-permissions` (P.1–P.6 committed), not
+merged, not pushed; it has migration `3ff92f646c92`** (the user runs `alembic upgrade head` on the dev DB). Batch order
+creation (`c8bdec6`) and Level 2 (`5e1af2f`) are merged into `main`, not pushed (`origin/main` = `6390c87`; the user
+pushes). See the first block of §1. The MVP pilot is postponed.
 
 ## 1. Current status
 
-### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — start here
+### Finer permissions (branch `feature/finer-permissions` from `main` `e07649b`, 2026-11-11) — start here
+
+- **Status: P.1–P.6 committed on `feature/finer-permissions`, not merged, not pushed** (`5de2110` P.1 · `d29aaa9` P.2 ·
+  `22b8124` P.3 · `c3bcb8f` P.4 · `e84e82d` P.5 · + the P.6 docs commit). **Migration `3ff92f646c92`**: the user runs
+  `alembic upgrade head` on the dev DB before trying it (the server's `app` container migrates at start). Next: the
+  user browser-tests (releaser: SOP 新しい版 → 承認を依頼 → 取り下げる; admin: 承認待ち → SOP の草稿 → 開く → 差し戻す… /
+  承認…, badge; releaser: 予定テンプレート設定 → リリースを編集 → 履歴) and merges ("commit and merge" like before).
+  Then the next phase is open (the pilot: rebuild the USB zip first — tree clean).
+
+- **User chose it 2026-11-11** after batch orders. Design doc item "Finer permissions for settings" (rev 125, no new
+  comments). **Decisions (all my recommendations):** releasers do **all SOP draft edits, shared** (create / clone /
+  rename / delete / steps on any draft; approve + cancel stay admin); a **submit-for-approval** state (submit /
+  withdraw; admin approves with the effective date or sends back with a required reason; submitted drafts are
+  read-only; shown on 承認待ち + the admin badge); **release settings: releasers change them directly** through their
+  own endpoint (3 fields) with a **change history** written by every endpoint; **existing releaser role**, no new
+  role. Defaults I stated in the plan (user said go): admins approve any draft directly (submitted or not, own
+  included; self-approval marked); withdraw by the submitter or an admin; a release change applies at once (no
+  preview).
+- **Steps:** P.1 data model · P.2 SOP backend · P.3 release endpoint + history + reads (OpenAPI, gen:api) · P.4
+  frontend SOP · P.5 frontend release settings · P.6 harness + jsdom + manual + GO-LIVE + design doc + MEMORY.
+- **P.1 committed:** migration **`3ff92f646c92`** (after `e7f9acb3d34a`; **the user must run `alembic upgrade head`
+  on the dev DB**; `plan_check` is at it): `sop_version` + `created_by_id` / `updated_by_id` / `updated_at` /
+  `submitted_by_id` / `submitted_at` (CHECK `ck_sop_version_submitted`: both or neither, drafts only; partial index
+  `ix_sop_version_submitted`); `sop_version_event` (CREATED / SUBMITTED / WITHDRAWN / REJECTED (note required) /
+  APPROVED / CANCELLED; actor nullable; CASCADE with the draft; step edits not logged); `biz_release_change` (before /
+  after JSON of the 3 fields, CHECK changed). Autogenerate missed the CHECK on the existing table and the FK names —
+  added by hand (+ enum drop on downgrade). Repos `sop_version_event_repo` (add, list_for_version, list_submitted /
+  count_submitted — deleted businesses skipped by the soft-delete filter), `biz_release_change_repo`; `RELEASE_FIELDS`
+  in `domain_biz/models.py`. Tests `tests/test_sop_drafting_model.py` (5). Suite 297, pyright 0.
+- **P.2 committed:** `SOP_DRAFTERS = [RELEASER, ADMIN]` on create / clone / rename / delete draft, step add / edit /
+  reorder / delete, new `POST /biz/versions/{id}/submit` + `/withdraw`; admin only: approve (+ optional `note` in
+  `SOPVersionScheduleIn`), cancel, new `POST /biz/versions/{id}/reject` (`SOPVersionReject.reason`). Services take
+  `actor_id` (default None for scripts / old tests): `_authored` / `_touch` set created_by / updated_by / updated_at;
+  events CREATED (clone: `detail.cloned_from_version_id` / `cloned_from_tag`), SUBMITTED, WITHDRAWN, REJECTED (note),
+  APPROVED (`detail.effective_date`, `drafted_by_id` = submitter else creator → self-approval derivable), CANCELLED.
+  `_get_draft(..., allow_submitted=False)` refuses submitted drafts **409 `SOP_DRAFT_SUBMITTED`** (rename now locks
+  too); `_get_submitted` → **409 `SOP_DRAFT_NOT_SUBMITTED`**; submit needs ≥ 1 step (400); withdraw = submitter or
+  admin (router passes `is_admin` from `role_codes`), else 403; approve works submitted or not and clears it.
+  `SOPVersionResponse` + the 5 id / time fields (names in P.3). Tests `tests/test_sop_drafting.py` (7) +
+  `test_plan_settings_guard.py` RELEASER_OR_ADMIN list + the 10 drafting routes. Suite 304, pyright 0.
+- **P.3 committed:** `PATCH /biz/{id}/release` (releaser + admin; `BizReleaseUpdate` extra=forbid, ≥ 1 field, no
+  nulls; row lock `_get_biz_locked`; applies at once); `update_biz(..., actor_id)` (admin PATCH) also records;
+  `_record_release_change` writes a row only when a value really changes (before / after = enum value, `HH:MM:SS`,
+  int). Reads: `GET /biz/{id}/release-changes` (newest first + `changed_by_name`), `GET /biz/versions/{id}/events`
+  (oldest first + `actor_name`, approved: `drafted_by_name`), `GET /biz/sop-drafts/submitted?client_code=` +
+  `/count` (`SubmittedSOPDraftResponse`: business code / name, client, step_count, submitter + creator names). Every
+  version-returning endpoint goes through `describe_version(s)` → `created_by_name` / `updated_by_name` /
+  `submitted_by_name` (names via `staff_names()` batch lookup, **not ORM relationships to StaffUser** — scripts that
+  never import the staff models would break mapper config). OpenAPI + `gen:api`; build passes. Tests
+  `tests/test_biz_release_and_reads.py` (4) + guard list + release route. HTTP harness scratchpad `p3_harness.py`
+  on `plan_check` 8001 **20/20** (cleans up its draft, restores biz 2 release; 2 history rows stay). Suite 308.
+- **P.4 UI decisions (user, all my recommendations):** admins decide on the **SOP page** (承認待ち gets an SOP section
+  linking there); releasers get the **same editor + 承認を依頼**, admins no submit button (approve directly); **one
+  combined badge** (template + SOP); **履歴 button → drawer** + an author line.
+- **P.4 committed (frontend only):** `sopApi` submit / withdraw / reject / events / listSubmitted / countSubmitted,
+  approve(note); SOP decisions call `notifyTemplateChangesChanged` (same signal as template drafts → badge + lists
+  reload). `lib/sop.ts`: `canDraftSop` (releaser / admin), `canDecideSop` (admin), `isSubmitted`, `canSubmitSop`
+  (releaser who is not admin), `submitBlockedReason`, `canWithdrawSop`, `isOwnDraft`, `isSelfApproval`, event labels
+  (replaces `canManageSop`). `hooks/useSopApprovals.ts`. `SopSettingsPage`: 承認待ち tag (list + title), editor hidden
+  while submitted, warning alert (who / when), 承認を依頼 (confirm) / 取り下げる / 差し戻す… / 承認…, author line
+  `.sop-authors`, 履歴 → `SopHistoryDrawer` (Timeline, newest first). `ApproveModal` + comment + submitter line +
+  self-approval warning (`me` prop); new `RejectDraftModal` (reason required). `ApprovalsPage` second table SOP の草稿
+  (link `/settings/sop?biz=&version=`), client filter over both. `AppLayout` badge = template + SOP count. CSS
+  `.sop-authors`, `.section-title`, `.history-entry`. Build passes. **jsdom kit re-installed** in this session's
+  scratchpad `domtest/` (jsdom 24.1.3, @testing-library/react 14.3.1, dom 9.3.4; `dom_setup.ts` = jsdom globals +
+  cookie-keeping fetch + `api` / `login` / `check`; esbuild alias `@app` → `frontend/src`, react / react-dom / antd /
+  react-router-dom → frontend node_modules, `--external:jsdom`, `NODE_PATH=domtest/node_modules`). **antd dialogs are
+  found by class (`.ant-modal-confirm`, `.ant-modal-content`, `.ant-drawer-content`), not by role**; wait for a
+  button to be enabled before clicking. `sop_dom.tsx` **17/17** twice. Not checked: the user's browser.
+- **P.5 committed (frontend only):** `BizSettingsPanel` gets `canEditRelease`: admin = full 編集 (unchanged, server
+  records release changes); releaser = **リリースを編集** (release fields only, immediate-effect note,
+  `bizApi.updateRelease`); everyone = **履歴** → new `ReleaseHistoryDrawer` (time / who / before → after, reloads after
+  a save). `lib/settings.ts`: `canEditReleaseSettings`, `releaseText` (shared by panel + history). jsdom
+  `release_dom.tsx` on biz 2 **9/9** twice (operator view-only, releaser form + save + panel + history, admin full
+  form, restore recorded). biz 2 restored to manual / 03:00 / 0; its history rows stay on `plan_check`.
+- **P.6 (docs + checks):** `docs/OPERATION-MANUAL.md` — 1.4 roles (releaser: SOP drafts + submit, release settings;
+  admin: decides SOP drafts), 1.5 badge = template + SOP, 3.4 リリースを編集 + 履歴 + API (`PATCH /biz/{id}/release`,
+  `GET .../release-changes`), 3.5 roles, author line, ひとこと, the submit / withdraw / send-back flow, 履歴, rules, API
+  rows, 4.3 `SOP_DRAFT_SUBMITTED` / `SOP_DRAFT_NOT_SUBMITTED`, 5 QA rows 20–22, 6 limits (SOP approval / history,
+  release settings changed directly with history, no preview). Every quoted screen label grepped in the frontend.
+  `deploy/GO-LIVE.md` role table + 2 checklist lines. **Design doc rev 127** (finer-permissions item: the remaining
+  part built, not yet merged, with the decisions). Final: suite **308 passed**, pyright 0, `npm run build` passes.
+
+### Batch order creation (branch `feature/batch-orders` from `main` `2038e4b`, 2026-11-11) — merged
 
 - **Status: merged into `main` as `c8bdec6` ("commit and merge", user, 2026-11-11), not pushed** (`0ef890c` B.1 ·
   `cee8ee2` B.2 · `471f683` B.3 · `1cee5c5` B.4 · `6ffa574` B.5 + this handoff commit). Next phase is open (finer permissions for SOP drafts + release
@@ -81,7 +166,9 @@ is merged into `main` (`c8bdec6`), not pushed** (`origin/main` = `6390c87`; the 
   limits); `deploy/GO-LIVE.md` D role table + checklist line "an admin to approve drafts". Every screen label quoted
   in the manual was grepped in the frontend. Design doc **rev 125** (Level 2 marked built and merged; finer-permissions item
   updated: template part done, SOP drafting + release settings still open).
-- **Open / offered, not decided:** (1) ~~batching order creation~~ — **merged (`c8bdec6`)** (block above); (2) finer permissions for SOP drafts and release settings (doc item);
+- **Open / offered, not decided:** (1) ~~batching order creation~~ — **merged (`c8bdec6`)**; (2) ~~finer permissions
+  for SOP drafts and release settings~~ — **built on `feature/finer-permissions`** (first block of §1); (4) moved
+  orders with a LATEST_BEFORE dependency still refresh links per order (told the user, not asked for);
   (3) biz delete doesn't lock the biz row (narrow race with a new-template draft, same as the existing template
   check — the user said leave it).
 - **`README.md` is the user's** (Japanese project description; the user committed it as `2038e4b`) — never include

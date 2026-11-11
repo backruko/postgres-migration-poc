@@ -1,5 +1,5 @@
 import { http, unwrap } from "../../../shared/api/http";
-import type { BizMaster, BizMasterCreate, BizMasterUpdate, SopVersion } from "../types";
+import type { BizMaster, BizMasterCreate, BizMasterUpdate, BizReleaseChange, BizReleaseUpdate, SopVersion } from "../types";
 
 /**
  * 選択肢として一度に取得する業務の上限。
@@ -41,6 +41,19 @@ export const bizApi = {
   /** 業務の設定の変更（送った項目だけ変わる）（PATCH /biz/{id}） */
   update(bizId: number, body: BizMasterUpdate): Promise<BizMaster> {
     return unwrap(http.PATCH("/biz/{biz_id}", { params: { path: { biz_id: bizId } }, body }));
+  },
+
+  /**
+   * リリース設定（方法・時刻・何日前）だけの変更（リリース担当・業務管理者。送った項目だけ変わり、すぐに効く）
+   * （PATCH /biz/{id}/release）。ほかの項目は送れない
+   */
+  updateRelease(bizId: number, body: BizReleaseUpdate): Promise<BizMaster> {
+    return unwrap(http.PATCH("/biz/{biz_id}/release", { params: { path: { biz_id: bizId } }, body }));
+  },
+
+  /** リリース設定の変更履歴（新しい順。どの画面で変えたものも）（GET /biz/{id}/release-changes） */
+  releaseChanges(bizId: number, signal?: AbortSignal): Promise<BizReleaseChange[]> {
+    return unwrap(http.GET("/biz/{biz_id}/release-changes", { params: { path: { biz_id: bizId } }, signal }));
   },
 
   /** 承認済み（草稿以外）の SOP バージョン、新しい順。オーダーに指定できる選択肢（GET /biz/{id}/versions） */

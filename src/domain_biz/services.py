@@ -4,15 +4,21 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, select, and_, or_
 from sqlalchemy.exc import IntegrityError
 
-from src.infrastructure.repositories import biz_dependency_repo, biz_master_repo, client_repo, sop_version_repo, sop_step_repo
+from src.infrastructure.repositories import (
+    biz_dependency_repo, biz_master_repo, biz_release_change_repo, client_repo, sop_version_event_repo, sop_version_repo,
+    sop_step_repo,
+)
 from src.domain_biz.models import (
-    BizDependency, BizMaster, CompletionMode, ExecutionType, SOPVersion, SOPStepTemplate, SOPStatus, SopState,
+    RELEASE_FIELDS, BizDependency, BizMaster, CompletionMode, ExecutionType, SOPVersion, SOPVersionEventType,
+    SOPStepTemplate, SOPStatus, SopState,
 )
 from src.domain_biz.schemas import (
-    BizDependencyCreate, BizDependencyResponse, BizMasterCreate, BizMasterUpdate, BizRef, SOPVersionCreate,
-    SOPStepOrderIn, SOPStepTemplateCreate, SOPStepTemplateUpdate, SOPVersionUpdate,
+    BizDependencyCreate, BizDependencyResponse, BizMasterCreate, BizMasterUpdate, BizRef, BizReleaseChangeResponse,
+    BizReleaseUpdate, BizReleaseValues, SOPVersionCreate, SOPVersionEventResponse, SOPVersionResponse,
+    SOPStepOrderIn, SOPStepTemplateCreate, SOPStepTemplateUpdate, SOPVersionUpdate, SubmittedSOPDraftResponse,
 )
-from src.core.exceptions import BadRequestError, NotFoundError, DuplicatedRecordError
+from src.core.error_codes import ErrorCode
+from src.core.exceptions import BadRequestError, DuplicatedRecordError, ForbiddenError, NotFoundError
 from src.domain_biz import delete_checks, dependency_events, version_checks
 from src.domain_client.services import require_active_client
 
@@ -83,16 +89,87 @@ def _check_client_event_settings(db: Session, biz: BizMaster, biz_in: BizMasterU
             raise DuplicatedRecordError(f"Signal type '{signal}' is already used by {other.business_code} of client {biz.client_code}.")
 
 
-def update_biz(db: Session, biz_id: int, biz_in: BizMasterUpdate) -> BizMaster:
-    db_obj = biz_master_repo.get(db, id=biz_id)
-    if not db_obj:
-        raise NotFoundError(f"BizMaster(id={biz_id}) not found for update.")
+def update_biz(db: Session, biz_id: int, biz_in: BizMasterUpdate, actor_id: int | None = None) -> BizMaster:
+    """業務の設定を変えます（業務管理者）。リリース設定が変わったら、その履歴も同じトランザクションで残す"""
+    db_obj = _get_biz_locked(db, biz_id)
     _check_client_event_settings(db, db_obj, biz_in)
+    sent = biz_in.model_dump(exclude_unset=True)
+    _record_release_change(db, db_obj, {f: sent[f] for f in RELEASE_FIELDS if f in sent}, actor_id)
 
     try:
         return biz_master_repo.update(db, db_obj=db_obj, obj_in=biz_in)
     except IntegrityError:
         raise DuplicatedRecordError(f"Update failed: Unique constraint violation.")
+
+
+# ==========================================
+# リリース設定（細かな権限、P.3、2026-11-11）: リリース担当も変えられる。どの API で変えても履歴を残す
+# ==========================================
+def _get_biz_locked(db: Session, biz_id: int) -> BizMaster:
+    """業務を行ロック付きで（変更前の値を確かに読むため。同時の変更は順に）"""
+    biz = db.scalars(select(BizMaster).where(BizMaster.id == biz_id).with_for_update()).first()
+    if not biz:
+        raise NotFoundError(f"BizMaster(id={biz_id}) not found for update.")
+    return biz
+
+
+def _release_values(mode, release_time, days_before) -> dict:
+    """リリース設定の 3 項目を JSON にできる形で（履歴の before / after）"""
+    return {
+        "release_mode": mode.value if hasattr(mode, "value") else str(mode),
+        "release_time": release_time.isoformat(),
+        "release_days_before": int(days_before),
+    }
+
+
+def _record_release_change(db: Session, biz: BizMaster, changes: dict, actor_id: int | None) -> None:
+    """リリース設定の変更（送られた値）が今の値と違えば、履歴を 1 行足す（書き出しは呼び出し側のコミットで）"""
+    if not changes:
+        return
+    current = {f: getattr(biz, f) for f in RELEASE_FIELDS}
+    before = _release_values(*(current[f] for f in RELEASE_FIELDS))
+    after = _release_values(*(changes.get(f, current[f]) for f in RELEASE_FIELDS))
+    if before != after:
+        biz_release_change_repo.add(db, biz_id=biz.id, changed_by_id=actor_id, before=before, after=after)
+
+
+def update_release(db: Session, biz_id: int, release_in: BizReleaseUpdate, actor_id: int | None) -> BizMaster:
+    """業務のリリース設定（モード・時刻・何日前）だけを変えます（リリース担当・業務管理者）。すぐに効く"""
+    biz = _get_biz_locked(db, biz_id)
+    changes = release_in.model_dump(exclude_unset=True)
+    _record_release_change(db, biz, changes, actor_id)
+    for field, value in changes.items():
+        setattr(biz, field, value)
+    db.commit()
+    db.refresh(biz)
+    return biz
+
+
+def list_release_changes(db: Session, biz_id: int) -> list[BizReleaseChangeResponse]:
+    """業務のリリース設定の変更履歴（新しい順。削除された業務は 404）"""
+    get_biz(db, biz_id)
+    rows = biz_release_change_repo.list_for_biz(db, biz_id=biz_id)
+    names = staff_names(db, {r.changed_by_id for r in rows})
+    return [
+        BizReleaseChangeResponse(
+            id=r.id, biz_master_id=r.biz_master_id, changed_by_id=r.changed_by_id, changed_by_name=names.get(r.changed_by_id),
+            changed_at=r.changed_at, before=BizReleaseValues.model_validate(r.before_values),
+            after=BizReleaseValues.model_validate(r.after_values),
+        )
+        for r in rows
+    ]
+
+
+# ==========================================
+# 職員の名前（記録・一覧に付ける。まとめて 1 回で読む）
+# ==========================================
+def staff_names(db: Session, ids: set[int | None]) -> dict[int | None, str]:
+    from src.domain_staff.models import StaffUser  # biz → staff は名前を読むだけ（モデルの循環を避ける）
+
+    wanted = {i for i in ids if i is not None}
+    if not wanted:
+        return {}
+    return {row.id: row.name for row in db.execute(select(StaffUser.id, StaffUser.name).where(StaffUser.id.in_(wanted)))}
 
 def delete_biz(db: Session, biz_id: int) -> BizMaster:
     """
@@ -138,7 +215,7 @@ def restore_biz(db: Session, biz_id: int) -> BizMaster:
 # ==========================================
 # SOPVersion Service
 # ==========================================
-def create_new_sop_version(db: Session, biz_id: int, version_in: SOPVersionCreate) -> SOPVersion:
+def create_new_sop_version(db: Session, biz_id: int, version_in: SOPVersionCreate, actor_id: int | None = None) -> SOPVersion:
     """
     【新規立ち上げ用】業務(BizMaster)に対して、完全に新しい最初の草稿(DRAFT)を作成します。
     コピー元がない、一番最初のまっさらな手順書を作るときに使用します。
@@ -161,15 +238,18 @@ def create_new_sop_version(db: Session, biz_id: int, version_in: SOPVersionCreat
             version_tag=version_in.version_tag,  # ユーザーが指定した「v1.0.0」など
             status=SOPStatus.DRAFT,              # 最初は下書きからスタート
             effective_at=None,
-            expired_at=None
+            expired_at=None,
+            **_authored(actor_id),
         )
         db.add(new_draft)
-        db.commit()
-        db.refresh(new_draft)
-        return new_draft
+        db.flush()
     except IntegrityError:
         db.rollback()
         raise DuplicatedRecordError(f"Version tag '{version_in.version_tag}' already exists for this business.")
+    sop_version_event_repo.add(db, version=new_draft, event_type=SOPVersionEventType.CREATED, actor_id=actor_id)
+    db.commit()
+    db.refresh(new_draft)
+    return new_draft
 
 
 # ==========================================
@@ -223,6 +303,17 @@ def get_current_active_version(db: Session, biz_id: int) -> SOPVersion:
 # ==========================================
 # 1. 新しい版: 最新の承認済みの版（予定があればそれ、なければ現行）を写した草稿。承認済みが無ければ空（M2.2）
 # ==========================================
+def _authored(actor_id: int | None) -> dict:
+    """新しい草稿の作った人・最後に直した人と日時"""
+    return {"created_by_id": actor_id, "updated_by_id": actor_id, "updated_at": datetime.now(timezone.utc)}
+
+
+def _touch(draft: SOPVersion, actor_id: int | None) -> None:
+    """草稿を直した人と日時（タグ・ステップの変更のたび）"""
+    draft.updated_by_id = actor_id
+    draft.updated_at = datetime.now(timezone.utc)
+
+
 def _next_version_number(db: Session, biz_id: int) -> int:
     max_num = db.scalar(select(func.max(SOPVersion.version_number)).where(SOPVersion.biz_master_id == biz_id))
     return (max_num or 0) + 1
@@ -238,16 +329,16 @@ def _newest_approved(db: Session, biz_id: int) -> SOPVersion | None:
     ).first()
 
 
-def clone_active_to_draft(db: Session, biz_id: int, version_in: SOPVersionCreate) -> SOPVersion:
+def clone_active_to_draft(db: Session, biz_id: int, version_in: SOPVersionCreate, actor_id: int | None = None) -> SOPVersion:
     """
-    新しい草稿を作ります（業務管理者）。最新の承認済みの版のステップ（条件・承認で次へも）を写す。
+    新しい草稿を作ります（リリース担当・業務管理者）。最新の承認済みの版のステップ（条件・承認で次へも）を写す。
     承認済みの版がまだ無い業務（最初の SOP）は、空の草稿になる。草稿は複数並べて作れる。
     """
     get_biz(db, biz_id)
     source = _newest_approved(db, biz_id)
     draft = SOPVersion(
         biz_master_id=biz_id, version_number=_next_version_number(db, biz_id), version_tag=version_in.version_tag,
-        status=SOPStatus.DRAFT, effective_at=None, expired_at=None,
+        status=SOPStatus.DRAFT, effective_at=None, expired_at=None, **_authored(actor_id),
     )
     db.add(draft)
     try:
@@ -261,6 +352,10 @@ def clone_active_to_draft(db: Session, biz_id: int, version_in: SOPVersionCreate
                 sop_version_id=draft.id, step_num=step.step_num, title=step.title, content=step.content,
                 condition=step.condition, is_blocking=step.is_blocking,
             ))
+    sop_version_event_repo.add(
+        db, version=draft, event_type=SOPVersionEventType.CREATED, actor_id=actor_id,
+        detail={"cloned_from_version_id": source.id, "cloned_from_tag": source.version_tag} if source is not None else None,
+    )
     db.commit()
     db.refresh(draft)
     return draft
@@ -286,13 +381,22 @@ def get_version(db: Session, version_id: int) -> SOPVersion:
     return version
 
 
-def _get_draft(db: Session, version_id: int, *, lock: bool = False) -> SOPVersion:
+def _get_draft(db: Session, version_id: int, *, lock: bool = False, allow_submitted: bool = False) -> SOPVersion:
+    """
+    草稿（承認済みの版は 400）。承認を依頼中の草稿は、allow_submitted でなければ直せない（409 SOP_DRAFT_SUBMITTED:
+    依頼した内容のまま判断されるよう。取り下げか差し戻しで草稿に戻る）
+    """
     stmt = select(SOPVersion).where(SOPVersion.id == version_id)
     version = db.scalars(stmt.with_for_update() if lock else stmt).first()
     if not version:
         raise NotFoundError(f"SOPVersion(id={version_id}) not found.")
     if version.status != SOPStatus.DRAFT:
         raise BadRequestError(f"{version.version_tag} is approved and can no longer be changed; edit a new draft instead.")
+    if version.submitted_at is not None and not allow_submitted:
+        raise DuplicatedRecordError(
+            f"{version.version_tag} is waiting for approval and cannot be changed; withdraw it first.",
+            error_code=ErrorCode.SOP_DRAFT_SUBMITTED,
+        )
     return version
 
 
@@ -302,9 +406,10 @@ def _steps_of(db: Session, version_id: int) -> list[SOPStepTemplate]:
     ).all())
 
 
-def rename_draft(db: Session, version_id: int, version_in: SOPVersionUpdate) -> SOPVersion:
-    draft = _get_draft(db, version_id)
+def rename_draft(db: Session, version_id: int, version_in: SOPVersionUpdate, actor_id: int | None = None) -> SOPVersion:
+    draft = _get_draft(db, version_id, lock=True)
     draft.version_tag = version_in.version_tag
+    _touch(draft, actor_id)
     try:
         db.commit()
     except IntegrityError:
@@ -322,7 +427,7 @@ def delete_draft(db: Session, version_id: int) -> SOPVersion:
     return draft
 
 
-def create_step_template(db: Session, version_id: int, step_in: SOPStepTemplateCreate) -> SOPStepTemplate:
+def create_step_template(db: Session, version_id: int, step_in: SOPStepTemplateCreate, actor_id: int | None = None) -> SOPStepTemplate:
     """草稿にステップを追加します。番号を省くと最後（最大 + 1）"""
     draft = _get_draft(db, version_id, lock=True)  # 同時の追加で同じ番号にならないよう版をロック
     steps = _steps_of(db, draft.id)
@@ -334,39 +439,41 @@ def create_step_template(db: Session, version_id: int, step_in: SOPStepTemplateC
         condition=step_in.condition.model_dump(), is_blocking=step_in.is_blocking,
     )
     db.add(step)
+    _touch(draft, actor_id)
     db.commit()
     db.refresh(step)
     return step
 
 
-def _get_draft_step(db: Session, step_id: int) -> SOPStepTemplate:
+def _get_draft_step(db: Session, step_id: int) -> tuple[SOPStepTemplate, SOPVersion]:
     step = db.get(SOPStepTemplate, step_id)
     if step is None:
         raise NotFoundError(f"SOPStepTemplate(id={step_id}) not found.")
-    _get_draft(db, step.sop_version_id, lock=True)
-    return step
+    return step, _get_draft(db, step.sop_version_id, lock=True)
 
 
-def update_step_template(db: Session, step_id: int, step_in: SOPStepTemplateUpdate) -> SOPStepTemplate:
+def update_step_template(db: Session, step_id: int, step_in: SOPStepTemplateUpdate, actor_id: int | None = None) -> SOPStepTemplate:
     """草稿のステップの変更（送った項目だけ）"""
-    step = _get_draft_step(db, step_id)
+    step, draft = _get_draft_step(db, step_id)
     data = step_in.model_dump(exclude_unset=True)
     for field, value in data.items():
         setattr(step, field, value)
+    _touch(draft, actor_id)
     db.commit()
     db.refresh(step)
     return step
 
 
-def delete_step_template(db: Session, step_id: int) -> SOPStepTemplate:
+def delete_step_template(db: Session, step_id: int, actor_id: int | None = None) -> SOPStepTemplate:
     """草稿のステップの削除（残りの番号はそのまま。詰めるときは並べ替え）"""
-    step = _get_draft_step(db, step_id)
+    step, draft = _get_draft_step(db, step_id)
     db.delete(step)
+    _touch(draft, actor_id)
     db.commit()
     return step
 
 
-def reorder_steps(db: Session, version_id: int, order_in: SOPStepOrderIn) -> list[SOPStepTemplate]:
+def reorder_steps(db: Session, version_id: int, order_in: SOPStepOrderIn, actor_id: int | None = None) -> list[SOPStepTemplate]:
     """草稿のステップを、渡された id の順に 1 から振り直します（すべてのステップの id がちょうど 1 回ずつ必要）"""
     draft = _get_draft(db, version_id, lock=True)
     steps = {s.id: s for s in _steps_of(db, draft.id)}
@@ -379,8 +486,64 @@ def reorder_steps(db: Session, version_id: int, order_in: SOPStepOrderIn) -> lis
     db.flush()
     for n, step_id in enumerate(order_in.step_ids, start=1):
         steps[step_id].step_num = n
+    _touch(draft, actor_id)
     db.commit()
     return _steps_of(db, draft.id)
+
+
+# ==========================================
+# 2b. 承認の依頼（P.2、2026-11-11）: リリース担当が書いた草稿を、業務管理者に判断してもらう
+# ==========================================
+def submit_draft(db: Session, version_id: int, actor_id: int) -> SOPVersion:
+    """
+    草稿の承認を依頼します（リリース担当・業務管理者）。依頼中は誰も直せない。ステップの無い草稿は依頼できない
+    （承認できないため）。もう依頼中なら 409 SOP_DRAFT_SUBMITTED。
+    """
+    draft = _get_draft(db, version_id, lock=True)
+    if not draft.step_templates:
+        raise BadRequestError(f"{draft.version_tag} has no steps; add at least one step before asking for approval.")
+    draft.submitted_by_id = actor_id
+    draft.submitted_at = datetime.now(timezone.utc)
+    sop_version_event_repo.add(db, version=draft, event_type=SOPVersionEventType.SUBMITTED, actor_id=actor_id)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+def _get_submitted(db: Session, version_id: int) -> SOPVersion:
+    draft = _get_draft(db, version_id, lock=True, allow_submitted=True)
+    if draft.submitted_at is None:
+        raise DuplicatedRecordError(
+            f"{draft.version_tag} is not waiting for approval.", error_code=ErrorCode.SOP_DRAFT_NOT_SUBMITTED,
+        )
+    return draft
+
+
+def _back_to_draft(draft: SOPVersion) -> None:
+    draft.submitted_by_id = None
+    draft.submitted_at = None
+
+
+def withdraw_draft(db: Session, version_id: int, actor_id: int, is_admin: bool) -> SOPVersion:
+    """承認の依頼を取り下げ、草稿に戻します（依頼した本人か業務管理者。ほかの人は 403）"""
+    draft = _get_submitted(db, version_id)
+    if draft.submitted_by_id != actor_id and not is_admin:
+        raise ForbiddenError("Only the staff member who asked for approval, or an admin, can withdraw it.")
+    _back_to_draft(draft)
+    sop_version_event_repo.add(db, version=draft, event_type=SOPVersionEventType.WITHDRAWN, actor_id=actor_id)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+def reject_draft(db: Session, version_id: int, actor_id: int, reason: str) -> SOPVersion:
+    """依頼された草稿を差し戻し、草稿に戻します（業務管理者。理由は必須で記録に残る）"""
+    draft = _get_submitted(db, version_id)
+    _back_to_draft(draft)
+    sop_version_event_repo.add(db, version=draft, event_type=SOPVersionEventType.REJECTED, actor_id=actor_id, note=reason)
+    db.commit()
+    db.refresh(draft)
+    return draft
 
 
 # ==========================================
@@ -392,9 +555,12 @@ def _versions_of(db: Session, biz_id: int) -> list[SOPVersion]:
     ).all())
 
 
-def approve_and_schedule_version(db: Session, biz_id: int, draft_version_id: int, effective_date: date) -> SOPVersion:
+def approve_and_schedule_version(
+    db: Session, biz_id: int, draft_version_id: int, effective_date: date, actor_id: int | None = None, note: str | None = None,
+) -> SOPVersion:
     """
     草稿を承認し、effective_date の 0:00（日本時間）から有効にします（業務管理者）。
+    承認を依頼された草稿も、依頼されていない草稿（業務管理者が自分で書いたものなど）も承認できる。依頼は外れる。
     - effective_date は明日以降。業務に「予定」（承認済みで未発効）の版が既にあれば断る（予定は 1 つまで）
     - ステップの無い草稿は承認しない
     - 今有効な版（終了日時なし）は、新しい版の発効日時で終わる
@@ -429,9 +595,16 @@ def approve_and_schedule_version(db: Session, biz_id: int, draft_version_id: int
         if v.status == SOPStatus.APPROVED and v.expired_at is None:
             v.expired_at = effective_at
 
+    # 誰の草稿を承認したか（依頼した人。依頼されていなければ作った人）: 本人の承認（自己承認）を記録から分かるように
+    drafted_by_id = draft.submitted_by_id if draft.submitted_by_id is not None else draft.created_by_id
+    _back_to_draft(draft)
     draft.status = SOPStatus.APPROVED
     draft.effective_at = effective_at
     draft.expired_at = None
+    sop_version_event_repo.add(
+        db, version=draft, event_type=SOPVersionEventType.APPROVED, actor_id=actor_id, note=note,
+        detail={"effective_date": effective_date.isoformat(), "drafted_by_id": drafted_by_id},
+    )
     db.commit()
     db.refresh(draft)
     return draft
@@ -439,7 +612,7 @@ def approve_and_schedule_version(db: Session, biz_id: int, draft_version_id: int
 # ==========================================
 # 4. 承認の取消: 「予定」の版を草稿に戻し、今有効な版の終了日時を外す（M2.1）
 # ==========================================
-def cancel_future_version(db: Session, biz_id: int, future_version_id: int) -> SOPVersion:
+def cancel_future_version(db: Session, biz_id: int, future_version_id: int, actor_id: int | None = None) -> SOPVersion:
     """
     まだ発効していない（予定の）版の承認を取り消し、草稿に戻します（業務管理者）。
     発効した版・オーダーが指定（pin）している版・リリースで固定した版は戻せない（理由は登録された確認が返す）。
@@ -464,9 +637,69 @@ def cancel_future_version(db: Session, biz_id: int, future_version_id: int) -> S
     version.status = SOPStatus.DRAFT
     version.effective_at = None
     version.expired_at = None
+    sop_version_event_repo.add(db, version=version, event_type=SOPVersionEventType.CANCELLED, actor_id=actor_id)
     db.commit()
     db.refresh(version)
     return version
+
+# ==========================================
+# SOP の版を返す形・記録・承認待ち（P.3、2026-11-11）
+# ==========================================
+def describe_versions(db: Session, versions: list[SOPVersion]) -> list[SOPVersionResponse]:
+    """版に職員の名前を付けて返す形に（名前はまとめて 1 回で読む）"""
+    names = staff_names(db, {i for v in versions for i in (v.created_by_id, v.updated_by_id, v.submitted_by_id)})
+    return [
+        SOPVersionResponse.model_validate(v).model_copy(update={
+            "created_by_name": names.get(v.created_by_id), "updated_by_name": names.get(v.updated_by_id),
+            "submitted_by_name": names.get(v.submitted_by_id),
+        })
+        for v in versions
+    ]
+
+
+def describe_version(db: Session, version: SOPVersion) -> SOPVersionResponse:
+    return describe_versions(db, [version])[0]
+
+
+def list_version_events(db: Session, version_id: int) -> list[SOPVersionEventResponse]:
+    """版の記録（古い順。承認の記録には誰の草稿かの名前も）"""
+    get_version(db, version_id)
+    events = sop_version_event_repo.list_for_version(db, version_id=version_id)
+    drafted = {e.id: (e.detail or {}).get("drafted_by_id") for e in events}
+    names = staff_names(db, {e.actor_id for e in events} | set(drafted.values()))
+    return [
+        SOPVersionEventResponse.model_validate(e).model_copy(update={
+            "actor_name": names.get(e.actor_id), "drafted_by_name": names.get(drafted[e.id]),
+        })
+        for e in events
+    ]
+
+
+def list_submitted_drafts(db: Session, client_code: str | None = None) -> list[SubmittedSOPDraftResponse]:
+    """承認を依頼された草稿（すべての業務。依頼の古い順。削除された業務のものは出ない）"""
+    drafts = sop_version_event_repo.list_submitted(db, client_code=client_code)
+    bizes = {b.id: b for b in db.scalars(select(BizMaster).where(BizMaster.id.in_({d.biz_master_id for d in drafts})))}
+    steps = dict(db.execute(
+        select(SOPStepTemplate.sop_version_id, func.count()).where(SOPStepTemplate.sop_version_id.in_([d.id for d in drafts]))
+        .group_by(SOPStepTemplate.sop_version_id)
+    ).all())
+    names = staff_names(db, {i for d in drafts for i in (d.submitted_by_id, d.created_by_id)})
+    result = []
+    for d in drafts:
+        b = bizes[d.biz_master_id]
+        assert d.submitted_by_id is not None and d.submitted_at is not None
+        result.append(SubmittedSOPDraftResponse(
+            version_id=d.id, version_tag=d.version_tag, biz_master_id=b.id, business_code=b.business_code, biz_name=b.name,
+            client_code=b.client_code, step_count=steps.get(d.id, 0), submitted_by_id=d.submitted_by_id,
+            submitted_by_name=names.get(d.submitted_by_id), submitted_at=d.submitted_at,
+            created_by_id=d.created_by_id, created_by_name=names.get(d.created_by_id),
+        ))
+    return result
+
+
+def count_submitted_drafts(db: Session) -> int:
+    return sop_version_event_repo.count_submitted(db)
+
 
 # ==========================================
 # 業務間の依存関係（Phase 6）
