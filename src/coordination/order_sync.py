@@ -135,14 +135,6 @@ def _order_slot(order: OpeOrder) -> tuple[int, str, date | int]:
     return (order.template_id, "date", order.occurrence_date)
 
 
-def _find_order(db: Session, slot: SlotKey) -> OpeOrder | None:
-    """1 つの発生枠の取消されていないオーダー（行ロック付き。取りこぼしの作成など、枠が少ない処理用）"""
-    return ope_order_repo.get_active_for_slot(
-        db, template_id=slot.template_id, occurrence_date=slot.occurrence_date,
-        sheet_event_id=slot.sheet_event_id, one_off_instance_id=slot.one_off_instance_id,
-    )
-
-
 def _find_orders(db: Session, slots: list[SlotKey]) -> dict[SlotKey, OpeOrder]:
     """発生枠ごとの、取消されていないオーダー（テンプレートごとに 1 回の問い合わせ。行ロック付き）"""
     by_template: dict[int, list[SlotKey]] = {}
@@ -240,14 +232,6 @@ class NewOrder:
     source: EventSource
     actor_staff_id: int | None
     detail: dict[str, Any]
-
-
-def create_order(
-    db: Session, slot: SlotKey, instance: PlanInstance, source: EventSource, actor_staff_id: int | None,
-    detail: dict[str, Any],
-) -> OpeOrder | None:
-    created = create_orders(db, [NewOrder(slot, instance, source, actor_staff_id, detail)])
-    return created[0] if created else None
 
 
 def create_orders(db: Session, items: list[NewOrder]) -> list[OpeOrder]:
@@ -404,6 +388,7 @@ def create_missing_orders(db: Session) -> int:
     """
     今以降に開始する有効な予定のうち、オーダーの無い発生枠にオーダーを作ります（何度実行しても同じ結果）。
     過去の予定にはオーダーを作りません（運用開始より前は plan の履歴のみ）。
+    テンプレートごとにまとめて作る（既存のオーダーを 1 回で読み、create_orders で作る。1 枠ずつ問い合わせない）。
     """
     stmt = (
         select(PlanInstance)
@@ -411,12 +396,17 @@ def create_missing_orders(db: Session) -> int:
         .where(PlanOccurrenceCache.starts_at >= _now())
         .order_by(PlanInstance.template_id, PlanInstance.scheduled_start)
     )
-    created = 0
+    by_template: dict[int, list[tuple[SlotKey, PlanInstance]]] = {}
     for instance in db.scalars(stmt).all():
-        slot = slot_key_of(db, instance)
-        if _find_order(db, slot) is None and create_order(
-            db, slot, instance, EventSource.SYSTEM, None, {"cause": "initial order creation"}
-        ):
-            created += 1
+        by_template.setdefault(instance.template_id, []).append((slot_key_of(db, instance), instance))
+    created = 0
+    with links.definitions_cached(db):
+        for group in by_template.values():
+            existing = _find_orders(db, [slot for slot, _ in group])
+            items: dict[SlotKey, NewOrder] = {}
+            for slot, instance in group:
+                if slot not in existing and slot not in items:
+                    items[slot] = NewOrder(slot, instance, EventSource.SYSTEM, None, {"cause": "initial order creation"})
+            created += len(create_orders(db, list(items.values())))
     db.commit()
     return created

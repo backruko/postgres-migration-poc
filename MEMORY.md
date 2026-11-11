@@ -45,6 +45,12 @@ block of §1). The MVP pilot is postponed.
   dependency: 854 / 2,939 → 22 / 26 statements, ~0.45 s.** 2 more oracle scenarios (downstream cancel, latest-before
   upstream cancel); count test none / downstream / upstream (B.2 code: 478 / 1,623). Suite 291. **Left as is (told the
   user):** moved orders with a LATEST_BEFORE definition still refresh per order (`_slot_moved`).
+- **B.4 committed:** `create_missing_orders` groups future instances per template → `_find_orders` (one query) →
+  `create_orders` (links via `refresh_orders`), inside `definitions_cached`, one commit; idempotent. Removed the
+  unused `_find_order` / single `create_order` (`ope_order_repo.get_active_for_slot` kept: its docstring is the rule
+  `get_active_for_slots` refers to). Oracle test `test_go_live_creation_in_batches_equals_one_by_one` (listeners off,
+  old one-by-one loop copied into the test, limited to its world). **Probe: 3 two-year daily templates + a
+  dependency, 2,190 orders: 22.5 s / 18,251 statements → 2.5 s / 29.** Suite 292.
 
 ### Handoff 2026-11-11 — start here
 

@@ -8,6 +8,7 @@ links.refresh_orders（まとめて直す）の結果は、1 件ずつ refresh_o
 - 同じシート日付: 定義のあとにシートのテンプレートを作る（両側）+ キーの無い下流
 - 上流が取消済みしか無い日にできた下流は、最新の取消済みを待つ
 - 取消: 下流の取消 / 直前の上流の取消（下流は前の上流に付け替わる）
+- 運用開始時のオーダー作成（create_missing_orders）: まとめて作った結果は、以前の 1 枠ずつの作り方と同じ
 ※ 顧客コードの先頭文字は空きがないため "I" を共有する
 """
 import json
@@ -25,7 +26,10 @@ from src.domain_client.schemas import ClientCreate
 from src.domain_ope import links
 from src.domain_ope.models import OpeDependency, OpeOrder, OrderStatus
 from src.domain_plan import services as plan_services
-from src.domain_plan.models import PlanTemplate, TemplateType
+from src.coordination import order_sync
+from src.domain_ope.models import EventSource
+from src.domain_plan import slot_events
+from src.domain_plan.models import PlanInstance, PlanOccurrenceCache, PlanTemplate, TemplateType
 from src.domain_plan.schemas import PlanTemplateUpdate, ReferenceSheetImport, ReferenceSheetTemplateCreate, RRuleTemplateCreate
 from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import biz_master_repo, client_repo
@@ -189,3 +193,57 @@ def test_batched_links_equal_one_by_one(db, monkeypatch, scenario):
         assert any(row[1] is not None and row[1][4] == OrderStatus.CANCELED.value and not row[6] for row in link_rows)
     if scenario is sheet_both_sides:
         assert any(row[4] is not None and not row[6] for row in link_rows)
+
+
+# ==========================================
+# 運用開始時のオーダー作成
+# ==========================================
+def _old_create_missing_orders(db, template_ids: set[int]) -> int:
+    """以前の作り方（1 枠ずつ: 枠のオーダーを探し、無ければ 1 件作ってつながりを直す）。比べるための写し"""
+    instances = db.scalars(
+        select(PlanInstance)
+        .join(PlanOccurrenceCache, PlanOccurrenceCache.instance_id == PlanInstance.id)
+        .where(PlanOccurrenceCache.starts_at >= datetime.now(timezone.utc), PlanInstance.template_id.in_(template_ids))
+        .order_by(PlanInstance.template_id, PlanInstance.scheduled_start)
+    ).all()
+    created = 0
+    for instance in instances:
+        slot = slot_events.slot_key_of(db, instance)
+        if order_sync._find_orders(db, [slot]):
+            continue
+        for order in order_sync.create_orders(
+            db, [order_sync.NewOrder(slot, instance, EventSource.SYSTEM, None, {"cause": "initial order creation"})],
+        ):
+            links.refresh_order(db, order)
+            created += 1
+    db.commit()
+    return created
+
+
+def go_live_world(w: World) -> None:
+    w.define(DATE)
+    w.template(w.up, "U", DAILY)
+    w.template(w.up, "U2", MWF, at=time(7, 0))  # 同じ日の上流が 2 つの日もある
+    w.template(w.down, "D", DAILY, at=time(10, 0))
+    w.sheet_templates()
+
+
+def test_go_live_creation_in_batches_equals_one_by_one(db, monkeypatch):
+    with monkeypatch.context() as m:
+        m.setattr(slot_events, "_listeners", [])  # 運用開始前: 予定はあるがオーダーは無い
+        batched, reference = World(db), World(db)
+        go_live_world(batched)
+        go_live_world(reference)
+    assert batched.snapshot() == ([], []) == reference.snapshot()
+
+    reference_templates = set(db.scalars(select(PlanTemplate.id).where(PlanTemplate.biz_master_id.in_([reference.up, reference.down]))))
+    with monkeypatch.context() as m:
+        m.setattr(links, "refresh_orders", lambda db, orders: None)  # 1 件ずつの refresh_order だけで直す
+        reference_created = _old_create_missing_orders(db, reference_templates)
+    created = order_sync.create_missing_orders(db)  # まとめて（reference の枠にはもうオーダーがある）
+
+    orders, link_rows = batched.snapshot()
+    assert created >= len(orders) == reference_created > 100
+    assert (orders, link_rows) == reference.snapshot()
+    assert any(row[1] is not None and not row[6] for row in link_rows)
+    assert order_sync.create_missing_orders(db) == 0  # 何度実行しても同じ
