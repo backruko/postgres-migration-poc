@@ -26,7 +26,7 @@
 # プロキシの設定があっても通さずに直接つなぐ。
 # pip・npm・イメージは、ふつうはインターネットから直接取る（2026-11-17: 会社のプロキシはたぶん要らない）。
 # プロキシが要るときだけ、HTTP_PROXY / HTTPS_PROXY / NO_PROXY と会社の証明書（PIP_CERT / NODE_EXTRA_CA_CERTS）を
-# ランナーの設定がジョブに渡す（deploy/README.md の「付録. プロキシが必要なとき」の 4.）。
+# ランナーの設定がジョブに渡す（deploy/gitea-runbook.md のプロキシの節）。
 name: checks and deploy
 
 on:
@@ -286,7 +286,7 @@ jobs:
           set -eu
           say() { echo "deploy: $*"; }
           [ -n "$RELEASE" ] || { echo "::error::版の名前がない（gate の出力）"; exit 1; }
-          [ -f "$OPS_HOME/.env" ] || { echo "::error::$OPS_HOME/.env が無い（deploy/README.md の 3.7）"; exit 1; }
+          [ -f "$OPS_HOME/.env" ] || { echo "::error::$OPS_HOME/.env が無い（deploy/README.md の 3.5）"; exit 1; }
 
           # 同時に 2 つ動かさない（flock はジョブが途中で止まっても自動で外れる）
           exec 9> "$OPS_HOME/.deploy.lock"

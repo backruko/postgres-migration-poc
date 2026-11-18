@@ -1,5 +1,5 @@
 # ランナー（act_runner）の設定の見本。/srv/gitea/runner/config.yaml に写す（ふつうはそのまま使える）。
-# プロキシが要るときだけ、プロキシと証明書の行を直す（deploy/README.md の「付録. プロキシが必要なとき」の 4.）。
+# プロキシが要るときだけ、プロキシと証明書の行を直す（deploy/gitea-runbook.md のプロキシの節）。
 # 直したら: cd /srv/gitea/compose && sudo docker compose restart runner
 log:
   level: info

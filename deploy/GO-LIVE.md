@@ -10,7 +10,7 @@
 
 ## A. 事前の確認（データを入れる前）
 
-Gitea とパイプライン（README.md の 3.3〜3.6）:
+Gitea とパイプライン（[gitea-runbook.md](gitea-runbook.md) と README.md の 3.4）:
 
 - [ ] `http://<サーバー>:3000/` にログインでき、自分で登録する画面が無い
 - [ ] リポジトリの「設定 → Actions → ランナー」に `ops-server` が **アイドル**
