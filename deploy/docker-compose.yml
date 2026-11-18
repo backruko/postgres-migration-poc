@@ -1,7 +1,7 @@
 # 社内ネットワーク用のデプロイ（http、ドメインなし）。使い方は deploy/README.md。
 #
 #   サーバーでは版ごとのフォルダー（/srv/ops/releases/ops-…）に展開し、deploy/install.sh で起動する。
-#   設定（.env）・バックアップ・ログは版の外の /srv/ops に置く（README の「フォルダーの形」）。
+#   設定（.env）・バックアップ・ログは版の外の /srv/ops に置く（README の「1.2 ファイルの置き場所」）。
 #   docker compose のコマンドは /srv/ops/current/deploy で実行する。
 #
 # サービス:

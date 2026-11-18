@@ -286,7 +286,7 @@ jobs:
           set -eu
           say() { echo "deploy: $*"; }
           [ -n "$RELEASE" ] || { echo "::error::版の名前がない（gate の出力）"; exit 1; }
-          [ -f "$OPS_HOME/.env" ] || { echo "::error::$OPS_HOME/.env が無い（deploy/README.md の最初の準備）"; exit 1; }
+          [ -f "$OPS_HOME/.env" ] || { echo "::error::$OPS_HOME/.env が無い（deploy/README.md の 3.7）"; exit 1; }
 
           # 同時に 2 つ動かさない（flock はジョブが途中で止まっても自動で外れる）
           exec 9> "$OPS_HOME/.deploy.lock"

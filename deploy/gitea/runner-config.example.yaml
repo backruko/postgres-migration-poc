@@ -23,6 +23,7 @@ runner:
   #   # （下の container.options の /srv/ops/certs も一緒に）。ファイル名は /srv/ops/certs/ に置いたもの
   #   PIP_CERT: /company-certs/company.crt
   #   NODE_EXTRA_CA_CERTS: /company-certs/company.crt
+  #   REQUESTS_CA_BUNDLE: /company-certs/company.crt   # pip-audit（requests）は PIP_CERT を読まない
   # ci.yml の runs-on: ubuntu-latest。どのジョブも container: で自分のイメージを決めるので、これは使われない
   labels:
     - "ubuntu-latest:docker://node:24"

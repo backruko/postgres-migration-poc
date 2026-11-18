@@ -1,6 +1,6 @@
 # Gitea（社内の Git サーバー）と、そのパイプラインを動かすランナー（act_runner）。C.4
 # アプリ（deploy/docker-compose.yml、名前 ops）とは別の Compose（名前 gitea）。同じ Ubuntu サーバーで動かす。
-# 置き場所: /srv/gitea/compose/（このフォルダーの中身を写す。手順は deploy/README.md の「0b.」）
+# 置き場所: /srv/gitea/compose/（このフォルダーの中身を写す。手順は deploy/README.md の 3.3〜3.5）
 #
 #   /srv/gitea/compose/docker-compose.yml   このファイル
 #   /srv/gitea/compose/.env                 .env.example から（サーバーのアドレス・版・ランナーの登録トークン）
