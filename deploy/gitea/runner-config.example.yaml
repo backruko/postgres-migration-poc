@@ -1,0 +1,49 @@
+# ランナー（act_runner）の設定の見本。/srv/gitea/runner/config.yaml に写す（ふつうはそのまま使える）。
+# プロキシが要るときだけ、プロキシと証明書の行を直す（deploy/README.md の「付録. プロキシが必要なとき」の 4.）。
+# 直したら: cd /srv/gitea/compose && sudo docker compose restart runner
+log:
+  level: info
+
+runner:
+  file: .runner          # 登録情報（/srv/gitea/runner/.runner。消すと登録し直し）
+  capacity: 2            # 同時に動くジョブの数（backend と frontend を並べて動かす）
+  timeout: 1h
+  # ジョブのコンテナに渡す環境変数。ふつうは無し（2026-11-17: サーバーは直接インターネットに出られ、pip / npm / pyright
+  # の取得もそのまま届く）。プロキシが要るときだけ、`envs: {}` の行を消し、下のブロックの # を外してアドレスを直す。
+  # Gitea（同じサーバー）とジョブの中のデータベース（testdb / migrationdb）はプロキシを通さない
+  envs: {}
+  # envs:
+  #   HTTP_PROXY: http://proxy.example.co.jp:8080
+  #   HTTPS_PROXY: http://proxy.example.co.jp:8080
+  #   NO_PROXY: localhost,127.0.0.1,10.0.0.5,testdb,migrationdb
+  #   http_proxy: http://proxy.example.co.jp:8080
+  #   https_proxy: http://proxy.example.co.jp:8080
+  #   no_proxy: localhost,127.0.0.1,10.0.0.5,testdb,migrationdb
+  #   # プロキシが HTTPS を検査する（会社の証明書で署名し直す）ときだけ、次の 2 行も
+  #   # （下の container.options の /srv/ops/certs も一緒に）。ファイル名は /srv/ops/certs/ に置いたもの
+  #   PIP_CERT: /company-certs/company.crt
+  #   NODE_EXTRA_CA_CERTS: /company-certs/company.crt
+  # ci.yml の runs-on: ubuntu-latest。どのジョブも container: で自分のイメージを決めるので、これは使われない
+  labels:
+    - "ubuntu-latest:docker://node:24"
+
+cache:
+  enabled: false
+
+container:
+  network: ""            # ジョブごとにネットワークを作る（services の testdb / migrationdb に名前で届く）
+  privileged: false
+  # 全部のジョブのコンテナに付ける。会社の証明書を使うときだけ # を外す
+  # options: -v /srv/ops/certs:/company-certs:ro
+  options:
+  # ジョブが ci.yml の container.options で頼んでよいボリュームはこれだけ（deploy のジョブ用）。
+  # 会社の証明書を使うときは /srv/ops/certs も足す
+  valid_volumes:
+    - /var/run/docker.sock
+    - /srv/ops
+  # "-" = サーバーの Docker のソケットを、ジョブのコンテナに自動ではつながない（つなぐのは deploy だけ、明示して）
+  docker_host: "-"
+  force_pull: false
+
+host:
+  workdir_parent:

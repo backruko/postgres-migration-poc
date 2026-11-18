@@ -1,0 +1,28 @@
+# docker build の起点（リポジトリのルート）から送らないもの
+.git
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+!.env.example
+*.log
+*.log.*
+frontend/node_modules
+frontend/dist
+deploy/.env
+deploy/backups
+deploy/logs
+mock_data
+tests
+.vscode
+.idea
+packages
+# 開発 PC と CI だけで使うスクリプト（サーバーでは動かさない。シードの 3 つは requests が要り、イメージには入っていない）
+scripts/export_seed.py
+scripts/import_seed.py
+scripts/seed_api.py
+scripts/export_openapi.py
+scripts/audit_check.py
+scripts/make_package.py

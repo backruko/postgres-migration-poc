@@ -1,0 +1,7 @@
+# /etc/cron.d/gitea-dump（sudo cp で写す。改行は LF、最後に改行が要る）
+# 毎晩 01:30（アプリのバックアップ 01:00 の後）に Gitea を丸ごと zip にする（リポジトリ・SQLite・設定）:
+#   /srv/gitea/data/backups/gitea-YYYYMMDD.zip。14 日より古いものは消す。NAS への同期は /srv/ops/backups と同じように
+# 記録は /var/log/gitea-dump.log
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 1 * * * root docker exec -u git -w /data/backups gitea sh -c 'gitea dump -c /data/gitea/conf/app.ini --type zip --file "gitea-$(date +\%Y\%m\%d).zip" && find /data/backups -name "gitea-*.zip" -mtime +13 -delete' >> /var/log/gitea-dump.log 2>&1

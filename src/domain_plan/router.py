@@ -1,0 +1,580 @@
+from datetime import date, datetime
+
+from fastapi import APIRouter, Body, Depends, Query, Response, status
+from sqlalchemy.orm import Session
+
+from src.core.schemas.error import AUTH_ERRORS, COMMON_ERRORS
+from src.domain_staff.auth import get_current_staff, require_roles
+from src.domain_staff.auth import ScopeKind, client_scope, get_client_scope
+from src.domain_staff.scope import ClientScope
+from src.coordination.scope_guards import (
+    BIZ_IN_SCOPE, CLIENT_CODE_IN_SCOPE, INSTANCE_IN_SCOPE, SHEET_EVENT_IN_SCOPE, SHEET_IN_SCOPE, TEMPLATE_CHANGE_IN_SCOPE,
+    TEMPLATE_IN_SCOPE, check_biz, check_client, check_template,
+)
+from src.domain_staff.models import RoleCode, StaffUser
+from src.infrastructure.database import get_db
+from src.domain_plan.schemas import (
+    BusinessCalendarCreate,
+    BusinessCalendarResponse,
+    BusinessCalendarUpdate,
+    CacheRebuildResponse,
+    CancelledInstanceResponse,
+    ClientCalendarResponse,
+    ClientOccurrenceResponse,
+    PLAN_TEMPLATE_CREATE_EXAMPLES,
+    CalendarChangeResult,
+    HolidayResponse,
+    HolidaysAdd,
+    ExplicitDatesAdd,
+    PlanInstanceCancel,
+    PlanInstanceOverride,
+    PlanInstanceResponse,
+    PlanInstanceRevert,
+    PlanOneOffCreate,
+    PlanRevertResponse,
+    PlanOccurrenceResponse,
+    PlanTemplateChangeResponse,
+    PlanTemplateCreate,
+    PlanTemplateResponse,
+    PlanTemplateUpdate,
+    TemplateChangeApprove,
+    TemplateChangeCount,
+    TemplateChangeReject,
+    TemplateDraft,
+    ReferenceSheetCreate,
+    ReferenceSheetEventResponse,
+    ReferenceSheetEventsCreate,
+    ReferenceSheetEventUpdate,
+    ReferenceSheetImport,
+    ReferenceSheetImportResult,
+    ReferenceSheetMarkerCreate,
+    ReferenceSheetMarkerResponse,
+    ReferenceSheetMarkerUpdate,
+    ReferenceSheetUpdate,
+    ReferenceSheetEventsBatch,
+    ReferenceSheetResponse,
+    TemplateCreateDraft,
+    MarkerInUseError,
+)
+from src.domain_plan.services import (
+    add_holidays, create_calendar, delete_holiday, get_calendar, get_calendars, get_holidays, update_calendar,
+    add_explicit_dates, add_marker, add_one_off_instance, add_sheet_events, cancel_instance, create_sheet, create_template, delete_sheet_event,
+    delete_template, get_cancelled_instances, get_client_calendar, restore_cancelled_instance, get_client_occurrences, get_instances, get_occurrences, get_sheet, get_sheets, get_template, get_templates,
+    import_sheet, override_instance, revert_sheet_event, update_marker, update_sheet, delete_marker, change_sheet_events, rebuild_cache, remove_explicit_date, restore_template, revert_instance, update_sheet_event,
+    update_template,
+)
+
+from src.domain_plan import template_changes
+from src.domain_plan.models import TemplateChangeStatus
+from src.core.clock import LOCAL_TIMEZONE_NAME
+
+router = APIRouter(prefix="/plans", tags=["plans"])
+
+# ==========================================
+# BusinessCalendar（営業日カレンダー）エンドポイント
+# ==========================================
+
+@router.post("/calendars", response_model=BusinessCalendarResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN], all_clients=True)
+def create_calendar_endpoint(calendar_in: BusinessCalendarCreate, db: Session = Depends(get_db)):
+    return create_calendar(db=db, calendar_in=calendar_in)
+
+@router.get("/calendars", response_model=list[BusinessCalendarResponse], responses={**COMMON_ERRORS})
+@client_scope(ScopeKind.SHARED)
+def get_calendars_endpoint(db: Session = Depends(get_db)):
+    return get_calendars(db=db)
+
+@router.get("/calendars/{calendar_id}", response_model=BusinessCalendarResponse, responses={**COMMON_ERRORS})
+@client_scope(ScopeKind.SHARED)
+def get_calendar_endpoint(calendar_id: int, db: Session = Depends(get_db)):
+    return get_calendar(db=db, calendar_id=calendar_id)
+
+@router.patch("/calendars/{calendar_id}", response_model=BusinessCalendarResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN], all_clients=True)
+def update_calendar_endpoint(calendar_id: int, calendar_in: BusinessCalendarUpdate, db: Session = Depends(get_db)):
+    """週末の曜日を変更すると、このカレンダーを使う全テンプレートの未来の予定が再計算されます。"""
+    return update_calendar(db=db, calendar_id=calendar_id, calendar_in=calendar_in)
+
+@router.get("/calendars/{calendar_id}/holidays", response_model=list[HolidayResponse], responses={**COMMON_ERRORS})
+@client_scope(ScopeKind.SHARED)
+def get_holidays_endpoint(calendar_id: int, year: int | None = None, db: Session = Depends(get_db)):
+    return get_holidays(db=db, calendar_id=calendar_id, year=year)
+
+@router.post("/calendars/{calendar_id}/holidays", response_model=CalendarChangeResult, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN], all_clients=True)
+def add_holidays_endpoint(calendar_id: int, holidays_in: HolidaysAdd, db: Session = Depends(get_db)):
+    """
+    休日を一括登録します（登録済みの日付は名前のみ更新）。
+    このカレンダーを使う全テンプレートの未来の予定が、休日ポリシーに従って再計算されます。
+    今日より前（日本時間）の日付は追加も名前の変更もできません（400）。
+    """
+    return add_holidays(db=db, calendar_id=calendar_id, holidays_in=holidays_in)
+
+@router.delete("/calendars/{calendar_id}/holidays/{holiday_date}", response_model=CalendarChangeResult, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN], all_clients=True)
+def delete_holiday_endpoint(calendar_id: int, holiday_date: date, db: Session = Depends(get_db)):
+    """休日を削除します（その日は営業日に戻ります）。今日より前（日本時間）の休日は削除できません（400）。"""
+    return delete_holiday(db=db, calendar_id=calendar_id, holiday_date=holiday_date)
+
+# ==========================================
+# ReferenceSheet（年間計画シート）エンドポイント
+# ==========================================
+
+@router.post("/sheets", response_model=ReferenceSheetResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def create_sheet_endpoint(sheet_in: ReferenceSheetCreate, db: Session = Depends(get_db), scope: ClientScope = Depends(get_client_scope)):
+    check_client(scope, sheet_in.client_code)  # 範囲の外の顧客は、無い顧客と同じ 404
+    return create_sheet(db=db, sheet_in=sheet_in)
+
+@router.post("/sheets/import", response_model=ReferenceSheetImportResult, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def import_sheet_endpoint(
+    import_in: ReferenceSheetImport,
+    response: Response,
+    replace_events: bool = Query(False, description="true: delete dates not in the file so the sheet matches it exactly"),
+    db: Session = Depends(get_db), scope: ClientScope = Depends(get_client_scope),
+):
+    """
+    年間計画シート（マーカーと日付）を一括で取り込みます。
+    新規作成時は 201、既存シート（client_code + sheet_name が一致）の更新時は 200 を返します。
+    同じファイルを再度取り込んでも変化はありません。全件1トランザクションで、エラー時は何も反映されません。
+    """
+    check_client(scope, import_in.client_code)  # 範囲の外の顧客は、無い顧客と同じ 404
+    result = import_sheet(db=db, import_in=import_in, replace_events=replace_events)
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return result
+
+@router.get("/sheets", response_model=list[ReferenceSheetResponse], responses={**COMMON_ERRORS}, dependencies=[CLIENT_CODE_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_sheets_endpoint(client_code: str, db: Session = Depends(get_db)):
+    return get_sheets(db=db, client_code=client_code)
+
+@router.get("/sheets/{sheet_id}", response_model=ReferenceSheetResponse, responses={**COMMON_ERRORS}, dependencies=[SHEET_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_sheet_endpoint(sheet_id: int, db: Session = Depends(get_db)):
+    return get_sheet(db=db, sheet_id=sheet_id)
+
+@router.patch("/sheets/{sheet_id}", response_model=ReferenceSheetResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[SHEET_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def update_sheet_endpoint(sheet_id: int, sheet_in: ReferenceSheetUpdate, db: Session = Depends(get_db)):
+    """
+    シートの名前・期間を変えます（送った項目だけ）。期間はいつでも延ばせます（ルールのマーカーは新しい期間まで日付を作る）。
+    縮めるのは、新しい期間の外に残る日付が無いときだけです（あれば 400 で日付を挙げる）。同じ顧客で同じ名前は 409。
+    """
+    return update_sheet(db=db, sheet_id=sheet_id, sheet_in=sheet_in)
+
+@router.post("/sheets/{sheet_id}/markers", response_model=ReferenceSheetResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[SHEET_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def add_marker_endpoint(sheet_id: int, marker_in: ReferenceSheetMarkerCreate, db: Session = Depends(get_db)):
+    return add_marker(db=db, sheet_id=sheet_id, marker_in=marker_in)
+
+@router.patch("/sheets/{sheet_id}/markers/{marker}", response_model=ReferenceSheetMarkerResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[SHEET_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def update_marker_endpoint(
+    sheet_id: int, marker: str, marker_in: ReferenceSheetMarkerUpdate, db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    マーカーの説明・生成ルールを変更します。
+    rule を指定するとルールから日付を再生成します（人が編集・追加・取消した日付は常に維持）。
+    rule に null を指定すると生成をやめ、今ある日付をそのまま残します（出どころ・取消の記録も残る）。
+    rule: null と同時に cancel_future_dates: true を指定すると、今日以降の日付をすべて取り消します（業務が終わった場合。過去は残る）。
+    name を指定すると名前を変えます。参照しているテンプレートも同じ名前に変わり（日付・予定は変わらない）、履歴に残ります。
+    承認待ちの下書きがそのテンプレートにある・下書きがこのマーカーを指す場合は 409 TEMPLATE_DRAFT_PENDING、同じ名前があれば 409。
+    """
+    return update_marker(db=db, sheet_id=sheet_id, marker=marker, marker_in=marker_in, actor_id=current_staff.id)
+
+@router.delete(
+    "/sheets/{sheet_id}/markers/{marker}", response_model=ReferenceSheetResponse, dependencies=[SHEET_IN_SCOPE],
+    responses={**COMMON_ERRORS, **AUTH_ERRORS, 409: {"model": MarkerInUseError, "description": "the marker is in use (details say by what)"}},
+)
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def delete_marker_endpoint(sheet_id: int, marker: str, db: Session = Depends(get_db)):
+    """
+    マーカーとその日付を削除します。テンプレート（削除済みも）か承認待ちの下書きが参照していれば
+    409 DELETE_FAILED_RECORD_IN_USE（理由にテンプレートを挙げる。details に、参照しているテンプレート・削除済みの
+    テンプレート・承認待ちの下書きの ID が入る: MarkerInUseDetails）。
+    """
+    return delete_marker(db=db, sheet_id=sheet_id, marker=marker)
+
+@router.post("/sheets/{sheet_id}/markers/{marker}/events", response_model=ReferenceSheetMarkerResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[SHEET_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def add_sheet_events_endpoint(sheet_id: int, marker: str, events_in: ReferenceSheetEventsCreate, db: Session = Depends(get_db)):
+    """
+    マーカーに日付を追加します（登録済みの日付は無視）。
+    このマーカーを参照している全テンプレートの未来の予定が自動で再計算されます。
+    """
+    return add_sheet_events(db=db, sheet_id=sheet_id, marker=marker, events_in=events_in)
+
+@router.post("/sheets/{sheet_id}/markers/{marker}/events/batch", response_model=ReferenceSheetMarkerResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[SHEET_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def change_sheet_events_endpoint(sheet_id: int, marker: str, batch_in: ReferenceSheetEventsBatch, db: Session = Depends(get_db)):
+    """
+    マーカーの日付をまとめて足す（add: 日付）・消す（remove: 日付の id）。1 トランザクションで、参照しているテンプレートの
+    予定は最後に 1 回だけ作り直します。規則は 1 件ずつの追加・削除と同じです（期間の外・今日より前は 400。取り込み・ルールの
+    日付を消すと「取消」の記録が残る）。同じ日付の追加と削除、別のマーカーの日付、取り消し済みの日付は 400。
+    """
+    return change_sheet_events(db=db, sheet_id=sheet_id, marker=marker, batch_in=batch_in)
+
+@router.patch("/sheets/events/{event_id}", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[SHEET_EVENT_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def update_sheet_event_endpoint(event_id: int, event_in: ReferenceSheetEventUpdate, db: Session = Depends(get_db)):
+    return update_sheet_event(db=db, event_id=event_id, event_in=event_in)
+
+@router.post("/sheets/events/{event_id}/revert", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[SHEET_EVENT_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def revert_sheet_event_endpoint(event_id: int, db: Session = Depends(get_db)):
+    """生成マーカーの日付に対する人の編集・取消を取り消し、ルールの日付に戻します。"""
+    return revert_sheet_event(db=db, event_id=event_id)
+
+@router.delete("/sheets/events/{event_id}", response_model=ReferenceSheetEventResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[SHEET_EVENT_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def delete_sheet_event_endpoint(event_id: int, db: Session = Depends(get_db)):
+    """日付を削除します。生成マーカーのルール由来の日付は、再生成で復活しないよう「取消」として記録されます。"""
+    return delete_sheet_event(db=db, event_id=event_id)
+
+# ==========================================
+# PlanTemplate エンドポイント
+# 参照は誰でも。作成・変更・削除は業務管理者（admin）だけ
+# ==========================================
+
+@router.post("/templates", response_model=PlanTemplateResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def create_template_endpoint(
+
+    # template_in: Annotated[PlanTemplateCreate, Body(openapi_examples=PLAN_TEMPLATE_CREATE_EXAMPLES)],
+    template_in: PlanTemplateCreate = Body(..., openapi_examples=PLAN_TEMPLATE_CREATE_EXAMPLES),
+    db: Session = Depends(get_db), scope: ClientScope = Depends(get_client_scope),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    テンプレートを作成し、今から90日先までのインスタンスを生成します。
+    template_type により必須項目が変わります（rrule / explicit_dates / reference_sheet_based）。
+    変更の履歴に「業務管理者の直接の保存」として残ります。
+    """
+    check_biz(db, scope, template_in.biz_master_id)  # 範囲の外の業務は、無い業務と同じ 404
+    return create_template(db=db, template_in=template_in, actor_id=current_staff.id)
+
+@router.get("/templates", response_model=list[PlanTemplateResponse], responses={**COMMON_ERRORS}, dependencies=[BIZ_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_templates_endpoint(biz_id: int, db: Session = Depends(get_db)):
+    return get_templates(db=db, biz_id=biz_id)
+
+@router.get("/templates/{template_id}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_template_endpoint(template_id: int, db: Session = Depends(get_db)):
+    return get_template(db=db, template_id=template_id)
+
+@router.patch("/templates/{template_id}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def update_template_endpoint(
+    template_id: int, template_in: PlanTemplateUpdate, db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    生成に影響する項目を変更するとリビジョンが上がり、未来のインスタンスが再照合されます（過去分は不変）。
+    何かが変われば、変更の履歴に「業務管理者の直接の保存」として残ります。承認待ちの下書きがある間は 409。
+    """
+    return update_template(db=db, template_id=template_id, template_in=template_in, actor_id=current_staff.id)
+
+@router.delete("/templates/{template_id}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def delete_template_endpoint(
+    template_id: int, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
+):
+    """論理削除。変更の履歴に残ります。承認待ちの下書きがある間は 409。"""
+    return delete_template(db=db, template_id=template_id, actor_id=current_staff.id)
+
+@router.post("/templates/{template_id}/restore", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def restore_template_endpoint(template_id: int, db: Session = Depends(get_db)):
+    return restore_template(db=db, template_id=template_id)
+
+@router.post("/templates/{template_id}/dates", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def add_explicit_dates_endpoint(
+    template_id: int, dates_in: ExplicitDatesAdd, db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """顧客指定日を追加します(登録済みの日付は無視)。足した日付は変更の履歴に残ります。"""
+    return add_explicit_dates(db=db, template_id=template_id, dates=dates_in.dates, actor_id=current_staff.id)
+
+@router.delete("/templates/{template_id}/dates/{local_date}", response_model=PlanTemplateResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def remove_explicit_date_endpoint(
+    template_id: int, local_date: date, db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """顧客指定日を外します。変更の履歴に残ります。"""
+    return remove_explicit_date(db=db, template_id=template_id, local_date=local_date, actor_id=current_staff.id)
+
+# ==========================================
+# テンプレートの変更依頼（下書き → 承認 → 反映。Level 2）
+# 下書きはリリース担当・業務管理者が書ける。直す・取り下げるのは本人だけ。承認・差し戻しは業務管理者（別のエンドポイント）
+# ==========================================
+
+@router.get("/template-changes", response_model=list[PlanTemplateChangeResponse], responses={**COMMON_ERRORS})
+@client_scope(ScopeKind.FILTERED)
+def list_template_changes_endpoint(
+    change_status: TemplateChangeStatus | None = Query(None, alias="status", description="draft = waiting for approval"),
+    biz_id: int | None = Query(None),
+    template_id: int | None = Query(None),
+    drafted_by: int | None = Query(None, description="staff id of the drafter (e.g. my own drafts)"),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db), scope: ClientScope = Depends(get_client_scope),
+):
+    """
+    テンプレートの変更依頼の一覧（ログインしている職員なら誰でも）。承認待ち（status=draft）は古い順＝承認の順番待ち、
+    それ以外は新しい順。差し戻された新規作成の下書き（テンプレートが無い）も、drafted_by などで探せます。
+    """
+    return template_changes.list_changes(
+        db, status=change_status, biz_master_id=biz_id, template_id=template_id, drafted_by_id=drafted_by, limit=limit,
+        scope=scope,
+    )
+
+@router.get("/template-changes/count", response_model=TemplateChangeCount, responses={**COMMON_ERRORS})
+@client_scope(ScopeKind.FILTERED)
+def count_template_changes_endpoint(
+    change_status: TemplateChangeStatus | None = Query(TemplateChangeStatus.DRAFT, alias="status"),
+    biz_id: int | None = Query(None),
+    drafted_by: int | None = Query(None),
+    db: Session = Depends(get_db), scope: ClientScope = Depends(get_client_scope),
+):
+    """変更依頼の件数（既定は承認待ち。メニューのバッジ用）。"""
+    return TemplateChangeCount(count=template_changes.count_changes(
+        db, status=change_status, biz_master_id=biz_id, drafted_by_id=drafted_by, scope=scope,
+    ))
+
+@router.get("/template-changes/{change_id}", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS}, dependencies=[TEMPLATE_CHANGE_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_template_change_endpoint(change_id: int, db: Session = Depends(get_db)):
+    return template_changes.get_change(db, change_id)
+
+@router.post("/template-changes", response_model=PlanTemplateChangeResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS})
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def create_template_draft_endpoint(
+    draft: TemplateDraft = Body(...),
+    db: Session = Depends(get_db), scope: ClientScope = Depends(get_client_scope),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    テンプレートの変更の下書きを作ります。kind で種類を選びます:
+    - `create`: 新しいテンプレート（template = POST /plans/templates と同じ本文）
+    - `update`: 項目の変更（changes = PATCH /plans/templates/{id} と同じ本文）と、指定日の追加・削除（add_dates / remove_dates）
+    - `delete`: テンプレートの削除
+
+    本物の保存と同じ処理で確かめ（何も保存しない試し実行）、誤りは直接の保存と同じエラーになります。何も変えない下書きは 400。
+    承認待ちの下書きがあるテンプレートには書けません（409 TEMPLATE_DRAFT_PENDING）。
+    """
+    # 範囲の外の業務・テンプレートは、無いものと同じ 404
+    if isinstance(draft, TemplateCreateDraft):
+        check_biz(db, scope, draft.template.biz_master_id)
+    else:
+        check_template(db, scope, draft.template_id)
+    return template_changes.describe(db, [template_changes.create_draft(db=db, draft=draft, actor_id=current_staff.id)])[0]
+
+@router.put("/template-changes/{change_id}", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_CHANGE_IN_SCOPE])
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def edit_template_draft_endpoint(
+    change_id: int,
+    draft: TemplateDraft = Body(...),
+    db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    承認待ちの下書きを、書いた本人が直します（中身をまるごと置き換え。確かめ方は作成と同じ）。
+    種類と対象のテンプレートは変えられません。削除の下書きには直すところがありません。
+    本人以外は 403、承認・差し戻し・取り下げが済んだ下書きは 409 TEMPLATE_CHANGE_DECIDED。
+    """
+    return template_changes.describe(db, [template_changes.edit_draft(db=db, change_id=change_id, draft=draft, actor_id=current_staff.id)])[0]
+
+@router.post("/template-changes/{change_id}/withdraw", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_CHANGE_IN_SCOPE])
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def withdraw_template_draft_endpoint(
+    change_id: int,
+    db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """承認待ちの下書きを、書いた本人が取り下げます（記録は残る）。本人以外は 403。"""
+    return template_changes.describe(db, [template_changes.withdraw_draft(db=db, change_id=change_id, actor_id=current_staff.id)])[0]
+
+@router.post("/template-changes/{change_id}/approve", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_CHANGE_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def approve_template_draft_endpoint(
+    change_id: int,
+    approve_in: TemplateChangeApprove = Body(default_factory=TemplateChangeApprove),
+    db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    承認待ちの下書きを承認し、すぐに反映します（業務管理者。自分の下書きも承認できる）。
+    反映は直接の保存と同じ処理で、オーダーも同じように追従します。誤り（参照するシートが無いなど）は直接の保存と同じエラーで、
+    そのときは何も変わらず、下書きは承認待ちのまま。決まった下書きは 409 TEMPLATE_CHANGE_DECIDED。
+    """
+    return template_changes.describe(db, [template_changes.approve_draft(db=db, change_id=change_id, actor_id=current_staff.id, note=approve_in.note)])[0]
+
+@router.post("/template-changes/{change_id}/reject", response_model=PlanTemplateChangeResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_CHANGE_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def reject_template_draft_endpoint(
+    change_id: int,
+    reject_in: TemplateChangeReject,
+    db: Session = Depends(get_db),
+    current_staff: StaffUser = Depends(get_current_staff),
+):
+    """承認待ちの下書きを差し戻します（業務管理者。理由は必須）。テンプレートは何も変わりません。"""
+    return template_changes.describe(db, [template_changes.reject_draft(db=db, change_id=change_id, actor_id=current_staff.id, reason=reject_in.reason)])[0]
+
+@router.get("/templates/{template_id}/changes", response_model=list[PlanTemplateChangeResponse], responses={**COMMON_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_template_history_endpoint(template_id: int, db: Session = Depends(get_db)):
+    """テンプレートの変更履歴（新しい順。承認・差し戻し・取り下げ・業務管理者の直接の保存）。削除済みのテンプレートも読めます。"""
+    return template_changes.template_history(db, template_id)
+
+@router.get("/templates/{template_id}/instances", response_model=list[PlanInstanceResponse], responses={**COMMON_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_instances_endpoint(template_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """無効化済みを含む全インスタンス(監査用)。"""
+    return get_instances(db=db, template_id=template_id, skip=skip, limit=limit)
+
+@router.post("/templates/{template_id}/cache/rebuild", response_model=CacheRebuildResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@require_roles([RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def rebuild_cache_endpoint(template_id: int, db: Session = Depends(get_db)):
+    return CacheRebuildResponse(template_id=template_id, occurrences=rebuild_cache(db=db, template_id=template_id))
+
+@router.post("/templates/{template_id}/instances", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[TEMPLATE_IN_SCOPE])
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def add_one_off_instance_endpoint(
+    template_id: int, one_off_in: PlanOneOffCreate, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    発生枠に紐づかない単発のインスタンスを追加します(scheduled_end 省略時はテンプレートの所要時間)。
+    テンプレートのルールを変更しても維持されます。
+    """
+    return add_one_off_instance(db=db, template_id=template_id, one_off_in=one_off_in, actor_staff_id=current_staff.id)
+
+# ==========================================
+# PlanInstance 手動変更エンドポイント
+# ==========================================
+
+@router.post("/instances/{instance_id}/override", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[INSTANCE_IN_SCOPE])
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def override_instance_endpoint(
+    instance_id: int, override_in: PlanInstanceOverride, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    特定の1件だけ時刻を変更します(延期・前倒し)。テンプレートのルールは変わりません。
+    元のインスタンスは MANUAL で無効化され、新しい時刻のインスタンスが追記されます(履歴は不変)。
+    以後テンプレートやシート日付が変更されても、この手動変更は維持されます。
+    """
+    return override_instance(db=db, instance_id=instance_id, override_in=override_in, actor_staff_id=current_staff.id)
+
+@router.post("/instances/{instance_id}/cancel", response_model=PlanInstanceResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[INSTANCE_IN_SCOPE])
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def cancel_instance_endpoint(
+    instance_id: int, cancel_in: PlanInstanceCancel | None = None, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
+):
+    """特定の1件だけ取り消します。以後の再生成でも復活しません。"""
+    return cancel_instance(db=db, instance_id=instance_id, cancel_in=cancel_in or PlanInstanceCancel(), actor_staff_id=current_staff.id)
+
+@router.post("/instances/{instance_id}/restore", response_model=PlanInstanceResponse, status_code=status.HTTP_201_CREATED, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[INSTANCE_IN_SCOPE])
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def restore_cancelled_instance_endpoint(instance_id: int, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff)):
+    """
+    取り消した予定を、取消の直前と同じ日時で元に戻します（臨時の予定・日時を変更した予定も可）。
+    時刻が過ぎた予定は戻せません。取消の記録は履歴として残ります。
+    """
+    return restore_cancelled_instance(db=db, instance_id=instance_id, actor_staff_id=current_staff.id)
+
+@router.post("/instances/{instance_id}/revert", response_model=PlanRevertResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[INSTANCE_IN_SCOPE])
+@require_roles([RoleCode.RELEASER, RoleCode.ADMIN])
+@client_scope(ScopeKind.CHECKED)
+def revert_instance_endpoint(
+    instance_id: int, revert_in: PlanInstanceRevert | None = None, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
+):
+    """
+    手動変更・取消を取り消し、その発生枠をテンプレートのルールに戻します。
+    置き換えの連鎖のどのインスタンスIDを指定しても構いません。
+    """
+    return revert_instance(db=db, instance_id=instance_id, revert_in=revert_in or PlanInstanceRevert(), actor_staff_id=current_staff.id)
+
+# ==========================================
+# Occurrence(カレンダー表示用)エンドポイント
+# ==========================================
+
+@router.get("/occurrences", response_model=list[PlanOccurrenceResponse], responses={**COMMON_ERRORS}, dependencies=[BIZ_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_occurrences_endpoint(
+    biz_id: int,
+    start: datetime = Query(..., description="タイムゾーン付き (例: 2026-11-01T00:00:00+09:00)"),
+    end: datetime = Query(..., description="タイムゾーン付き、start から最大366日"),
+    db: Session = Depends(get_db),
+):
+    return get_occurrences(db=db, biz_id=biz_id, start=start, end=end)
+
+@router.get("/clients/{client_code}/occurrences", response_model=list[ClientOccurrenceResponse], responses={**COMMON_ERRORS}, dependencies=[CLIENT_CODE_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_client_occurrences_endpoint(
+    client_code: str,
+    start: datetime = Query(..., description="タイムゾーン付き (例: 2026-11-01T00:00:00+09:00)"),
+    end: datetime = Query(..., description="タイムゾーン付き、start から最大366日"),
+    db: Session = Depends(get_db),
+):
+    """顧客に属する全業務の予定を、開始時刻順に一覧で取得します（業務コード・業務名付き）。"""
+    return get_client_occurrences(db=db, client_code=client_code, start=start, end=end)
+
+@router.get("/clients/{client_code}/calendar", response_model=ClientCalendarResponse, responses={**COMMON_ERRORS}, dependencies=[CLIENT_CODE_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_client_calendar_endpoint(
+    client_code: str,
+    month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="表示する月 (例: 2026-11)"),
+    timezone: str = Query(LOCAL_TIMEZONE_NAME, description="日付の振り分けに使うタイムゾーン"),
+    holiday_calendar: str | None = Query(None, description="休日名を付ける営業日カレンダーのコード (例: JP_BANK)"),
+    db: Session = Depends(get_db),
+):
+    """
+    顧客に属する全業務の予定を、月カレンダーの形で返します。
+    その月の全日（予定の無い日も含む）と、日ごとの予定（開始時刻順）、凡例用のテンプレート一覧を返すため、
+    そのままカレンダーに描画できます。
+    """
+    return get_client_calendar(
+        db=db, client_code=client_code, month=month, tz_name=timezone, holiday_calendar=holiday_calendar
+    )
+
+@router.get("/clients/{client_code}/cancelled", response_model=list[CancelledInstanceResponse], responses={**COMMON_ERRORS}, dependencies=[CLIENT_CODE_IN_SCOPE])
+@client_scope(ScopeKind.CHECKED)
+def get_cancelled_instances_endpoint(
+    client_code: str,
+    start: datetime = Query(..., description="タイムゾーン付き (例: 2026-11-01T00:00:00+09:00)"),
+    end: datetime = Query(..., description="タイムゾーン付き、start から最大366日"),
+    db: Session = Depends(get_db),
+):
+    """顧客に属する全業務の、取り消された予定の一覧（元に戻せるかどうか付き）。カレンダーには表示されない予定です。"""
+    return get_cancelled_instances(db=db, client_code=client_code, start=start, end=end)

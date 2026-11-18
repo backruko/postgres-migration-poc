@@ -1,0 +1,96 @@
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session
+
+from src.infrastructure.repositories.base import SoftCRUDBase
+from typing import Any
+
+from src.domain_biz.models import BizDependency, BizMaster, BizReleaseChange
+from src.domain_biz.schemas import BizMasterCreate, BizMasterUpdate
+from src.domain_staff.scope import ALL_CLIENTS, ClientScope
+
+class BizMasterRepository(SoftCRUDBase[BizMaster, BizMasterCreate, BizMasterUpdate]):
+    def get_list(
+        self, db: Session, *, client_code: str | None = None, include_deleted: bool = False, skip: int = 0, limit: int = 100,
+        scope: ClientScope = ALL_CLIENTS,
+    ) -> list[BizMaster]:
+        """業務の一覧（業務コード順）。顧客で絞れる。include_deleted=True で論理削除された業務も含める。scope の顧客だけ"""
+        stmt = (
+            select(BizMaster).where(scope.clause(BizMaster.client_code))
+            .order_by(BizMaster.business_code, BizMaster.id).offset(skip).limit(limit)
+        )
+        if client_code is not None:
+            stmt = stmt.where(BizMaster.client_code == client_code)
+        if include_deleted:
+            stmt = stmt.execution_options(include_deleted=True)
+        return list(db.scalars(stmt).all())
+
+    def max_business_seq(self, db: Session, *, client_code: str) -> int:
+        """顧客の業務連番の最大値（論理削除された業務も含む。業務コードは使い回さない）。業務が無ければ 0"""
+        stmt = (
+            select(func.coalesce(func.max(BizMaster.business_seq), 0))
+            .where(BizMaster.client_code == client_code)
+            .execution_options(include_deleted=True)
+        )
+        return int(db.scalar(stmt) or 0)
+
+    def count_alive_of_client(self, db: Session, *, client_code: str) -> int:
+        """顧客の（論理削除されていない）業務の数"""
+        stmt = select(func.count(BizMaster.id)).where(BizMaster.client_code == client_code, BizMaster.deleted_at.is_(None))
+        return int(db.scalar(stmt) or 0)
+
+
+
+class BizDependencyRepository:
+    """業務間の依存関係の定義。commit は Service 層で行います。"""
+
+    def get_for_biz(self, db: Session, *, biz_id: int) -> list[BizDependency]:
+        """その業務が上流または下流になっている定義"""
+        stmt = (
+            select(BizDependency)
+            .where(or_(BizDependency.upstream_biz_id == biz_id, BizDependency.downstream_biz_id == biz_id))
+            .order_by(BizDependency.id)
+        )
+        return list(db.scalars(stmt).all())
+
+    def get_for_client(self, db: Session, *, client_code: str) -> list[BizDependency]:
+        """顧客の業務どうしの定義（定義は同じ顧客の業務のみを結ぶ。論理削除された業務のものも含む）"""
+        stmt = (
+            select(BizDependency)
+            .join(BizMaster, BizMaster.id == BizDependency.downstream_biz_id)
+            .where(BizMaster.client_code == client_code)
+            .order_by(BizDependency.id)
+            .execution_options(include_deleted=True)
+        )
+        return list(db.scalars(stmt).all())
+
+    def get_pair(self, db: Session, *, upstream_biz_id: int, downstream_biz_id: int) -> BizDependency | None:
+        stmt = select(BizDependency).where(
+            BizDependency.upstream_biz_id == upstream_biz_id, BizDependency.downstream_biz_id == downstream_biz_id
+        )
+        return db.scalars(stmt).first()
+
+    def get_edges(self, db: Session) -> list[tuple[int, int]]:
+        """すべての定義の (上流, 下流)（循環の確認用）"""
+        return [(row[0], row[1]) for row in db.execute(select(BizDependency.upstream_biz_id, BizDependency.downstream_biz_id))]
+
+
+class BizReleaseChangeRepository:
+    """リリース設定の変更履歴（追記のみ）"""
+
+    def add(
+        self, db: Session, *, biz_id: int, changed_by_id: int | None, before: dict[str, Any], after: dict[str, Any],
+    ) -> BizReleaseChange:
+        """記録を足す（書き出しは呼び出し側のコミットで）"""
+        row = BizReleaseChange(biz_master_id=biz_id, changed_by_id=changed_by_id, before_values=before, after_values=after)
+        db.add(row)
+        return row
+
+    def list_for_biz(self, db: Session, *, biz_id: int) -> list[BizReleaseChange]:
+        """業務の変更履歴（新しい順）"""
+        stmt = select(BizReleaseChange).where(BizReleaseChange.biz_master_id == biz_id)
+        return list(db.scalars(stmt.order_by(BizReleaseChange.changed_at.desc(), BizReleaseChange.id.desc())).all())
+
+
+biz_master_repo = BizMasterRepository(BizMaster)
+biz_dependency_repo = BizDependencyRepository()
+biz_release_change_repo = BizReleaseChangeRepository()

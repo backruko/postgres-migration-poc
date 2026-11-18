@@ -1,0 +1,6 @@
+// client ドメインの型（OpenAPI から生成した型の別名）
+import type { components } from "../../../shared/api/schema.gen";
+
+export type Client = components["schemas"]["ClientResponse"];
+export type ClientCreate = components["schemas"]["ClientCreate"];
+export type ClientUpdate = components["schemas"]["ClientUpdate"];

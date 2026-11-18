@@ -1,0 +1,44 @@
+# Ruff（静的チェック）の設定。CI（.gitea/workflows/ci.yml）と開発 PC で同じものを使う:
+#   ruff check .
+# 有効にするのは、いま問題が 0 件の規則だけ（新しい問題だけが赤になる）。関数の複雑さ（C901）は、
+# 10 を超えていた関数をすべて分けてから足した（2026-11-17）。
+# 注意: 型の注釈の前方参照（後で定義するクラス）を引用符なしで書く（UP037）。Python 3.14 の注釈の遅延評価に
+# 頼るので、3.13 以前では import できない（アプリのイメージ・CI・開発 PC はどれも 3.14）。
+target-version = "py314"
+line-length = 120
+
+[lint]
+select = [
+    "F",    # 未使用の import・変数、未定義の名前など（pyflakes）
+    "E",    # PEP 8（pycodestyle のエラー）
+    "W",    # PEP 8（行末の空白など）
+    "B",    # 間違いやすい書き方（bugbear）
+    "SIM",  # 簡単にできる書き方
+    "PIE",
+    "RET",
+    "RUF",  # Ruff 独自の規則
+    "UP",   # 今の Python の書き方（X | None、list[...]、collections.abc、datetime.UTC など）
+    "C90",  # 関数の複雑さ（分かれ道の数）が max-complexity を超えたら赤。超えるなら、名前の付いた手順に分ける
+]
+ignore = [
+    "E501",    # 行の長さ: 日本語のコメント・説明が長い。折り返しは見た目の好みなので強制しない
+    "B008",    # 引数の既定値の関数呼び出し: FastAPI の Depends() / Query() はこの書き方
+    "B009",    # getattr(x, "名前"): 関数に後から付けた属性（__required_roles__ など）を pyright に通すため
+    "B010",    # setattr(x, "名前", …): 同上
+    "RUF001",  # 文字列・コメント・docstring の全角の記号（（）、：など）: 日本語なので正しい
+    "RUF002",
+    "RUF003",
+    "UP042",   # (str, Enum) → StrEnum: str() と書式の結果が変わる（値の表示・保存に効く）ので使わない
+    "UP046",   # Generic[T] → class X[T]: 書き方の好み。CRUDBase だけなので今のまま
+]
+
+[lint.mccabe]
+max-complexity = 10  # Ruff の既定と同じ値。変えるときに分かるよう書いておく
+
+[lint.per-file-ignores]
+# ログの設定を先にしてからアプリを import する（import のときのログもファイルに出すため）
+"main.py" = ["E402"]
+# pytest の fixture は名前で import して、引数の名前で受け取る（同じ名前の付け直しに見える）
+# テストの中の複雑さは問わない: 分ける前の関数を比べるために凍結した写し（_reference_refresh_order）と、
+# SMTP の偽物のサーバー（handle）は、手を入れずに残すほうが目的に合う
+"tests/**" = ["F811", "C901"]

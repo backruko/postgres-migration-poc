@@ -1,0 +1,60 @@
+; mfa 連携アダプターの設定（見本）。mfa_adapter.ini に写して使う。文字コードは UTF-8。
+; API キーはこのファイルに書かない: 環境変数（key_env）か、別のファイル（key_file）に置く。
+
+[api]
+; 新しいシステムの API（/api まで。末尾の / は不要）
+base_url = http://10.x.x.100/api
+; API キー（業務オーケストレーションの「職員」画面で、システム連携（読み取り）のアカウントに発行したもの）
+key_env = OPS_API_KEY
+; key_file = C:\ops_adapter\api_key.txt
+; 何日先まで書くか（1〜31）
+days = 30
+; 知らせる作業の分類（通常は変えない）
+categories = adhoc,special
+timeout_seconds = 60
+
+[output]
+; 書き出し先。並行稼働の間は、mfa が読む本物のファイルではなく、見比べるための別のフォルダーにする
+dir = D:\ops_adapter\out
+mfa_file = mfa.txt
+csv_file = access_check.csv
+; 書いたファイルの写し（日時つき）。照合の材料。空なら残さない
+archive_dir = D:\ops_adapter\archive
+archive_keep_days = 60
+
+[mfa]
+; 開始の時刻に鳴らす音（空なら Msg の行だけ）。例: E:\sound\gm\e_警報.wav
+sound =
+; 文面（{client} 顧客コード、{task} 予定名、{deadline} 締切（例: 11時 / 11:30 / 翌日9時）、{client_name} {biz_code} {biz_name} も使える）
+message = 【{client}】{task}を【{deadline}まで】に実施してください
+message_no_deadline = 【{client}】{task}を実施してください
+
+[parity]
+; 新旧の照合（parity_report.py）。相対のパスはこの設定ファイルの場所から
+; mfa がいま読んでいる旧の mfa.txt（毎晩、アダプターの写しの隣に legacy_mfa_YYYYMMDD_HHMMSS.txt として写す）
+legacy_file = D:\mfa\mfa.txt
+; 照合の結果（日ごとの CSV と要約、期間のまとめ）を書くフォルダー
+out_dir = D:\ops_adapter\parity
+; 別名の表（旧の顧客,旧の作業,新の顧客,新の作業）。まだ無くてもよい（最初の別名が要るときに作る）
+aliases = parity_aliases.csv
+; 一致とみなす開始の差（分）と、1 晩の写しが受け持つ時間（時間）。通常は変えない
+tolerance_minutes = 3
+hours = 24
+; アダプターの最新の写しがこれより古ければ「昨夜アダプターが動かなかった」として止める（時間）
+max_age_hours = 26
+
+[cutover]
+; 切り替え（deploy/GO-LIVE.md の J.）。並行稼働の間は false のまま（いままでどおり [output] にだけ書く）。
+; true にすると、Excel の txt を元に mfa が読む本物のファイルを組み立て（新しいシステムが出す知らせを置き換え、
+; Shell のスクリプト・音などはそのまま）、そのあと mfa に読み直させる。照合（[parity]）は組み合わせる前のものと見比べる
+enabled = false
+; 運用の担当が Excel から書き出して置く txt（J-2 で替えた置き場所。通信サーバーの上）。[parity] legacy_file もこれにする
+excel_file = D:\mfa\excel\mfa.txt
+; mfa が読む本物のファイル（組み合わせた結果を書く）。配置のときに通信サーバーの本当の場所を書く
+live_file = D:\mfa\mfa.txt
+; mfa の場所。書いたあとに「mfa_exe reload_args」で読み直させる。空なら読み直さない（手で MFA.exe /R）
+mfa_exe = D:\mfa\MFA.exe
+reload_args = /R
+; 読み直す分の前後に、行が無いこと（分）と、そういう分を待つ上限（分。過ぎたら読み直さず、終了コード 7）
+quiet_minutes = 2
+max_wait_minutes = 30

@@ -1,0 +1,58 @@
+from typing import TYPE_CHECKING
+
+from sqlalchemy import create_engine, event, false
+from sqlalchemy.orm import DeclarativeBase, Mapped, sessionmaker, with_loader_criteria
+
+from src.infrastructure.config import settings
+from src.core.mixin import SoftDeleteMixin
+
+
+# データベースエンジンの作成（SQL のログは SQL_ECHO で切り替える。既定はオフ）
+# pool_pre_ping: プールの接続を貸す前に確かめ、データベースの再起動などで切れていれば張り直す
+# （確かめないと、再起動のあと最初の要求が接続ごとに 500 になる。代わりに貸すたびに 1 往復増える）
+engine = create_engine(settings.database_url, echo=settings.sql_echo, pool_pre_ping=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# 全てのモデルの親となる基本クラス
+class Base(DeclarativeBase):
+    # 全モデルが id を持つ前提を型チェッカーに伝える（実行時にはカラムを追加しない）
+    if TYPE_CHECKING:
+        id: Mapped[int]
+
+# ==========================================
+# 【追加】全局scope（グローバルフィルター）の制御コード
+# ==========================================
+@event.listens_for(SessionLocal, "do_orm_execute")
+def _add_soft_delete_filter(execute_state):
+    """
+    全てのSQL実行時に割り込み、論理削除されたデータを自動で除外するフィルターを挟みます。
+    ただし、`.execution_options(include_deleted=True)` が指定されている場合はスキップします。
+    """
+    from src.domain_biz.models import BizMaster, SOPVersion
+
+    # 復元処理（Restore）など、明示的に解除オプションが指定されていないかチェック
+    if not execute_state.execution_options.get("include_deleted", False):
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(
+                SoftDeleteMixin,                 # 対象となるMixin
+                # 自動適用する条件式（== false() は SQL の「= false」。.is_(False) の「IS false」とは別の式になる）
+                lambda cls: cls.is_deleted == false(),
+                include_aliases=True
+            )
+        )
+    # SOPVersionのクエリ時、親が消えているものを自動で除外するスコープ
+        # これにより、SOPVersion単体を取得しようとしても、親が消えていればNoneになります
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(
+                SOPVersion,
+                lambda cls: cls.biz_master.has(BizMaster.is_deleted == false()),
+                include_aliases=True
+            )
+        )
+# FastAPI用のDBセッション取得関数
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

@@ -1,0 +1,727 @@
+# src/infrastructure/repositories/Plan.py
+"""
+domain_plan 用のリポジトリ群。
+
+※ 生成・無効化・キャッシュ更新は「1つのトランザクションで全部成功 or 全部失敗」が必要なため、
+  ここに追加したメソッドは commit せず flush のみ行います。commit は Service 層で1回だけ行います。
+"""
+from datetime import date, datetime
+from typing import Any
+from collections.abc import Iterable, Sequence
+
+from pydantic import BaseModel
+from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy.orm import Session, aliased
+
+from src.core.error_codes import ErrorCode
+from src.domain_biz.models import BizMaster
+from src.core.exceptions import BadRequestError
+from src.domain_plan import slot_events
+from src.domain_plan.engine import Occurrence
+from src.domain_plan.models import (
+    BusinessCalendar,
+    BusinessCalendarHoliday,
+    InstanceOrigin,
+    PlanExplicitDate,
+    PlanInstance,
+    PlanInstanceVoid,
+    PlanOccurrenceCache,
+    PlanSlotRelease,
+    PlanTemplate,
+    PlanTemplateChange,
+    ReferenceSheet,
+    ReferenceSheetEvent,
+    ReferenceSheetMarker,
+    TemplateChangeStatus,
+    VoidReason,
+    merge_ui_metadata,
+)
+from src.domain_plan.schemas import PlanTemplateUpdate
+from src.infrastructure.repositories.base import CRUDBase, SoftCRUDBase
+from src.domain_staff.scope import ALL_CLIENTS, ClientScope
+
+
+# ==========================================
+#  BusinessCalendar Repository
+# ==========================================
+class BusinessCalendarRepository(CRUDBase[BusinessCalendar, BaseModel, BaseModel]):
+
+    def get_by_code(self, db: Session, *, code: str) -> BusinessCalendar | None:
+        return db.scalars(select(self.model).where(self.model.code == code)).first()
+
+    def get_all(self, db: Session) -> list[BusinessCalendar]:
+        return list(db.scalars(select(self.model).order_by(self.model.code)).all())
+
+    def get_holidays(
+        self, db: Session, *, calendar_id: int, start: date | None = None, end: date | None = None
+    ) -> list[BusinessCalendarHoliday]:
+        stmt = select(BusinessCalendarHoliday).where(BusinessCalendarHoliday.calendar_id == calendar_id)
+        if start is not None:
+            stmt = stmt.where(BusinessCalendarHoliday.holiday_date >= start)
+        if end is not None:
+            stmt = stmt.where(BusinessCalendarHoliday.holiday_date <= end)
+        return list(db.scalars(stmt.order_by(BusinessCalendarHoliday.holiday_date)).all())
+
+    def get_holiday_dates(self, db: Session, *, calendar_id: int) -> set[date]:
+        stmt = select(BusinessCalendarHoliday.holiday_date).where(BusinessCalendarHoliday.calendar_id == calendar_id)
+        return set(db.scalars(stmt).all())
+
+
+# ==========================================
+#  ReferenceSheet Repository
+# ==========================================
+class ReferenceSheetRepository(CRUDBase[ReferenceSheet, BaseModel, BaseModel]):
+
+    def get_by_client(self, db: Session, *, client_code: str) -> list[ReferenceSheet]:
+        stmt = select(self.model).where(self.model.client_code == client_code).order_by(self.model.period_start)
+        return list(db.scalars(stmt).all())
+
+    def get_by_client_and_name(self, db: Session, *, client_code: str, name: str) -> ReferenceSheet | None:
+        stmt = select(self.model).where(self.model.client_code == client_code, self.model.name == name)
+        return db.scalars(stmt).first()
+
+    def get_marker(self, db: Session, *, sheet_id: int, marker: str) -> ReferenceSheetMarker | None:
+        stmt = select(ReferenceSheetMarker).where(
+            ReferenceSheetMarker.sheet_id == sheet_id,
+            ReferenceSheetMarker.marker == marker,
+        )
+        return db.scalars(stmt).first()
+
+    def get_generated_markers_by_calendar(self, db: Session, *, calendar_id: int) -> list[ReferenceSheetMarker]:
+        stmt = select(ReferenceSheetMarker).where(
+            ReferenceSheetMarker.business_calendar_id == calendar_id, ReferenceSheetMarker.rrule.is_not(None)
+        )
+        return list(db.scalars(stmt.order_by(ReferenceSheetMarker.id)).all())
+
+    def get_event(self, db: Session, *, event_id: int) -> ReferenceSheetEvent | None:
+        stmt = select(ReferenceSheetEvent).where(ReferenceSheetEvent.id == event_id)
+        return db.scalars(stmt).first()
+
+    def get_event_dates(self, db: Session, *, sheet_id: int, marker: str) -> list[tuple[int, date]]:
+        """(sheet_id, marker) に紐づく日付を (event_id, event_date) で返します（エンジン入力用）"""
+        stmt = (
+            select(ReferenceSheetEvent.id, ReferenceSheetEvent.event_date)
+            .join(ReferenceSheetMarker, ReferenceSheetEvent.marker_id == ReferenceSheetMarker.id)
+            .where(
+                ReferenceSheetMarker.sheet_id == sheet_id,
+                ReferenceSheetMarker.marker == marker,
+                ReferenceSheetEvent.is_cancelled.is_(False),  # 人が取り消した生成日は除外
+            )
+        )
+        return [(row.id, row.event_date) for row in db.execute(stmt)]
+
+    def get_events_on(
+        self, db: Session, *, day: date, include_cancelled: bool, scope: ClientScope = ALL_CLIENTS,
+    ) -> list[tuple[ReferenceSheetEvent, ReferenceSheetMarker, ReferenceSheet]]:
+        """全顧客（scope の顧客）のシートの、指定日の日付を返します（顧客コード・シート名・マーカー順）"""
+        stmt = (
+            select(ReferenceSheetEvent, ReferenceSheetMarker, ReferenceSheet)
+            .join(ReferenceSheetMarker, ReferenceSheetMarker.id == ReferenceSheetEvent.marker_id)
+            .join(ReferenceSheet, ReferenceSheet.id == ReferenceSheetMarker.sheet_id)
+            .where(ReferenceSheetEvent.event_date == day, scope.clause(ReferenceSheet.client_code))
+            .order_by(ReferenceSheet.client_code, ReferenceSheet.name, ReferenceSheetMarker.marker, ReferenceSheetEvent.id)
+        )
+        if not include_cancelled:
+            stmt = stmt.where(ReferenceSheetEvent.is_cancelled.is_(False))
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
+
+# ==========================================
+#  PlanTemplate Repository
+# ==========================================
+class PlanTemplateRepository(SoftCRUDBase[PlanTemplate, BaseModel, PlanTemplateUpdate]):
+
+    def get_locked(self, db: Session, *, id: int, include_deleted: bool = False) -> PlanTemplate | None:
+        """
+        行ロック付きで取得します（同時マテリアライズによる二重生成を防ぐため）。
+        populate_existing により、セッション内の古い値もロック取得後の最新値で上書きします。
+        """
+        stmt = (
+            select(self.model)
+            .where(self.model.id == id)
+            .with_for_update()
+            .execution_options(populate_existing=True, include_deleted=include_deleted)
+        )
+        return db.scalars(stmt).first()
+
+    def get_including_deleted(self, db: Session, *, id: int) -> PlanTemplate | None:
+        stmt = select(self.model).where(self.model.id == id).execution_options(include_deleted=True)
+        return db.scalars(stmt).first()
+
+    def get_by_biz(self, db: Session, *, biz_master_id: int) -> list[PlanTemplate]:
+        stmt = select(self.model).where(self.model.biz_master_id == biz_master_id).order_by(self.model.id)
+        return list(db.scalars(stmt).all())
+
+    def get_by_client(self, db: Session, *, client_code: str) -> list[PlanTemplate]:
+        """顧客に属する全業務の有効なテンプレート（論理削除された業務・テンプレートは全局scopeで除外）"""
+        stmt = (
+            select(self.model)
+            .join(BizMaster, BizMaster.id == self.model.biz_master_id)
+            .where(BizMaster.client_code == client_code)
+            .order_by(self.model.id)
+        )
+        return list(db.scalars(stmt).all())
+
+    def get_by_client_with_biz(self, db: Session, *, client_code: str) -> list[tuple[PlanTemplate, str, str]]:
+        """顧客に属する全業務の有効なテンプレート（業務コード・業務名付き）"""
+        stmt = (
+            select(self.model, BizMaster.business_code, BizMaster.name)
+            .join(BizMaster, BizMaster.id == self.model.biz_master_id)
+            .where(BizMaster.client_code == client_code)
+            .order_by(BizMaster.business_code, self.model.id)
+        )
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
+    def get_all(self, db: Session) -> list[PlanTemplate]:
+        """全顧客の有効なテンプレート（論理削除された業務・テンプレートは全局scopeで除外）"""
+        stmt = (
+            select(self.model)
+            .join(BizMaster, BizMaster.id == self.model.biz_master_id)
+            .order_by(self.model.id)
+        )
+        return list(db.scalars(stmt).all())
+
+    def get_by_sheet_marker(self, db: Session, *, sheet_id: int, marker: str | None = None) -> list[PlanTemplate]:
+        """シート（とマーカー）を参照している有効なテンプレートを行ロック付きで取得します"""
+        stmt = select(self.model).where(self.model.reference_sheet_id == sheet_id)
+        if marker is not None:
+            stmt = stmt.where(self.model.reference_event_marker == marker)
+        return list(db.scalars(stmt.order_by(self.model.id).with_for_update()).all())
+
+    def get_deleted_by_sheet_marker(self, db: Session, *, sheet_id: int, marker: str) -> list[PlanTemplate]:
+        """シートのマーカーを参照している削除済みのテンプレート（復元できるため、マーカーを消せない理由になる）"""
+        stmt = (
+            select(self.model)
+            .where(self.model.reference_sheet_id == sheet_id, self.model.reference_event_marker == marker,
+                   self.model.is_deleted.is_(True))
+            .order_by(self.model.id)
+            .execution_options(include_deleted=True)
+        )
+        return list(db.scalars(stmt).all())
+
+    def get_by_calendar(self, db: Session, *, calendar_id: int) -> list[PlanTemplate]:
+        """営業日カレンダーを使用している有効なテンプレートを行ロック付きで取得します"""
+        stmt = select(self.model).where(self.model.business_calendar_id == calendar_id)
+        return list(db.scalars(stmt.order_by(self.model.id).with_for_update()).all())
+
+    def add_explicit_dates(self, db: Session, *, template: PlanTemplate, dates: Iterable[date]) -> int:
+        """未登録の日付だけを追加し、追加件数を返します"""
+        existing = {d.local_date for d in template.explicit_dates}
+        new_dates = sorted(set(dates) - existing)
+        for d in new_dates:
+            template.explicit_dates.append(PlanExplicitDate(local_date=d))
+        db.flush()
+        return len(new_dates)
+
+    def remove_explicit_date(self, db: Session, *, template: PlanTemplate, local_date: date) -> bool:
+        target = next((d for d in template.explicit_dates if d.local_date == local_date), None)
+        if target is None:
+            return False
+        template.explicit_dates.remove(target)
+        db.flush()
+        return True
+
+
+# ==========================================
+#  PlanInstance Repository（不変）
+# ==========================================
+class PlanInstanceRepository(CRUDBase[PlanInstance, BaseModel, BaseModel]):
+
+    def update(self, db: Session, *, db_obj: PlanInstance, obj_in: Any) -> PlanInstance:
+        raise BadRequestError("PlanInstance is immutable. Void it instead.", error_code=ErrorCode.IMMUTABLE_RECORD)
+
+    def remove(self, db: Session, *, id: int) -> PlanInstance | None:
+        raise BadRequestError("PlanInstance is immutable. Void it instead.", error_code=ErrorCode.IMMUTABLE_RECORD)
+
+    def _live_stmt(self, template_id: int):
+        return (
+            select(PlanInstance)
+            .outerjoin(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .where(PlanInstance.template_id == template_id, PlanInstanceVoid.instance_id.is_(None))
+        )
+
+    def get_live_in_window(
+        self, db: Session, *, template_id: int, lower: datetime, upper: datetime, generated_only: bool = False
+    ) -> list[PlanInstance]:
+        """
+        :param generated_only: True の場合、ルールから生成されたものだけを返します（手動変更・単発追加を除外）
+        """
+        stmt = self._live_stmt(template_id).where(
+            PlanInstance.scheduled_start >= lower, PlanInstance.scheduled_start < upper
+        )
+        if generated_only:
+            stmt = stmt.where(PlanInstance.origin == InstanceOrigin.GENERATED)
+        return list(db.scalars(stmt).all())
+
+    def get_live_started(
+        self, db: Session, *, template_id: int, before: datetime, occurrence_dates: list[date], sheet_event_ids: list[int]
+    ) -> list[PlanInstance]:
+        """
+        before より前に始まった有効なインスタンスのうち、指定した発生枠（ルール上の日付、またはシート日付の行）のもの。
+        もう始まった発生枠を、再照合でもう一度作らないために使います。
+        """
+        if not occurrence_dates and not sheet_event_ids:
+            return []
+        stmt = self._live_stmt(template_id).where(
+            PlanInstance.scheduled_start < before,
+            or_(
+                and_(PlanInstance.source_sheet_event_id.is_(None), PlanInstance.occurrence_date.in_(occurrence_dates)),
+                PlanInstance.source_sheet_event_id.in_(sheet_event_ids),
+            ),
+        )
+        return list(db.scalars(stmt).all())
+
+    def get_with_void(self, db: Session, *, id: int) -> tuple[PlanInstance, PlanInstanceVoid | None] | None:
+        stmt = (
+            select(PlanInstance, PlanInstanceVoid)
+            .outerjoin(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .where(PlanInstance.id == id)
+        )
+        row = db.execute(stmt).first()
+        return (row[0], row[1]) if row else None
+
+    def get_manual_history(self, db: Session, *, template_id: int) -> list[tuple[PlanInstance, PlanInstanceVoid | None]]:
+        """手動操作に関わるインスタンス（MANUAL で無効化されたもの・手動で作られたもの）を返します"""
+        stmt = (
+            select(PlanInstance, PlanInstanceVoid)
+            .outerjoin(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .where(
+                PlanInstance.template_id == template_id,
+                (PlanInstanceVoid.reason == VoidReason.MANUAL) | (PlanInstance.origin != InstanceOrigin.GENERATED),
+            )
+        )
+        return [(row[0], row[1]) for row in db.execute(stmt)]
+
+    def get_cancelled_for_client(
+        self, db: Session, *, client_code: str, start: datetime, end: datetime
+    ) -> list[tuple[PlanInstance, PlanInstanceVoid, PlanTemplate, str, str]]:
+        """
+        顧客の「取り消された予定」（MANUAL で無効化され、置き換えのオーバーライドが無いもの）を開始時刻順に返します。
+        置き換えがあるもの（=日時を変更した元の予定）は取消ではないため含めません。
+        論理削除された業務・テンプレートの予定は全局scopeで除外されます。
+        """
+        child = aliased(PlanInstance)
+        stmt = (
+            select(PlanInstance, PlanInstanceVoid, PlanTemplate, BizMaster.business_code, BizMaster.name)
+            .join(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .join(PlanTemplate, PlanTemplate.id == PlanInstance.template_id)
+            .join(BizMaster, BizMaster.id == PlanTemplate.biz_master_id)
+            .outerjoin(child, child.overrides_instance_id == PlanInstance.id)
+            .where(
+                BizMaster.client_code == client_code,
+                PlanInstanceVoid.reason == VoidReason.MANUAL,
+                child.id.is_(None),
+                PlanInstance.scheduled_start >= start,
+                PlanInstance.scheduled_start < end,
+            )
+            .order_by(PlanInstance.scheduled_start, PlanInstance.id)
+        )
+        return [(row[0], row[1], row[2], row[3], row[4]) for row in db.execute(stmt)]
+
+    def get_voided_starting_in(
+        self, db: Session, *, start: datetime, end: datetime, scope: ClientScope = ALL_CLIENTS,
+    ) -> list[tuple[PlanInstance, PlanInstanceVoid, PlanTemplate, BizMaster]]:
+        """
+        全顧客の、範囲内に開始する予定だった無効化済みインスタンスを開始時刻順に返します（理由付き）。
+        削除されたテンプレートの予定も履歴として含めます（論理削除された業務の予定は含めません）。
+        """
+        stmt = (
+            select(PlanInstance, PlanInstanceVoid, PlanTemplate, BizMaster)
+            .join(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .join(PlanTemplate, PlanTemplate.id == PlanInstance.template_id)
+            .join(BizMaster, BizMaster.id == PlanTemplate.biz_master_id)
+            .where(
+                BizMaster.is_deleted.is_(False),
+                PlanInstance.scheduled_start >= start,
+                PlanInstance.scheduled_start < end,
+                scope.clause(BizMaster.client_code),
+            )
+            .order_by(PlanInstance.scheduled_start, PlanInstance.id)
+            .execution_options(include_deleted=True)
+        )
+        return [(row[0], row[1], row[2], row[3]) for row in db.execute(stmt)]
+
+    def get_override_child(self, db: Session, *, instance_id: int) -> PlanInstance | None:
+        """このインスタンスを置き換えたオーバーライド（あれば）"""
+        stmt = select(PlanInstance).where(PlanInstance.overrides_instance_id == instance_id)
+        return db.scalars(stmt).first()
+
+    def add_override(
+        self,
+        db: Session,
+        *,
+        template: PlanTemplate,
+        original: PlanInstance,
+        start: datetime,
+        end: datetime,
+        ui_metadata: dict[str, Any] | None,
+    ) -> PlanInstance:
+        """元インスタンスと同じ発生枠を引き継いだ、手動オーバーライドのインスタンスを作成します"""
+        instance = PlanInstance(
+            template_id=template.id,
+            template_revision=template.revision,
+            origin=InstanceOrigin.OVERRIDE,
+            scheduled_start=start,
+            scheduled_end=end,
+            source_sheet_event_id=original.source_sheet_event_id,
+            occurrence_date=original.occurrence_date,
+            overrides_instance_id=original.id,
+            ui_metadata=ui_metadata,
+        )
+        db.add(instance)
+        db.flush()
+        slot_events.record_created(db, [instance])
+        return instance
+
+    def add_one_off(
+        self,
+        db: Session,
+        *,
+        template: PlanTemplate,
+        start: datetime,
+        end: datetime,
+        occurrence_date: date,
+        ui_metadata: dict[str, Any] | None,
+    ) -> PlanInstance:
+        """発生枠に紐づかない単発のインスタンスを作成します"""
+        instance = PlanInstance(
+            template_id=template.id,
+            template_revision=template.revision,
+            origin=InstanceOrigin.ONE_OFF,
+            scheduled_start=start,
+            scheduled_end=end,
+            occurrence_date=occurrence_date,
+            ui_metadata=ui_metadata,
+        )
+        db.add(instance)
+        db.flush()
+        slot_events.record_created(db, [instance])
+        return instance
+
+    def get_live_by_template(self, db: Session, *, template_id: int) -> list[PlanInstance]:
+        return list(db.scalars(self._live_stmt(template_id)).all())
+
+    def add_many(self, db: Session, *, template: PlanTemplate, occurrences: Sequence[Occurrence]) -> list[PlanInstance]:
+        instances = [
+            PlanInstance(
+                template_id=template.id,
+                template_revision=template.revision,
+                origin=InstanceOrigin.GENERATED,
+                scheduled_start=o.start,
+                scheduled_end=o.end,
+                source_sheet_event_id=o.source_sheet_event_id,
+                occurrence_date=o.occurrence_date,
+            )
+            for o in occurrences
+        ]
+        db.add_all(instances)
+        db.flush()
+        slot_events.record_created(db, instances)
+        return instances
+
+    def get_with_void_status(
+        self, db: Session, *, template_id: int, skip: int = 0, limit: int = 100
+    ) -> list[tuple[PlanInstance, PlanInstanceVoid | None]]:
+        stmt = (
+            select(PlanInstance, PlanInstanceVoid)
+            .outerjoin(PlanInstanceVoid, PlanInstanceVoid.instance_id == PlanInstance.id)
+            .where(PlanInstance.template_id == template_id)
+            .order_by(PlanInstance.scheduled_start, PlanInstance.id)
+            .offset(skip)
+            .limit(limit)
+        )
+        return [(row[0], row[1]) for row in db.execute(stmt)]
+
+
+# ==========================================
+#  PlanInstanceVoid Repository（追記のみ）
+# ==========================================
+class PlanInstanceVoidRepository:
+
+    def void_many(
+        self, db: Session, *, instance_ids: Sequence[int], reason: VoidReason, note: str | None = None
+    ) -> None:
+        db.add_all(PlanInstanceVoid(instance_id=i, reason=reason, note=note) for i in instance_ids)
+        db.flush()
+        slot_events.record_voided(db, list(instance_ids), reason)
+
+
+# ==========================================
+#  PlanSlotRelease Repository（追記のみ）
+# ==========================================
+class PlanSlotReleaseRepository:
+
+    def get_released_root_ids(self, db: Session, *, template_id: int) -> set[int]:
+        stmt = select(PlanSlotRelease.root_instance_id).where(PlanSlotRelease.template_id == template_id)
+        return set(db.scalars(stmt).all())
+
+    def exists(self, db: Session, *, root_instance_id: int) -> bool:
+        stmt = select(PlanSlotRelease.root_instance_id).where(PlanSlotRelease.root_instance_id == root_instance_id)
+        return db.scalars(stmt).first() is not None
+
+    def add(self, db: Session, *, root_instance_id: int, template_id: int, note: str | None) -> None:
+        db.add(PlanSlotRelease(root_instance_id=root_instance_id, template_id=template_id, note=note))
+        db.flush()
+
+
+# ==========================================
+#  PlanOccurrenceCache Repository（シャドウテーブル）
+# ==========================================
+class PlanOccurrenceCacheRepository:
+
+    def add_for_instances(self, db: Session, *, template: PlanTemplate, instances: Sequence[PlanInstance]) -> None:
+        db.add_all(
+            PlanOccurrenceCache(
+                instance_id=i.id,
+                template_id=template.id,
+                biz_master_id=template.biz_master_id,
+                title=template.name,
+                starts_at=i.scheduled_start,
+                ends_at=i.scheduled_end,
+                is_override=i.origin == InstanceOrigin.OVERRIDE,
+                origin=i.origin,
+                ui_metadata=merge_ui_metadata(template.ui_metadata, i.ui_metadata),
+            )
+            for i in instances
+        )
+        db.flush()
+
+    def purge(self, db: Session, *, instance_ids: Sequence[int]) -> None:
+        if instance_ids:
+            db.execute(delete(PlanOccurrenceCache).where(PlanOccurrenceCache.instance_id.in_(instance_ids)))
+
+    def purge_template(self, db: Session, *, template_id: int) -> None:
+        db.execute(delete(PlanOccurrenceCache).where(PlanOccurrenceCache.template_id == template_id))
+
+    def refresh_ui_metadata(self, db: Session, *, template: PlanTemplate) -> None:
+        """テンプレートの表示用メタデータ変更後、そのテンプレートのキャッシュ行の実効値を再計算します"""
+        stmt = (
+            select(PlanOccurrenceCache, PlanInstance.ui_metadata)
+            .join(PlanInstance, PlanInstance.id == PlanOccurrenceCache.instance_id)
+            .where(PlanOccurrenceCache.template_id == template.id)
+        )
+        for cache, instance_meta in db.execute(stmt):
+            cache.ui_metadata = merge_ui_metadata(template.ui_metadata, instance_meta)
+        db.flush()
+
+    def rename_template(self, db: Session, *, template_id: int, title: str) -> None:
+        db.execute(
+            update(PlanOccurrenceCache).where(PlanOccurrenceCache.template_id == template_id).values(title=title)
+        )
+
+    def query_range(
+        self, db: Session, *, biz_master_id: int, start: datetime, end: datetime
+    ) -> list[PlanOccurrenceCache]:
+        """GiSTインデックス（period &&）による重なり検索"""
+        stmt = (
+            select(PlanOccurrenceCache)
+            .where(
+                PlanOccurrenceCache.biz_master_id == biz_master_id,
+                PlanOccurrenceCache.period.op("&&")(func.tstzrange(start, end, "[)")),
+            )
+            .order_by(PlanOccurrenceCache.starts_at, PlanOccurrenceCache.instance_id)
+        )
+        return list(db.scalars(stmt).all())
+
+    def query_range_for_client(
+        self, db: Session, *, client_code: str, start: datetime, end: datetime
+    ) -> list[tuple[PlanOccurrenceCache, str, str]]:
+        """
+        顧客に属する全業務の予定を重なり検索します（業務コード・業務名付き）。
+        論理削除された業務は全局scopeで除外されます。
+        """
+        stmt = (
+            select(PlanOccurrenceCache, BizMaster.business_code, BizMaster.name)
+            .join(BizMaster, BizMaster.id == PlanOccurrenceCache.biz_master_id)
+            .where(
+                BizMaster.client_code == client_code,
+                PlanOccurrenceCache.period.op("&&")(func.tstzrange(start, end, "[)")),
+            )
+            .order_by(PlanOccurrenceCache.starts_at, BizMaster.business_code, PlanOccurrenceCache.instance_id)
+        )
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
+    def next_starts(self, db: Session, *, template_ids: Sequence[int], after: datetime) -> dict[int, datetime]:
+        """テンプレートごとの、after 以降に開始する最初の有効な予定の開始日時（無いテンプレートは含めない）"""
+        if not template_ids:
+            return {}
+        stmt = (
+            select(PlanOccurrenceCache.template_id, func.min(PlanOccurrenceCache.starts_at))
+            .where(PlanOccurrenceCache.template_id.in_(template_ids), PlanOccurrenceCache.starts_at >= after)
+            .group_by(PlanOccurrenceCache.template_id)
+        )
+        return {row[0]: row[1] for row in db.execute(stmt)}
+
+    def starts_for_template(self, db: Session, *, template_id: int, start: datetime, end: datetime) -> list[tuple[datetime, int]]:
+        """テンプレートの、範囲内に開始する有効な予定の (開始日時, インスタンス ID)（開始順）"""
+        stmt = (
+            select(PlanOccurrenceCache.starts_at, PlanOccurrenceCache.instance_id)
+            .where(
+                PlanOccurrenceCache.template_id == template_id,
+                PlanOccurrenceCache.starts_at >= start,
+                PlanOccurrenceCache.starts_at < end,
+            )
+            .order_by(PlanOccurrenceCache.starts_at, PlanOccurrenceCache.instance_id)
+        )
+        return [(row[0], row[1]) for row in db.execute(stmt)]
+
+    def query_starting_in(
+        self, db: Session, *, start: datetime, end: datetime, scope: ClientScope = ALL_CLIENTS,
+    ) -> list[tuple[PlanOccurrenceCache, PlanInstance, BizMaster]]:
+        """
+        全顧客の、範囲内に開始する予定を返します（発生枠の日付・算出元のためインスタンス、業務付き）。
+        論理削除された業務は全局scopeで除外されます。
+        """
+        stmt = (
+            select(PlanOccurrenceCache, PlanInstance, BizMaster)
+            .join(PlanInstance, PlanInstance.id == PlanOccurrenceCache.instance_id)
+            .join(BizMaster, BizMaster.id == PlanOccurrenceCache.biz_master_id)
+            .where(
+                PlanOccurrenceCache.period.op("&&")(func.tstzrange(start, end, "[)")),
+                PlanOccurrenceCache.starts_at >= start,
+                PlanOccurrenceCache.starts_at < end,
+                scope.clause(BizMaster.client_code),
+            )
+            .order_by(PlanOccurrenceCache.starts_at, PlanOccurrenceCache.instance_id)
+        )
+        return [(row[0], row[1], row[2]) for row in db.execute(stmt)]
+
+
+# ==========================================
+#  PlanTemplateChange Repository（テンプレートの変更依頼: 下書き・承認・履歴）
+# ==========================================
+class PlanTemplateChangeRepository:
+
+    def add(self, db: Session, *, change: PlanTemplateChange) -> PlanTemplateChange:
+        """追加して flush します（承認待ちの重複は一意インデックスで IntegrityError になる）"""
+        db.add(change)
+        db.flush()
+        return change
+
+    def get(self, db: Session, *, id: int) -> PlanTemplateChange | None:
+        return db.get(PlanTemplateChange, id)
+
+    def get_locked(self, db: Session, *, id: int) -> PlanTemplateChange | None:
+        """行ロック付きで取得します（承認と取り下げ・修正が同時に走らないように）"""
+        stmt = (
+            select(PlanTemplateChange)
+            .where(PlanTemplateChange.id == id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return db.scalars(stmt).first()
+
+    def get_draft_for_template(self, db: Session, *, template_id: int) -> PlanTemplateChange | None:
+        """そのテンプレートの承認待ちの下書き（あれば 1 件）"""
+        stmt = select(PlanTemplateChange).where(
+            PlanTemplateChange.template_id == template_id,
+            PlanTemplateChange.status == TemplateChangeStatus.DRAFT,
+        )
+        return db.scalars(stmt).first()
+
+    def get_draft_template_ids(self, db: Session, *, template_ids: Sequence[int]) -> dict[int, int]:
+        """承認待ちの下書きがあるテンプレート → 下書きの id（一覧に「承認待ち」を付ける用）"""
+        if not template_ids:
+            return {}
+        stmt = select(PlanTemplateChange.template_id, PlanTemplateChange.id).where(
+            PlanTemplateChange.template_id.in_(template_ids),
+            PlanTemplateChange.status == TemplateChangeStatus.DRAFT,
+        )
+        return {template_id: change_id for template_id, change_id in db.execute(stmt) if template_id is not None}
+
+    def get_drafts_naming_marker(self, db: Session, *, sheet_id: int, marker: str) -> list[PlanTemplateChange]:
+        """
+        承認待ちの下書きのうち、本文でこのシートのマーカーを指すもの（新規作成・変更）。
+        マーカーの名前の変更・削除で、承認のときに無い名前を指さないよう断るため
+        """
+        stmt = select(PlanTemplateChange).where(
+            PlanTemplateChange.status == TemplateChangeStatus.DRAFT,
+            PlanTemplateChange.changes["reference_sheet_id"].as_integer() == sheet_id,
+            PlanTemplateChange.changes["reference_event_marker"].as_string() == marker,
+        )
+        return list(db.scalars(stmt.order_by(PlanTemplateChange.id)).all())
+
+    def get_drafts(self, db: Session, *, biz_master_id: int | None = None) -> list[PlanTemplateChange]:
+        """承認待ちの下書き（古い順）。biz_master_id を省くと全業務"""
+        stmt = select(PlanTemplateChange).where(PlanTemplateChange.status == TemplateChangeStatus.DRAFT)
+        if biz_master_id is not None:
+            stmt = stmt.where(PlanTemplateChange.biz_master_id == biz_master_id)
+        return list(db.scalars(stmt.order_by(PlanTemplateChange.drafted_at, PlanTemplateChange.id)).all())
+
+    def count_drafts(self, db: Session) -> int:
+        """承認待ちの件数（メニューのバッジ用）"""
+        stmt = select(func.count()).select_from(PlanTemplateChange).where(
+            PlanTemplateChange.status == TemplateChangeStatus.DRAFT
+        )
+        return db.scalar(stmt) or 0
+
+    def _filtered(self, stmt, *, status, biz_master_id, template_id, drafted_by_id, scope: ClientScope = ALL_CLIENTS):
+        if scope.limited:
+            # 業務の顧客で絞る。表の列で引く（ORM の BizMaster だと論理削除の全局フィルタが掛かり、削除した業務の記録が消えるため）
+            biz = BizMaster.__table__
+            stmt = stmt.where(PlanTemplateChange.biz_master_id.in_(select(biz.c.id).where(scope.clause(biz.c.client_code))))
+        if status is not None:
+            stmt = stmt.where(PlanTemplateChange.status == status)
+        if biz_master_id is not None:
+            stmt = stmt.where(PlanTemplateChange.biz_master_id == biz_master_id)
+        if template_id is not None:
+            stmt = stmt.where(PlanTemplateChange.template_id == template_id)
+        if drafted_by_id is not None:
+            stmt = stmt.where(PlanTemplateChange.drafted_by_id == drafted_by_id)
+        return stmt
+
+    def get_list(
+        self, db: Session, *, status: TemplateChangeStatus | None = None, biz_master_id: int | None = None,
+        template_id: int | None = None, drafted_by_id: int | None = None, limit: int = 100, scope: ClientScope = ALL_CLIENTS,
+    ) -> list[PlanTemplateChange]:
+        """
+        変更依頼の一覧。承認待ち（status=DRAFT）は古い順（承認の順番待ち）、それ以外は新しい順
+        （決まった日時、承認待ちは書いた日時）。
+        """
+        stmt = self._filtered(
+            select(PlanTemplateChange), status=status, biz_master_id=biz_master_id, template_id=template_id,
+            drafted_by_id=drafted_by_id, scope=scope,
+        )
+        if status == TemplateChangeStatus.DRAFT:
+            stmt = stmt.order_by(PlanTemplateChange.drafted_at, PlanTemplateChange.id)
+        else:
+            stmt = stmt.order_by(
+                func.coalesce(PlanTemplateChange.decided_at, PlanTemplateChange.drafted_at).desc(),
+                PlanTemplateChange.id.desc(),
+            )
+        return list(db.scalars(stmt.limit(limit)).all())
+
+    def count(
+        self, db: Session, *, status: TemplateChangeStatus | None = None, biz_master_id: int | None = None,
+        template_id: int | None = None, drafted_by_id: int | None = None, scope: ClientScope = ALL_CLIENTS,
+    ) -> int:
+        stmt = self._filtered(
+            select(func.count()).select_from(PlanTemplateChange), status=status, biz_master_id=biz_master_id,
+            template_id=template_id, drafted_by_id=drafted_by_id, scope=scope,
+        )
+        return db.scalar(stmt) or 0
+
+    def get_history(self, db: Session, *, template_id: int) -> list[PlanTemplateChange]:
+        """テンプレートの変更履歴（すべての状態。新しい順: 決まった日時、承認待ちは書いた日時）"""
+        stmt = (
+            select(PlanTemplateChange)
+            .where(PlanTemplateChange.template_id == template_id)
+            .order_by(
+                func.coalesce(PlanTemplateChange.decided_at, PlanTemplateChange.drafted_at).desc(),
+                PlanTemplateChange.id.desc(),
+            )
+        )
+        return list(db.scalars(stmt).all())
+
+
+# ==========================================
+#  インスタンス化とエクスポート
+# ==========================================
+business_calendar_repo = BusinessCalendarRepository(BusinessCalendar)
+reference_sheet_repo = ReferenceSheetRepository(ReferenceSheet)
+plan_template_repo = PlanTemplateRepository(PlanTemplate)
+plan_instance_repo = PlanInstanceRepository(PlanInstance)
+plan_instance_void_repo = PlanInstanceVoidRepository()
+plan_slot_release_repo = PlanSlotReleaseRepository()
+plan_cache_repo = PlanOccurrenceCacheRepository()
+plan_template_change_repo = PlanTemplateChangeRepository()

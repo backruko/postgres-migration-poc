@@ -1,0 +1,414 @@
+"""
+plan の発生枠の変更をオーダーに反映します（plan → ope の追従）。
+
+plan がコミットする直前に、変更された発生枠の一覧を受け取り（domain_plan.slot_events）、同じトランザクションで
+オーダーを作成・移動・取消・矛盾フラグにします。設計書の「Propagating plan changes」の表のとおり:
+
+| plan の変更             | pending / ready | 保留中         | 作業中                 | 完了 / 取消 |
+|-------------------------|-----------------|----------------|------------------------|-------------|
+| 人が日時を変更           | 追従            | 追従（保留のまま）| 拒否（plan の変更ごと） | 影響なし    |
+| 人が取消                 | 取消（理由付き） | 取消           | 拒否                   | 影響なし    |
+| システムが枠を動かした    | 追従            | 追従           | そのまま + 矛盾フラグ（※）| 影響なし（※）|
+| 枠が消えた（システム）    | システムが取消   | 矛盾フラグ      | 矛盾フラグ             | 影響なし    |
+| 新しい枠                 | 新しい pending オーダー（今以降の予定のみ）                                  |
+
+※ 2026-11-10: 完了したオーダーの枠は、plan の側でも動かさない（予定ごと今のまま残す）。作業中のオーダーの枠は、
+テンプレートの変更では動かさず矛盾フラグも立てない（work_started_slots。休日・シートの日付の変更ではこの表のとおり）。
+取消されたオーダーは履歴として残り、同じ枠が戻ったときは新しいオーダーを作ります。
+オーダーの作成・取消・ルール上の日付の変更のたびに、業務間の依存関係の定義からオーダー同士のつながりを直します
+（domain_ope/links.py）。定義の作成・削除も受け取ります（biz の dependency_events）。
+リリース済みで未開始のオーダーは、予定の変更でステップの条件の結果（固定したステップ）が変わったら矛盾フラグにします
+（人の変更・システムの変更とも。first_in_week は同じ週の他の予定にも左右されるため、変更のあった週のオーダーをすべて確かめる）。
+起動時に register() で plan に受け手として登録します（アプリ: main.py、スクリプト・テストも同様）。
+"""
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from src.coordination import master_guards
+from src.core.error_codes import ErrorCode
+from src.core.exceptions import DuplicatedRecordError
+from src.domain_biz import dependency_events
+from src.domain_biz.models import BizDependency, BizMaster
+from src.domain_ope import deadlines, links
+from src.domain_ope.models import EventSource, OpeOrder, OrderEventType, OrderStatus
+from src.domain_ope.steps import StepSetChange, scheduled_day, step_set_change, week_start
+from src.domain_plan import template_events
+from src.domain_plan.models import PlanInstance, PlanOccurrenceCache, PlanTemplate, VoidReason
+from src.domain_plan.slot_events import (
+    SimpleSlot, SlotChange, SlotKey, live_instances_for_slots, register_slot_guard, register_slot_listener, slot_key_of,
+)
+from src.infrastructure.repositories import ope_order_repo
+from src.core.clock import local_date_of, utc_now as _now
+
+# plan に追従する（人・システムが日時を動かせる）状態
+FOLLOWING = (OrderStatus.PENDING, OrderStatus.READY, OrderStatus.ON_HOLD)
+
+
+def register() -> None:
+    """
+    plan の発生枠の変更・biz の依存関係の定義の変更の受け手、顧客の無効化・業務の削除の前の確認（M1.1）として
+    登録します（何度呼んでも1回だけ登録される）。
+    """
+    register_slot_listener(apply_slot_changes)
+    register_slot_guard(work_started_slots)
+    dependency_events.register_dependency_listener(apply_dependency_change)
+    template_events.register_template_listener(apply_template_deadline_change)
+    master_guards.register()
+
+
+def work_started_slots(db: Session, template_id: int, lower: datetime, upper: datetime, reason: VoidReason) -> set[SimpleSlot]:
+    """
+    plan の再照合で、今の予定のまま残す発生枠（2026-11-10 の決定）:
+    - オーダーが完了している枠: どの理由の再照合でも残す。終わった作業の予定は動かさない
+      （動かすと、完了したオーダーが古い予定に残り、動いた先の予定にはオーダーが付かず、リリースも取消もできない行になる）
+    - オーダーが作業中の枠: テンプレートの変更のときは残す（矛盾フラグも立てない。そのオーダーにとっては何も変わらないため）。
+      休日・シートの日付の変更では、これまでどおり予定は動き、オーダーに矛盾フラグが立って人の判断を待つ
+    臨時の予定（one_off）は再照合の対象ではないので含めない。
+    """
+    statuses = [OrderStatus.FINISHED]
+    if reason == VoidReason.TEMPLATE_REVISED:
+        statuses.append(OrderStatus.IN_PROGRESS)
+    stmt = select(OpeOrder.occurrence_date, OpeOrder.source_sheet_event_id).where(
+        OpeOrder.template_id == template_id,
+        OpeOrder.status.in_(statuses),
+        OpeOrder.one_off_instance_id.is_(None),
+        OpeOrder.scheduled_start >= lower,
+        OpeOrder.scheduled_start < upper,
+    )
+    return {
+        ("sheet_event", row.source_sheet_event_id) if row.source_sheet_event_id is not None else ("date", row.occurrence_date)
+        for row in db.execute(stmt)
+    }
+
+
+def apply_template_deadline_change(db: Session, template: PlanTemplate) -> None:
+    """
+    テンプレートの締切の設定が変わった: リリース前のオーダーだけ、新しい決め方を写して締切を計算し直す（N.3、2026-11-05 の決定）。
+    リリース後（準備済み・作業中・完了）と取消済みのオーダーは、作成時（リリース前の最後の写し直し）の決め方のまま。
+    """
+    for order in ope_order_repo.get_unreleased_of_template(db, template_id=template.id):
+        deadlines.copy_rule(order, template)
+        deadlines.restamp(order)
+
+
+def apply_dependency_change(db: Session, change: dependency_events.DependencyChange, dependency: BizDependency) -> None:
+    if change == "created":
+        links.definition_created(db, dependency)
+    else:
+        links.definition_deleted(db, dependency)
+
+
+def apply_slot_changes(db: Session, changes: list[SlotChange]) -> None:
+    """
+    発生枠の変更をオーダーに反映します。テンプレートの変更では生成済みの範囲の全部の枠が一度に動く
+    （2 年先まで生成した毎日の予定なら 730 枠）ため、枠ごとに問い合わせず、今の予定とオーダーをまとめて読む
+    （以前は枠ごとに 3 回の問い合わせ: 1 回の承認で 2,000 文を超え、数秒〜十数秒かかっていた）。
+    依存関係の定義も、この間は業務ごとに 1 回だけ読む。
+    """
+    now = _now()
+    weeks: dict[int, set[date]] = {}  # テンプレートごとの、変更のあった週（月曜日）
+    lives = live_instances_for_slots(db, [c.slot for c in changes])
+    orders = _find_orders(db, [c.slot for c in changes])
+    later = _Deferred()  # オーダーの作成とつながりの直しは、最後にまとめて行う（1 件ずつ書き出さない）
+    with links.definitions_cached(db):
+        for change in changes:
+            for day in _apply(db, change, now, lives.get(change.slot), orders.get(change.slot), later):
+                weeks.setdefault(change.slot.template_id, set()).add(week_start(day))
+        create_orders(db, later.new)
+        # つながりは最後にまとめて直す（定義ごとに数回の問い合わせ。1 件ずつだと 1 件に数文: 400 件の移動で 2,000〜5,000 文）
+        links.refresh_orders(db, [*later.cancelled, *later.rekeyed])  # 取り消した・キーが変わったオーダー
+        links.refresh_orders(db, later.retimed, only_time_based=True)  # 時刻だけ: 予定開始で突き合わせる「直前の上流」だけ
+    _recheck_steps(db, weeks)
+
+
+def _order_slot(order: OpeOrder) -> tuple[int, str, date | int]:
+    """オーダーの発生枠（SlotKey と同じ見分け方: シート日付 → 臨時の予定 → ルール上の日付）"""
+    if order.source_sheet_event_id is not None:
+        return (order.template_id, "sheet_event", order.source_sheet_event_id)
+    if order.one_off_instance_id is not None:
+        return (order.template_id, "one_off", order.one_off_instance_id)
+    return (order.template_id, "date", order.occurrence_date)
+
+
+def _find_orders(db: Session, slots: list[SlotKey]) -> dict[SlotKey, OpeOrder]:
+    """発生枠ごとの、取消されていないオーダー（テンプレートごとに 1 回の問い合わせ。行ロック付き）"""
+    by_template: dict[int, list[SlotKey]] = {}
+    for slot in slots:
+        by_template.setdefault(slot.template_id, []).append(slot)
+    result: dict[SlotKey, OpeOrder] = {}
+    for template_id, group in by_template.items():
+        found = {
+            _order_slot(o): o
+            for o in ope_order_repo.get_active_for_slots(
+                db, template_id=template_id,
+                occurrence_dates={s.occurrence_date for s in group if s.kind == "date"},
+                sheet_event_ids={s.ref for s in group if s.kind == "sheet_event"},  # type: ignore[misc]
+                one_off_instance_ids={s.ref for s in group if s.kind == "one_off"},  # type: ignore[misc]
+            )
+        }
+        for slot in group:
+            order = found.get((slot.template_id, slot.kind, slot.ref))
+            if order is not None:
+                result[slot] = order
+    return result
+
+
+def _apply(
+    db: Session, change: SlotChange, now: datetime, live: PlanInstance | None, order: OpeOrder | None,
+    later: _Deferred,
+) -> list[date]:
+    """
+    発生枠の変更をオーダーに反映し、関わった日（日本時間。変更前・変更後の予定日）を返します。
+    live: 枠の今の有効な予定（無ければ枠が消えた）、order: 枠の取消されていないオーダー（まとめて読んだもの）、
+    later: 作るオーダー・取り消したオーダーをここに足す（呼び出し側が最後にまとめて作る・つながりを直す）
+    """
+    days = [local_date_of(live.scheduled_start)] if live is not None else []
+    if order is None:
+        # 新しい枠（または取消後に戻った枠）。過去の予定にはオーダーを作らない（運用開始より前は plan の履歴のみ）
+        if live is not None and live.scheduled_start >= now:
+            later.new.append(NewOrder(change.slot, live, _source(change), change.actor_staff_id, _cause(change)))
+        return days
+    days.append(scheduled_day(order))
+    if order.status not in FOLLOWING and order.status != OrderStatus.IN_PROGRESS:
+        return days  # 完了したオーダーは影響を受けない
+    if live is None:
+        _slot_removed(db, order, change, later)
+    elif (live.id, live.scheduled_start, live.scheduled_end) != (
+        order.current_instance_id, order.scheduled_start, order.scheduled_end
+    ):
+        _slot_moved(db, order, live, change, later)
+    return days
+
+
+# ==========================================
+# 記録の出どころ
+# ==========================================
+def _source(change: SlotChange) -> EventSource:
+    # 人の操作でも職員が分からない呼び出し（スクリプト・テスト）はシステムの処理として記録する
+    return EventSource.HUMAN if change.by_person and change.actor_staff_id is not None else EventSource.SYSTEM
+
+
+def _cause(change: SlotChange, **extra: Any) -> dict[str, Any]:
+    detail: dict[str, Any] = {"cause": "manual plan change" if change.by_person else "plan change"}
+    if change.void_reasons:
+        detail["plan_reasons"] = sorted({r.value for r in change.void_reasons})
+    detail.update(extra)
+    return detail
+
+
+def _plan_reason(change: SlotChange) -> str | None:
+    """システムによる取消・矛盾の理由（plan の無効化の理由）"""
+    reasons = [r for r in change.void_reasons if r not in (VoidReason.MANUAL, VoidReason.REVERTED)]
+    return reasons[-1].value if reasons else None
+
+
+def _refuse_in_progress(order: OpeOrder) -> None:
+    raise DuplicatedRecordError(
+        f"Order {order.id} is in progress, so its schedule cannot be changed or cancelled.",
+        error_code=ErrorCode.ORDER_IN_PROGRESS,
+    )
+
+
+# ==========================================
+# オーダーの作成・追従・取消・矛盾
+# ==========================================
+@dataclass
+class _Deferred:
+    """発生枠の変更の反映で、最後にまとめて行うこと（1 件ごとに書き出すと、更新・記録の INSERT がまとまらない）"""
+    new: list[NewOrder] = field(default_factory=list)  # 作るオーダー
+    cancelled: list[OpeOrder] = field(default_factory=list)  # 取り消したオーダー（つながりを直す）
+    rekeyed: list[OpeOrder] = field(default_factory=list)  # 突き合わせのキー（ルール上の日付）が変わったオーダー（全部直す）
+    retimed: list[OpeOrder] = field(default_factory=list)  # 時刻だけが動いたオーダー（「直前の上流」だけ直す）
+
+
+@dataclass(frozen=True)
+class NewOrder:
+    """作るオーダー 1 件（発生枠・その有効な予定・記録の出どころ）"""
+    slot: SlotKey
+    instance: PlanInstance
+    source: EventSource
+    actor_staff_id: int | None
+    detail: dict[str, Any]
+
+
+def create_orders(db: Session, items: list[NewOrder]) -> list[OpeOrder]:
+    """
+    オーダーをまとめて作ります（削除された業務の予定には作らない）。作ったオーダーを返します。
+    テンプレートと業務はテンプレートごとに 1 回だけ読み、オーダーと作成の記録はそれぞれ 1 回の書き出しで入れる
+    （SQLAlchemy が複数行の INSERT … RETURNING にまとめる。1 件ずつ書き出すと 1 件に 1 文かかる）。
+    ※ 業務はここで手元に持っておく: セッションは読んだ行を弱く参照するだけなので、持たないと次の参照で読み直しになる
+    """
+    if not items:
+        return []
+    targets: dict[int, tuple[PlanTemplate, BizMaster] | None] = {}
+    for template_id in {item.slot.template_id for item in items}:
+        template = db.get(PlanTemplate, template_id)
+        biz = db.get(BizMaster, template.biz_master_id) if template else None
+        targets[template_id] = (template, biz) if template is not None and biz is not None and not biz.is_deleted else None
+    created: list[tuple[OpeOrder, NewOrder]] = []
+    for item in items:
+        target = targets[item.slot.template_id]
+        if target is None:
+            continue  # 削除された業務の予定にはオーダーを作らない
+        template, biz = target
+        order = OpeOrder(
+            template_id=item.slot.template_id,
+            occurrence_date=item.instance.occurrence_date,
+            source_sheet_event_id=item.slot.sheet_event_id,
+            one_off_instance_id=item.slot.one_off_instance_id,
+            current_instance_id=item.instance.id,
+            biz_master_id=biz.id,
+            client_code=biz.client_code,
+            scheduled_start=item.instance.scheduled_start,
+            scheduled_end=item.instance.scheduled_end,
+            status=OrderStatus.PENDING,
+        )
+        # 締切: テンプレートの決め方を写して保存する（以後のテンプレートの変更では変わらない）
+        deadlines.copy_rule(order, template)
+        deadlines.restamp(order)
+        db.add(order)
+        created.append((order, item))
+    db.flush()  # オーダーの id（作成の記録に要る）
+    for order, item in created:
+        ope_order_repo.add_event(
+            db, order=order, event_type=OrderEventType.CREATED, to_status=OrderStatus.PENDING, source=item.source,
+            actor_staff_id=item.actor_staff_id if item.source == EventSource.HUMAN else None, detail=item.detail,
+        )
+    db.flush()
+    orders = [order for order, _ in created]
+    links.refresh_orders(db, orders)  # 依存関係のつながり（定義ごとに数回の問い合わせ）
+    return orders
+
+
+def _slot_moved(db: Session, order: OpeOrder, live: PlanInstance, change: SlotChange, later: _Deferred) -> None:
+    before = {"start": order.scheduled_start.isoformat(), "end": order.scheduled_end.isoformat(),
+              "instance_id": order.current_instance_id}
+    after = {"start": live.scheduled_start.isoformat(), "end": live.scheduled_end.isoformat(), "instance_id": live.id}
+    if order.status == OrderStatus.IN_PROGRESS:
+        if change.by_person:
+            _refuse_in_progress(order)
+        # システムが動かした: 作業中のオーダーはそのまま、矛盾として人の判断を待つ
+        _raise_conflict(db, order, f"作業中に予定の日時が変わりました（新しい開始: {after['start']}）",
+                        _cause(change, before=before, after=after))
+        return
+    times_changed = (order.scheduled_start, order.scheduled_end) != (live.scheduled_start, live.scheduled_end)
+    key_changed = order.occurrence_date != live.occurrence_date  # 依存関係の突き合わせのキー（臨時の予定で変わる）
+    order.current_instance_id = live.id
+    order.occurrence_date = live.occurrence_date
+    order.scheduled_start = live.scheduled_start
+    order.scheduled_end = live.scheduled_end
+    deadlines.restamp(order)  # 締切はこのオーダーの写した決め方で計算し直す
+    if times_changed:
+        source = _source(change)
+        ope_order_repo.add_event(
+            db, order=order, event_type=OrderEventType.RESCHEDULED, source=source,
+            actor_staff_id=change.actor_staff_id if source == EventSource.HUMAN else None,
+            reason=change.note if change.by_person else None, detail=_cause(change, before=before, after=after),
+        )
+    # 依存関係: キー（ルール上の日付）が変わったら全部、時刻だけが変わったら「直前の上流」（予定開始で突き合わせる）だけ直す。
+    # どちらも最後にまとめて（apply_slot_changes の links.refresh_orders）
+    if key_changed:
+        later.rekeyed.append(order)
+    elif times_changed:
+        later.retimed.append(order)
+
+
+def _slot_removed(db: Session, order: OpeOrder, change: SlotChange, later: _Deferred) -> None:
+    if change.by_person:
+        if order.status == OrderStatus.IN_PROGRESS:
+            _refuse_in_progress(order)
+        _cancel(db, order, change, change.note, later)
+    elif order.status in (OrderStatus.PENDING, OrderStatus.READY):
+        _cancel(db, order, change, _plan_reason(change), later)
+    else:
+        # 保留中・作業中のオーダーは自動で取り消さず、矛盾として人の判断を待つ
+        _raise_conflict(db, order, f"予定が無くなりました（{_plan_reason(change) or 'plan'}）", _cause(change))
+
+
+def _cancel(db: Session, order: OpeOrder, change: SlotChange, reason: str | None, later: _Deferred) -> None:
+    source = _source(change)
+    from_status = order.status
+    order.status = OrderStatus.CANCELED
+    order.status_before_hold = None
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.STATUS_CHANGED, from_status=from_status,
+        to_status=OrderStatus.CANCELED, source=source,
+        actor_staff_id=change.actor_staff_id if source == EventSource.HUMAN else None,
+        reason=reason, detail=_cause(change),
+    )
+    later.cancelled.append(order)  # このオーダーを待つ下流のつながりは、最後にまとめて直す（ここで書き出さない）
+
+
+def _raise_conflict(db: Session, order: OpeOrder, reason: str, detail: dict[str, Any]) -> None:
+    order.conflict = True
+    order.conflict_reason = reason
+    ope_order_repo.add_event(
+        db, order=order, event_type=OrderEventType.CONFLICT_RAISED, source=EventSource.SYSTEM, actor_staff_id=None,
+        reason=reason, detail=detail,
+    )
+
+
+# ==========================================
+# ステップの条件の再確認（リリース済み・未開始のオーダー）
+# ==========================================
+STEP_CONFLICT = "ステップの条件が変わりました"
+
+
+def _recheck_steps(db: Session, weeks: dict[int, set[date]]) -> None:
+    """
+    変更のあった週の、リリース済みで未開始のオーダーのステップが、今の予定日の条件の結果と食い違えば矛盾フラグにします。
+    （リリース前のオーダーはプレビューを毎回計算するので対象外。開始後のステップは作り直さないので対象外）
+    """
+    if not weeks:
+        return
+    db.flush()  # plan のこのトランザクションの変更（予定のキャッシュ）を条件の判定から見えるようにする
+    for template_id, mondays in weeks.items():
+        for order in ope_order_repo.get_released_unstarted(db, template_id=template_id):
+            if week_start(scheduled_day(order)) in mondays:
+                change = step_set_change(db, order)
+                if change is not None:
+                    _raise_step_conflict(db, order, change)
+
+
+def _raise_step_conflict(db: Session, order: OpeOrder, change: StepSetChange) -> None:
+    if order.conflict and STEP_CONFLICT in (order.conflict_reason or ""):
+        return  # すでに同じ理由で矛盾中（解決時に今の条件で作り直す）
+    reason = f"{STEP_CONFLICT}（{change.describe()}）"
+    if order.conflict:
+        reason = f"{order.conflict_reason} / {reason}"  # 別の理由の矛盾に重ねる（理由は両方残す）
+    _raise_conflict(db, order, reason, {"cause": "step conditions changed", "added": change.added, "removed": change.removed})
+
+
+# ==========================================
+# 運用開始時のオーダー作成（scripts/create_orders.py）
+# ==========================================
+def create_missing_orders(db: Session) -> int:
+    """
+    今以降に開始する有効な予定のうち、オーダーの無い発生枠にオーダーを作ります（何度実行しても同じ結果）。
+    過去の予定にはオーダーを作りません（運用開始より前は plan の履歴のみ）。
+    テンプレートごとにまとめて作る（既存のオーダーを 1 回で読み、create_orders で作る。1 枠ずつ問い合わせない）。
+    """
+    stmt = (
+        select(PlanInstance)
+        .join(PlanOccurrenceCache, PlanOccurrenceCache.instance_id == PlanInstance.id)
+        .where(PlanOccurrenceCache.starts_at >= _now())
+        .order_by(PlanInstance.template_id, PlanInstance.scheduled_start)
+    )
+    by_template: dict[int, list[tuple[SlotKey, PlanInstance]]] = {}
+    for instance in db.scalars(stmt).all():
+        by_template.setdefault(instance.template_id, []).append((slot_key_of(db, instance), instance))
+    created = 0
+    with links.definitions_cached(db):
+        for group in by_template.values():
+            existing = _find_orders(db, [slot for slot, _ in group])
+            items: dict[SlotKey, NewOrder] = {}
+            for slot, instance in group:
+                if slot not in existing and slot not in items:
+                    items[slot] = NewOrder(slot, instance, EventSource.SYSTEM, None, {"cause": "initial order creation"})
+            created += len(create_orders(db, list(items.values())))
+    db.commit()
+    return created

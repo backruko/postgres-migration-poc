@@ -1,0 +1,66 @@
+# Gitea（社内の Git サーバー）と、そのパイプラインを動かすランナー（act_runner）。C.4
+# アプリ（deploy/docker-compose.yml、名前 ops）とは別の Compose（名前 gitea）。同じ Ubuntu サーバーで動かす。
+# 置き場所: /srv/gitea/compose/（このフォルダーの中身を写す。手順は deploy/README.md の「0b.」）
+#
+#   /srv/gitea/compose/docker-compose.yml   このファイル
+#   /srv/gitea/compose/.env                 .env.example から（サーバーのアドレス・版・ランナーの登録トークン）
+#   /srv/gitea/data/                        Gitea のデータ（リポジトリ・SQLite・設定。毎晩の gitea dump も data/backups/ に）
+#   /srv/gitea/runner/                      ランナーの登録情報と config.yaml（runner-config.example.yaml から）
+#
+# Gitea へはインターネットから何も取らない（プロキシ不要）。画面と git の push は http://<サーバー>:3000/ だけ
+# （SSH は使わない）。自分で登録はできず、管理者がアカウントを作る。
+name: gitea
+
+services:
+  gitea:
+    image: gitea/gitea:${GITEA_VERSION:?GITEA_VERSION を .env に}
+    container_name: gitea
+    restart: unless-stopped
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      TZ: Asia/Tokyo
+      # app.ini の値（GITEA__<節>__<キー>）。最初の起動で /data/gitea/conf/app.ini に書かれる
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__server__ROOT_URL: http://${SERVER_ADDRESS:?SERVER_ADDRESS を .env に}:3000/
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__server__DISABLE_SSH: "true"
+      GITEA__server__START_SSH_SERVER: "false"
+      GITEA__security__INSTALL_LOCK: "true"           # 画面からの初期設定は使わない（管理者はコマンドで作る）
+      GITEA__service__DISABLE_REGISTRATION: "true"     # 自分で登録できない
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "true"      # ログインしないと何も見えない
+      GITEA__actions__ENABLED: "true"
+      # ワークフローの uses: を github.com ではなくこの Gitea で探す（ci.yml は uses: を使わないが、念のため外に出ない）
+      GITEA__actions__DEFAULT_ACTIONS_URL: self
+      GITEA__mailer__ENABLED: "false"                  # 失敗は Actions の赤い印で見る（メールは送らない）
+    volumes:
+      - /srv/gitea/data:/data
+    ports:
+      - "3000:3000"
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  runner:
+    image: gitea/act_runner:${ACT_RUNNER_VERSION:?ACT_RUNNER_VERSION を .env に}
+    container_name: gitea-runner
+    restart: unless-stopped
+    depends_on:
+      - gitea
+    environment:
+      CONFIG_FILE: /data/config.yaml
+      # ジョブのコンテナからも同じアドレスで Gitea に届く（ROOT_URL と同じ。localhost は使わない）
+      GITEA_INSTANCE_URL: http://${SERVER_ADDRESS}:3000
+      # 最初の起動のときだけ使う（リポジトリの 設定 → Actions → ランナー → 新しいランナーを作成）。
+      # このリポジトリだけのランナーになる。登録後は /data/.runner に残り、トークンは要らない
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${RUNNER_TOKEN:-}
+      GITEA_RUNNER_NAME: ops-server
+    volumes:
+      - /srv/gitea/runner:/data
+      # ランナーがジョブのコンテナを作るためにサーバーの Docker を使う。ジョブのコンテナには
+      # つながない（config.yaml の docker_host: "-"）。つなぐのは deploy のジョブだけ（ci.yml が明示し、
+      # config.yaml の valid_volumes で許す）
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging: *logging

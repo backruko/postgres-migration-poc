@@ -1,0 +1,332 @@
+# 自動チェック（C.2）とデプロイ（C.3）。
+# - main への push のたびに、チェック（backend・frontend）だけが動く。失敗すると Gitea のコミットと
+#   Actions の画面に赤い印がつく（メールは送らない）
+# - デプロイは手動: Actions の画面でこのワークフローの「Run workflow」を main で押す。押した人がリポジトリの
+#   変数 DEPLOY_USERS（ログイン名をカンマか空白で区切る。リポジトリの管理者だけが変えられる）に無ければ止まる。
+#   チェックをもう一度すべて流し、両方とおったときだけ deploy が動く（壊れた版はサーバーに届かない）
+# - 戻すときはボタンではなく、サーバーで前の版の install.sh を動かす（deploy/README.md。マイグレーションをまたぐなら
+#   入れ替える前のバックアップから戻す）
+#
+# どのジョブも使い捨てのコンテナで動く（サーバーには Docker だけあればよい）:
+#   backend  … python:3.14-slim（アプリのイメージと同じ土台）+ 使い捨ての PostgreSQL 16 を 2 つ
+#              （テスト用と、マイグレーションの確認用。テストは create_all で表を作り、最後に消すので分ける）
+#   frontend … node:24（web のイメージのビルドと同じ Node）
+#   gate     … python:3.14-slim（ボタンのときだけ。押した人と枝を確かめ、版の名前を決める）
+#   deploy   … docker:28-cli。サーバーの Docker のソケットと /srv/ops を同じパスでつなぐ（ランナーの設定で
+#              この 2 つだけを許す。C.4）。同じパスなので deploy/install.sh も compose のパスもそのまま動く
+#
+# デプロイの流れ（USB の zip と同じ置き場所と同じ install.sh）:
+#   1. このコミットを /srv/ops/releases/ops-<コミットの日付>-<コミット>/ に展開（zip と同じ名前。あれば使い回す）
+#   2. その版の deploy/install.sh: 設定 /srv/ops/.env をつなぐ → 会社の証明書 → 動いていればバックアップ →
+#      docker compose up -d --build（app の起動でマイグレーション）→ 成功したら /srv/ops/current をこの版に
+#   3. /srv/ops/deploys.log に 1 行（日時・押した人・コミット・版・結果）。Gitea の実行の記録とは別に、サーバーにも残す
+#
+# ソースは actions/checkout（github.com から取ってくる）を使わず、Gitea の API からこのコミットの
+# アーカイブを取る（ジョブごとに Gitea が発行するトークンで読む）。Gitea は同じサーバーにあるので、
+# プロキシの設定があっても通さずに直接つなぐ。
+# pip・npm・イメージは、ふつうはインターネットから直接取る（2026-11-17: 会社のプロキシはたぶん要らない）。
+# プロキシが要るときだけ、HTTP_PROXY / HTTPS_PROXY / NO_PROXY と会社の証明書（PIP_CERT / NODE_EXTRA_CA_CERTS）を
+# ランナーの設定がジョブに渡す（deploy/README.md の「付録. プロキシが必要なとき」の 4.）。
+name: checks and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+  # 週に 1 回、push が無くてもチェックだけを流す（古くなるコードの見張り: 新しく公表された脆弱性・動く版の名前の
+  # イメージ（python:3.14-slim など）の変化・取り下げられたパッケージを、急ぎのデプロイの前に見つける）。
+  # gate と deploy は workflow_dispatch のときだけ動くので、この実行ではデプロイしない。
+  # 0 22 * * 0 = 日曜 22:00。UTC で読むなら月曜 07:00（日本時間）。どちらで読むかは、最初の実行の時刻で確かめる
+  schedule:
+    - cron: '0 22 * * 0'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  backend:
+    name: バックエンド（静的チェック・依存の脆弱性・マイグレーション・API の説明・テスト・型）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: python:3.14-slim
+    services:
+      testdb:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: test_db
+      migrationdb:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: migration_check
+    env:
+      # テスト（tests/conftest.py は ENVIRONMENT=test で .env.test を読むが、CI には無い。環境変数が優先される）
+      DATABASE_URL: postgresql://ci:ci@testdb:5432/test_db
+      MIGRATION_DATABASE_URL: postgresql://ci:ci@migrationdb:5432/migration_check
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: ソースを取得（Gitea のアーカイブ）
+        shell: python3 {0}
+        env:
+          SERVER_URL: ${{ gitea.server_url }}
+          REPOSITORY: ${{ gitea.repository }}
+          COMMIT: ${{ gitea.sha }}
+          TOKEN: ${{ gitea.token }}
+        run: |
+          import io, os, tarfile, urllib.request
+          url = f"{os.environ['SERVER_URL'].rstrip('/')}/api/v1/repos/{os.environ['REPOSITORY']}/archive/{os.environ['COMMIT']}.tar.gz"
+          request = urllib.request.Request(url, headers={"Authorization": f"token {os.environ['TOKEN']}"})
+          opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 同じサーバーの Gitea へは直接
+          with opener.open(request, timeout=300) as response:
+              data = response.read()
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+              members = []
+              for member in tar.getmembers():
+                  _, _, rest = member.name.partition("/")  # アーカイブの先頭のフォルダ（リポジトリ名）を外す
+                  if rest:
+                      member.name = rest
+                      members.append(member)
+              # filter="data"（危険なパスを拒む）は古い Python 3.11 には無い
+              extra = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
+              tar.extractall(".", members=members, **extra)
+          print(f"{os.environ['COMMIT'][:12]}: {len(members)} entries")
+
+      - name: 依存関係を入れる
+        run: pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+
+      - name: 静的チェック（ruff。設定は ruff.toml）
+        run: ruff check --no-cache --output-format concise .
+
+      # requirements*.txt はすべての依存を版つきで並べている（間接の依存も）ので、ファイルをそのまま調べる（--no-deps）。
+      # 既知の脆弱性が 1 つでもあれば止まる（2026-11-17 の決定: 止める）。直し方は修正版へ上げること。上げられない理由が
+      # あるときだけ、requirements-audit-ignore.txt に ID と理由を書いて見送る
+      # （開発 PC でも同じ: python scripts/audit_check.py。理由の無い見送りの行も赤にする）
+      - name: 依存関係の既知の脆弱性（pip-audit）
+        run: python scripts/audit_check.py
+
+      - name: データベースの起動を待つ
+        run: |
+          python - <<'EOF'
+          import os, time
+          import psycopg
+          for url in (os.environ["DATABASE_URL"], os.environ["MIGRATION_DATABASE_URL"]):
+              for _ in range(60):
+                  try:
+                      psycopg.connect(url, connect_timeout=3).close()
+                      break
+                  except psycopg.OperationalError:
+                      time.sleep(2)
+              else:
+                  raise SystemExit(f"database not ready: {url.rsplit('@', 1)[-1]}")
+          print("databases ready")
+          EOF
+
+      - name: マイグレーションがモデルと合っている（alembic upgrade head + alembic check）
+        run: |
+          export DATABASE_URL="$MIGRATION_DATABASE_URL"
+          alembic upgrade head
+          alembic check
+
+      - name: API の説明（frontend/openapi.json）が最新
+        run: |
+          python scripts/export_openapi.py /tmp/openapi.json
+          if ! diff -u frontend/openapi.json /tmp/openapi.json > /tmp/openapi.diff; then
+            head -n 80 /tmp/openapi.diff
+            echo "::error::frontend/openapi.json が古い。python scripts/export_openapi.py と（frontend で）npm run gen:api を実行してコミットする"
+            exit 1
+          fi
+
+      - name: テスト（pytest）
+        run: python -m pytest -q -p no:cacheprovider
+
+      - name: 型チェック（pyright）
+        run: pyright
+
+  frontend:
+    name: フロントエンド（依存の脆弱性・API の型・ビルド）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: node:24
+    steps:
+      - name: ソースを取得（Gitea のアーカイブ）
+        shell: python3 {0}
+        env:
+          SERVER_URL: ${{ gitea.server_url }}
+          REPOSITORY: ${{ gitea.repository }}
+          COMMIT: ${{ gitea.sha }}
+          TOKEN: ${{ gitea.token }}
+        run: |
+          import io, os, tarfile, urllib.request
+          url = f"{os.environ['SERVER_URL'].rstrip('/')}/api/v1/repos/{os.environ['REPOSITORY']}/archive/{os.environ['COMMIT']}.tar.gz"
+          request = urllib.request.Request(url, headers={"Authorization": f"token {os.environ['TOKEN']}"})
+          opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 同じサーバーの Gitea へは直接
+          with opener.open(request, timeout=300) as response:
+              data = response.read()
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+              members = []
+              for member in tar.getmembers():
+                  _, _, rest = member.name.partition("/")  # アーカイブの先頭のフォルダ（リポジトリ名）を外す
+                  if rest:
+                      member.name = rest
+                      members.append(member)
+              # filter="data"（危険なパスを拒む）は古い Python 3.11 には無い
+              extra = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
+              tar.extractall(".", members=members, **extra)
+          print(f"{os.environ['COMMIT'][:12]}: {len(members)} entries")
+
+      - name: 依存関係を入れる（npm ci）
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      # 画面に入る依存（dependencies）だけを調べ、high 以上で止める（2026-11-17 の決定）。開発用の道具
+      # （devDependencies: vite など）は配布物に入らないので止めない。直し方は package.json の版を上げて npm install。
+      # 上げられない理由があるときだけ frontend/audit-ignore.txt に勧告の ID と理由を書く（npm audit 自身には一覧が無いので、
+      # scripts/audit-check.mjs が npm audit --omit=dev の結果から外す）
+      - name: 依存関係の既知の脆弱性（npm audit。画面に入るもの）
+        working-directory: frontend
+        run: node scripts/audit-check.mjs
+
+      - name: API の型（schema.gen.ts）が openapi.json と合っている
+        working-directory: frontend
+        run: |
+          npx --no-install openapi-typescript ./openapi.json -o /tmp/schema.gen.ts
+          if ! diff -u src/shared/api/schema.gen.ts /tmp/schema.gen.ts > /tmp/schema.diff; then
+            head -n 80 /tmp/schema.diff
+            echo "::error::src/shared/api/schema.gen.ts が古い。frontend で npm run gen:api を実行してコミットする"
+            exit 1
+          fi
+
+      - name: ビルド（型チェック + vite build）
+        working-directory: frontend
+        run: npm run build
+
+  gate:
+    name: デプロイの確認（押した人・枝・版の名前）
+    if: gitea.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    container:
+      image: python:3.14-slim
+    outputs:
+      release: ${{ steps.release.outputs.release }}
+    steps:
+      - id: release
+        name: 押した人が DEPLOY_USERS にあり、main であることを確かめ、版の名前を決める
+        shell: python3 {0}
+        env:
+          ACTOR: ${{ gitea.actor }}
+          REF: ${{ gitea.ref }}
+          DEPLOY_USERS: ${{ vars.DEPLOY_USERS }}
+          SERVER_URL: ${{ gitea.server_url }}
+          REPOSITORY: ${{ gitea.repository }}
+          COMMIT: ${{ gitea.sha }}
+          TOKEN: ${{ gitea.token }}
+        run: |
+          import json, os, sys, urllib.request
+
+          def stop(message: str) -> None:
+              print(f"::error::{message}")
+              sys.exit(1)
+
+          actor = os.environ["ACTOR"]
+          allowed = {name.lower() for name in os.environ.get("DEPLOY_USERS", "").replace(",", " ").split()}
+          if os.environ["REF"] != "refs/heads/main":
+              stop(f"デプロイできるのは main だけ（いまは {os.environ['REF']}）")
+          if not allowed:
+              stop("リポジトリの変数 DEPLOY_USERS が空。リポジトリの管理者が 設定 → Actions → 変数 で決める")
+          if actor.lower() not in allowed:
+              stop(f"{actor} はデプロイできない（DEPLOY_USERS: {', '.join(sorted(allowed))}）")
+
+          # 版の名前は zip と同じ ops-<コミットの日付>-<コミットの先頭 7 文字>（scripts/make_package.py）
+          commit = os.environ["COMMIT"]
+          url = (f"{os.environ['SERVER_URL'].rstrip('/')}/api/v1/repos/{os.environ['REPOSITORY']}/git/commits/{commit}"
+                 "?stat=false&files=false&verification=false")
+          request = urllib.request.Request(url, headers={"Authorization": f"token {os.environ['TOKEN']}"})
+          opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 同じサーバーの Gitea へは直接
+          with opener.open(request, timeout=60) as response:
+              date = json.load(response)["commit"]["committer"]["date"]  # 例 2026-11-17T10:15:00+09:00（コミットの時刻帯）
+          release = f"ops-{date[:10].replace('-', '')}-{commit[:7]}"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"release={release}\n")
+          print(f"{actor} deploys {commit[:12]} as {release}")
+
+  deploy:
+    name: デプロイ（サーバーで install.sh）
+    if: gitea.event_name == 'workflow_dispatch'
+    needs: [gate, backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: docker:28-cli
+      # サーバーの Docker と /srv/ops を同じパスで（ランナーの valid_volumes でこの 2 つだけを許す。C.4）
+      options: -v /var/run/docker.sock:/var/run/docker.sock -v /srv/ops:/srv/ops
+    defaults:
+      run:
+        shell: sh  # docker:cli は Alpine（bash が無い）
+    env:
+      OPS_HOME: /srv/ops
+    steps:
+      - name: 版を展開して install.sh を動かし、deploys.log に残す
+        env:
+          RELEASE: ${{ needs.gate.outputs.release }}
+          ACTOR: ${{ gitea.actor }}
+          COMMIT: ${{ gitea.sha }}
+          SERVER_URL: ${{ gitea.server_url }}
+          REPOSITORY: ${{ gitea.repository }}
+          TOKEN: ${{ gitea.token }}
+          RUN_ID: ${{ gitea.run_id }}
+        run: |
+          set -eu
+          say() { echo "deploy: $*"; }
+          [ -n "$RELEASE" ] || { echo "::error::版の名前がない（gate の出力）"; exit 1; }
+          [ -f "$OPS_HOME/.env" ] || { echo "::error::$OPS_HOME/.env が無い（deploy/README.md の最初の準備）"; exit 1; }
+
+          # 同時に 2 つ動かさない（flock はジョブが途中で止まっても自動で外れる）
+          exec 9> "$OPS_HOME/.deploy.lock"
+          flock -n 9 || { echo "::error::ほかのデプロイが動いている"; exit 1; }
+
+          result=failed
+          log_line() {
+              printf '%s\t%s\t%s\t%s\t%s\trun %s\n' "$(TZ=JST-9 date '+%Y-%m-%d %H:%M:%S +0900')" \
+                  "$ACTOR" "$COMMIT" "$RELEASE" "$result" "$RUN_ID" >> "$OPS_HOME/deploys.log"
+          }
+          trap log_line EXIT
+
+          REL="$OPS_HOME/releases/$RELEASE"
+          mkdir -p "$OPS_HOME/releases"
+          if [ -d "$REL" ]; then
+              say "$REL already exists (same commit), reusing it"
+          else
+              # 途中で失敗しても半端な版が残らないよう、別の名前に展開してから名前を変える
+              WORK="$OPS_HOME/releases/.partial-$RUN_ID"
+              rm -rf "$WORK"
+              mkdir -p "$WORK"
+              say "downloading $COMMIT"
+              # 同じサーバーの Gitea へは、プロキシの設定があっても通さない
+              env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
+                  wget -q --header "Authorization: token $TOKEN" -O "$WORK/source.tar.gz" \
+                  "${SERVER_URL%/}/api/v1/repos/$REPOSITORY/archive/$COMMIT.tar.gz"
+              tar -xzf "$WORK/source.tar.gz" -C "$WORK"
+              rm "$WORK/source.tar.gz"
+              set -- "$WORK"/*/
+              if [ "$#" -ne 1 ] || [ ! -d "$1" ]; then
+                  echo "::error::アーカイブの中身が想定と違う（先頭のフォルダーが 1 つではない）"
+                  exit 1
+              fi
+              mv "${1%/}" "$REL"
+              rm -rf "$WORK"
+              say "unpacked into $REL"
+          fi
+
+          sh "$REL/deploy/install.sh"
+          result=ok
+          # 入れ替えで使われなくなった古いイメージ（名前の無いもの）だけを片づける
+          docker image prune -f > /dev/null || true
+          say "done: $RELEASE ($COMMIT) by $ACTOR"

@@ -1,0 +1,41 @@
+# 開発とチェック用（テスト・型チェック）。アプリの実行に必要なものは requirements.txt
+# CI（.gitea/workflows/ci.yml）は両方を入れる: pip install -r requirements.txt -r requirements-dev.txt
+# pyright[nodejs]: Node.js を pip の wheel で入れる（slim イメージに Node が無くても動く）
+pytest==9.1.1
+iniconfig==2.3.1
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+pyright[nodejs]==1.1.414
+nodeenv==1.12.0
+nodejs-wheel-binaries==22.20.0
+# 静的チェック（設定は ruff.toml。ruff check .）
+ruff==0.17.5
+# シードデータの書き出し・取り込み（scripts/export_seed.py・import_seed.py。開発 PC から API を呼ぶ）
+requests==2.34.2
+urllib3==2.8.0
+certifi==2026.10.23
+idna==3.20
+charset-normalizer==3.5.2
+# 依存関係の既知の脆弱性の確認（CI: pip-audit。見送るものは requirements-audit-ignore.txt に理由つきで）
+pip-audit==2.10.1
+cyclonedx-python-lib==11.12.0
+license-expression==30.4.4
+packageurl-python==0.17.6
+py-serializable==2.2.0
+defusedxml==0.7.1
+sortedcontainers==2.4.0
+boolean.py==5.0
+CacheControl==0.15.0
+msgpack==1.2.4
+filelock==4.2.11
+pip-api==0.0.35
+pip-requirements-parser==32.0.1
+platformdirs==4.14.5
+rich==15.0.0
+markdown-it-py==4.3.0
+mdurl==0.1.2
+tomli==2.5.0
+tomli_w==1.2.0
+pip==26.3
+pyparsing==3.3.3
