@@ -2416,6 +2416,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/health/app": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * App Health Endpoint
+         * @description API が動いているか（ログインなし）。Docker の healthcheck が使う（deploy/docker-compose.yml）。
+         *     データベースもワーカーも見ない: worker は app が healthy になってから起動するので、ワーカーの状態を見ると
+         *     どちらも起動しなくなる。API はマイグレーションが終わってから起動するので、答えれば使える。
+         */
+        get: operations["app_health_endpoint_health_app_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health/worker": {
         parameters: {
             query?: never;
@@ -18661,6 +18683,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    app_health_endpoint_health_app_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
                 };
             };
         };

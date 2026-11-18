@@ -18,6 +18,17 @@ health_router = APIRouter(prefix="/health", tags=["health"])
 router = APIRouter(prefix="/worker-health", tags=["worker-health"])
 
 
+@health_router.get("/app")
+@client_scope(ScopeKind.SHARED)
+def app_health_endpoint() -> dict[str, str]:
+    """
+    API が動いているか（ログインなし）。Docker の healthcheck が使う（deploy/docker-compose.yml）。
+    データベースもワーカーも見ない: worker は app が healthy になってから起動するので、ワーカーの状態を見ると
+    どちらも起動しなくなる。API はマイグレーションが終わってから起動するので、答えれば使える。
+    """
+    return {"status": "ok"}
+
+
 @health_router.get(
     "/worker", response_model=WorkerHealthState,
     responses={503: {"model": WorkerHealthState, "description": "ワーカーの心拍が 5 分より古い・止まっている・一度も動いていない"}},

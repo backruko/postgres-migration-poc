@@ -197,3 +197,18 @@ def test_health_endpoint_answers_503_when_not_ok_and_is_mounted_without_login(db
         return any(d.dependency is require_login for d in included.include_context.dependencies)  # type: ignore[attr-defined]
 
     assert not needs_login("/health") and needs_login("/worker-health")
+
+
+def test_the_docker_healthcheck_url_answers_without_login_or_a_database():
+    """deploy/docker-compose.yml の app の healthcheck が叩く URL が、ルートとしてあり、データベースなしで ok を返す
+    （無い URL を叩くと app が healthy にならず、worker も起動しない）"""
+    import re
+    from pathlib import Path
+
+    from main import app
+    from src.worker_health.router import app_health_endpoint
+
+    compose = (Path(__file__).resolve().parent.parent / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
+    [path] = re.findall(r"urlopen\('http://127\.0\.0\.1:8000(/[^']*)'\)", compose)
+    assert path == "/health/app" and path in app.openapi()["paths"]
+    assert app_health_endpoint() == {"status": "ok"}

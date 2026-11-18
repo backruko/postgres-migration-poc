@@ -73,7 +73,8 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')"]
+      # /health/app はログインなしで 200（src/worker_health/router.py）。ワーカーの状態は見ない（worker はこの後に起動する）
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/app')"]
       interval: 10s
       timeout: 5s
       retries: 30
