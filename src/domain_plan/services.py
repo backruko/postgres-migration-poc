@@ -96,6 +96,8 @@ MATERIALIZE_HORIZON = timedelta(days=90)
 # 範囲検索の上限（巨大な範囲で大量生成されるのを防ぐ）
 MAX_QUERY_SPAN = timedelta(days=366)
 MAX_LOOKAHEAD = timedelta(days=730)
+# 生成済みの範囲の上の境目をまたいで動いた枠を、どこまで追うか（時刻の変更で枠が動くのは 1 日より短い。_reconcile）
+BOUNDARY_SHIFT = timedelta(days=1)
 # 「無期限」の代わりに使う上限
 FAR_FUTURE = datetime.max.replace(tzinfo=UTC)
 
@@ -281,22 +283,33 @@ def _reconcile(db: Session, template: PlanTemplate, lower: datetime, upper: date
 
     # 手動で変更・取消された発生枠はルールから再生成しない（手動オーバーライド自体も照合対象外）
     manual_slots = _manual_slots(db, template)
+    # 今ある予定は、upper の先 1 日まで見る（下の「上の境目をまたいで動いた枠」で、upper より後に作った予定があるため）
+    edge = upper + BOUNDARY_SHIFT
+    existing = {
+        (i.scheduled_start, i.scheduled_end, i.source_sheet_event_id): i
+        for i in plan_instance_repo.get_live_in_window(
+            db, template_id=template.id, lower=lower, upper=edge, generated_only=True
+        )
+    }
+    # 上の境目（upper）をまたいで動いた枠: 今の予定がある枠は、新しい開始が upper 以降になっても、その枠の新しい予定を作る
+    # （無効にして作らないと、範囲の最後の日の枠だけ「無くなった」になり、オーダーが取り消される。取り消されたオーダーは
+    # 直前の上流（L.2）として下流を止め続ける。例: 境目が 9:00（ふつうのホライズンは UTC の 0 時 = 日本時間 9:00）のとき
+    # 8:30 → 9:30）。時刻の変更で枠が動くのは 1 日より短いので、upper から BOUNDARY_SHIFT だけ先を見る。
+    # materialized_until は変えない（後で範囲を延ばすと、その予定は範囲の中にあり、同じキーなのでそのまま残る）
+    slots_with_instance = {_slot(i.occurrence_date, i.source_sheet_event_id) for i in existing.values()}
     expanded = [
         o for o in _expand(db, template, lower, upper) if _slot(o.occurrence_date, o.source_sheet_event_id) not in manual_slots
+    ] + [
+        o for o in _expand(db, template, upper, edge)
+        if _slot(o.occurrence_date, o.source_sheet_event_id) in slots_with_instance - manual_slots
     ]
     # もう始まった発生枠（lower より前に始まった有効な予定がある枠）も作らない。
     # 例: 今日 9:00 の予定が過ぎた後に、テンプレートの時刻を 14:00 に変える。過去の予定は変えないので 9:00 の予定は残り、
     # ここで除かないと今日に 14:00 の予定がもう 1 件できる（オーダーは 9:00 の側に付いたままで、14:00 の側はリリースも取消もできない）
     started_slots = _started_slots(db, template, lower, expanded)
-    existing = {
-        (i.scheduled_start, i.scheduled_end, i.source_sheet_event_id): i
-        for i in plan_instance_repo.get_live_in_window(
-            db, template_id=template.id, lower=lower, upper=upper, generated_only=True
-        )
-    }
     # 作業がもう始まった・終わった発生枠（確認役 = coordination が答える。オーダーが完了・作業中）は、今の予定のまま残す:
     # 無効にしないし、新しい日時で作り直しもしない。動かすと、完了したオーダーが古い予定に残り、新しい予定にはオーダーが無くなる
-    protected = slot_events.protected_slots(db, template.id, lower, upper, reason)
+    protected = slot_events.protected_slots(db, template.id, lower, edge, reason)
     kept_slots = {
         _slot(i.occurrence_date, i.source_sheet_event_id)
         for i in existing.values()

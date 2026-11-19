@@ -393,8 +393,8 @@ def test_a_slot_that_already_started_today_is_not_generated_again(db, biz_id, mo
     change = PlanTemplateUpdate(start_time=time(23, 55))
     p = preview_template_update(db, t.id, change, months=1)
     assert not p.added and len(p.moved) > 25
-    # 範囲の最後の日だけは「無くなる」に出ることがある（新しい時刻が生成済みの範囲の外に出る。範囲が延びるとまた作られる）
-    assert all(o.occurrence_date > today() + timedelta(days=60) for o in p.removed) and len(p.removed) <= 1
+    # 範囲の最後の日の枠も「無くなる」に出ない（新しい時刻が生成済みの範囲の外に出ても、動いた枠として扱う。_reconcile）
+    assert not p.removed
     assert today() not in {o.occurrence_date for o in p.occurrences}
 
     plan_services.update_template(db, t.id, change)

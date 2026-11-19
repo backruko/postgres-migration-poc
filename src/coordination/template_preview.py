@@ -110,11 +110,14 @@ def _preview_change(db: Session, template_id: int, months: int, apply: ApplyChan
     with dry_run(db):
         before, until = plan_services.dry_run_materialize(db, template_id, since=now, until=_range_end(now, months))
         orders_before = _orders(db, template_id)
-        after, generation_changed = apply(now, until)
+        # 変更の後は、範囲の終わりの先 BOUNDARY_SHIFT まで見る: 範囲の最後の日の枠は、時刻の変更で終わりより後へ動くことが
+        # ある（_reconcile がその枠を動かす）。終わりで切ると、その枠が「無くなる」に見える
+        after, generation_changed = apply(now, until + plan_services.BOUNDARY_SHIFT)
         orders_after = _orders(db, template_id)
 
     before_by_slot = {o.slot: o for o in before}
-    after_by_slot = {o.slot: o for o in after}
+    # 範囲の終わりより後の予定は、変更の前からある枠（動いた枠）だけ。ほかは次の日の分で、比べる範囲の外
+    after_by_slot = {o.slot: o for o in after if o.scheduled_start < until or o.slot in before_by_slot}
     added = [_out(o) for slot, o in after_by_slot.items() if slot not in before_by_slot]
     removed = [_out(o) for slot, o in before_by_slot.items() if slot not in after_by_slot]
     moved = [

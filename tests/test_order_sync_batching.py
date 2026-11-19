@@ -7,12 +7,14 @@
 ※ 顧客コードの先頭文字は空きがないため "I" を共有する
 """
 import uuid
-from datetime import UTC, datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 import pytest
 from sqlalchemy import event, select
 
 from tests.client_codes import new_client_code
+from src.coordination import order_sync
+from src.core.clock import LOCAL_TIMEZONE, local_date_of, utc_now
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import DependencyMatchRule
 from src.domain_biz.schemas import BizDependencyCreate, BizMasterCreate
@@ -26,6 +28,20 @@ from src.infrastructure.repositories import biz_master_repo, client_repo
 
 JST = timezone(timedelta(hours=9))
 HORIZON_DAYS = 400
+
+
+def _early() -> datetime:
+    """このファイルの「いま」: 今日の 0:30（日本時間）。今日の枠がまだ始まっていない時刻に決める
+    （本当の時刻だと、今日の枠がもう始まっている時間帯は「始まった枠は動かさない」決まりが混ざり、結果が時刻で変わる）"""
+    return datetime.combine(local_date_of(utc_now()), time(0, 30), tzinfo=LOCAL_TIMEZONE)
+
+
+@pytest.fixture(autouse=True)
+def fixed_now(monkeypatch):
+    early = _early()
+    monkeypatch.setattr(plan_services, "_now", lambda: early)
+    monkeypatch.setattr(order_sync, "_now", lambda: early)
+    return early
 
 
 @pytest.fixture
@@ -47,11 +63,14 @@ def _biz(db, code: str, seq: int) -> int:
 def _daily(db, biz_id: int, name: str) -> int:
     t = plan_services.create_template(db, RRuleTemplateCreate.model_validate(dict(
         biz_master_id=biz_id, name=name, template_type=TemplateType.RRULE, timezone="Asia/Tokyo",
-        start_time=time(9, 0), duration_minutes=60, anchor_date=datetime.now(JST).date(), rrule="FREQ=DAILY",
+        start_time=time(9, 0), duration_minutes=60, anchor_date=_early().date(), rrule="FREQ=DAILY",
     )))
     # カレンダーを先まで見たときのように、生成済みの範囲を延ばす
     template = plan_services._get_locked_template(db, t.id)
-    plan_services._ensure_materialized(db, template, datetime.now(UTC) + timedelta(days=HORIZON_DAYS))
+    # 範囲の終わりは HORIZON_DAYS 日後の 9:30（日本時間）に決める: 最後の日の 9:00 の枠は範囲の中で、上流を 10:00 に
+    # 動かすと境目をまたぐ（境目をまたいだ枠も動く = 取り消されない、を確かめる）
+    until = datetime.combine(_early().date() + timedelta(days=HORIZON_DAYS), time(9, 30), tzinfo=LOCAL_TIMEZONE)
+    plan_services._ensure_materialized(db, template, until)
     db.commit()
     return t.id
 
@@ -75,7 +94,7 @@ def open_orders(db, template_id: int) -> list[OpeOrder]:
     db.expire_all()
     return list(db.scalars(select(OpeOrder).where(
         OpeOrder.template_id == template_id, OpeOrder.status == OrderStatus.PENDING,
-        OpeOrder.scheduled_start > datetime.now(UTC) + timedelta(days=1),
+        OpeOrder.scheduled_start > _early() + timedelta(days=1),
     )))
 
 
@@ -228,10 +247,11 @@ def test_a_time_change_with_latest_before_relinks_hundreds_of_orders_with_a_hand
         plan_services.update_template(db, changed, PlanTemplateUpdate(start_time=new_time))
 
     db.expire_all()
-    ups = sorted(
-        db.scalars(select(OpeOrder).where(OpeOrder.template_id == upstream, OpeOrder.status != OrderStatus.CANCELED)),
-        key=lambda o: o.scheduled_start,
-    )
+    # 直前の上流（L.2）: 下流の予定開始以前で最新の上流のオーダー。取消済みも候補（人が判断するまで待つ）。
+    # 同じ時刻なら id の大きいもの
+    ups = sorted(db.scalars(select(OpeOrder).where(OpeOrder.template_id == upstream)), key=lambda o: (o.scheduled_start, o.id))
+    # 時刻の変更で取り消された上流は無い（範囲の最後の日の枠も動く: 生成済みの範囲の境目 9:00 をまたいでも）
+    assert [u.occurrence_date for u in ups if u.status == OrderStatus.CANCELED] == []
     downs = open_orders(db, downstream)
     linked = {
         link.downstream_order_id: link.upstream_order_id
