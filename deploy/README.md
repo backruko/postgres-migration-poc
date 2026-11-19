@@ -192,8 +192,8 @@ worker running
   または [3.8](#38-バックアップの保管場所) の「任意」で PC に写したもの）。どちらも無ければデータベースは戻せない
   （3.8）
 - メールの設定の控え（[6.4](#64-設定の控え)）
-- 開発 PC。無ければ、Git for Windows を入れた PC で GitHub からリポジトリを取る:
-  `git clone https://github.com/<GitHub のアカウント>/postgres-migration-poc.git /c/p/postgres-migration-poc`
+- Git for Windows を入れた PC と、NAS にあるプロジェクトのフォルダー `postgres-migration-poc`（PC へ写すのは
+  [3.2](#32-最初に要るファイルをサーバーへ送る)）
 
 **前提**: Ubuntu Server 24.04、自分のアカウントで `sudo` が使える、社内の PC からサーバーの 80 番（画面）と
 3000 番（Gitea）に届く、サーバーから直接インターネットに出られる（3.1 で確かめる）。かかる時間は 1〜2 時間
@@ -251,19 +251,49 @@ sudo docker run --rm hello-world | grep -m 1 "Hello from Docker"
 
 ### 3.2 最初に要るファイルをサーバーへ送る
 
-**PC で**（Git Bash。先に 0.3 の PC の手順）。コミット済みの `deploy` フォルダーを 1 つのファイルにします:
+**この時点では Gitea がまだ無いので、Git のリモートからは何も取れません。** そこで、NAS に置いてあるプロジェクトの
+フォルダーを PC に写し、その中の `deploy` フォルダーだけを 1 つのファイルにまとめてサーバーへ送ります。サーバーは
+これを使って Gitea を立てます（3.3）。コードが Gitea を通って届くようになるのは 3.4 からです。
+
+```text
+NAS ──(1. コピー)──> PC ──(2. tar でまとめる / 3. scp で送る)──> サーバー /srv/ops/bootstrap ──> 3.3 Gitea
+```
+
+**1. NAS から PC へ写す**（PC で、エクスプローラーで）
+
+NAS の `postgres-migration-poc` フォルダーを、**フォルダーごと** `C:\p\` へコピーします（`C:\p\postgres-migration-poc`
+になる）。
+
+- 隠しフォルダーの `.git` も一緒に写ります（エクスプローラーのコピーなら隠しフォルダーも含まれる）。3.4 で Gitea へ
+  送るときに使うので、消さないでください。
+- `C:\p\postgres-migration-poc` が**もうある**ときは、上書きしないで、先に名前を変えておきます（例
+  `postgres-migration-poc.old`）。古いファイルが混ざると、どの版を送ったのかわからなくなります。
+
+Git Bash で（先に 0.3 の PC の手順）、写ったことを確かめます:
+
+```sh
+cd /c/p/postgres-migration-poc && ls -A deploy && ls -d .git
+```
+
+**確認**: `.env.example`・`docker-compose.yml`・`gitea`・`install.sh` などが出て、最後の行が `.git`。
+
+**2. `deploy` フォルダーを 1 つのファイルにまとめる**（PC で、Git Bash で続けて）
+
+`deploy` の中に、その PC で作った設定（`.env`）・バックアップ・ログ・会社の証明書があっても、送らないように外します
+（パスワードやデータが入っているため）:
 
 ```sh
 cd /c/p/postgres-migration-poc
-git fetch origin && git status -sb | head -n 1
-git -c core.autocrlf=false archive --format=tar -o ops-bootstrap.tar origin/main deploy
+tar -cf ops-bootstrap.tar --exclude=deploy/.env --exclude=deploy/gitea/.env --exclude=deploy/backups --exclude=deploy/logs --exclude='deploy/certs/*.crt' --exclude='deploy/certs/*.pem' deploy
+tar -tf ops-bootstrap.tar | grep -E '(^|/)\.env$|/backups/|/logs/|\.(crt|pem)$' || echo "OK: 送ってはいけないファイルは無い"
 ls -l ops-bootstrap.tar
 ```
 
-**確認**: 2 行目が `## main...origin/main`（`[behind …]` が付いていたら `git pull` してからもう一度）、最後に
-`ops-bootstrap.tar` の行が出る。
+**確認**: `OK: 送ってはいけないファイルは無い` と、`ops-bootstrap.tar` の行が出る。ファイル名が出たら、そのファイルが
+入ってしまっています。送らないで、出た名前を担当に知らせます。
 
-サーバーへ送ります（最後の行がサーバーのログイン名をたずね、続いて scp がサーバーのパスワードをたずねます）:
+**3. サーバーへ送る**（PC で、Git Bash で続けて。最後の行がサーバーのログイン名をたずね、続いて scp がサーバーの
+パスワードをたずねます）:
 
 ```sh
 read -r -p "サーバーにログインする名前: " SERVER_USER && scp ops-bootstrap.tar "$SERVER_USER@$SERVER_IP:/tmp/ops-bootstrap.tar"
@@ -271,20 +301,28 @@ read -r -p "サーバーにログインする名前: " SERVER_USER && scp ops-bo
 
 **確認**: `ops-bootstrap.tar  100%` の行が出る。
 
-**サーバーで**、置き場所に展開します:
+**4. サーバーで、置き場所に展開する**
+
+Windows の PC を通ったファイルは、改行が Windows 式（CRLF）になっていることがあります。そのままだと、Gitea の毎晩の
+バックアップの予定（cron）や設定ファイルが正しく読まれないので、展開したあとで Linux 式（LF）にそろえます。
+前に展開したものが残っていたら、いったん消してから展開し直します（`/srv/ops/bootstrap` は作業用の置き場所で、3.9 で
+消すもの）:
 
 ```sh
-sudo mkdir -p /srv/ops/bootstrap
-sudo tar -xf /tmp/ops-bootstrap.tar -C /srv/ops/bootstrap
+sudo rm -rf /srv/ops/bootstrap && sudo mkdir -p /srv/ops/bootstrap
+sudo tar -xf /tmp/ops-bootstrap.tar -C /srv/ops/bootstrap --no-same-owner
+sudo find /srv/ops/bootstrap/deploy -type f -exec sed -i 's/\r$//' {} +
+sudo grep -rlI $'\r' /srv/ops/bootstrap/deploy || echo "OK: 改行は LF"
 ls -A /srv/ops/bootstrap/deploy
 ```
 
-**確認**: `.env.example`・`docker-compose.yml`・`gitea`・`install.sh` などが出る。
+**確認**: `OK: 改行は LF` と、`.env.example`・`docker-compose.yml`・`gitea`・`install.sh` などが出る。
 
 ### 3.3 Gitea とランナーを用意する
 
-**[gitea-runbook.md](gitea-runbook.md) の構築の手順を、最後まで行います。** 3.2 で送ったファイルを使います。
-終わったときに、次がそろっていること:
+**[gitea-runbook.md](gitea-runbook.md) の構築の手順を、最後まで行います。** 3.2 でサーバーの
+`/srv/ops/bootstrap/deploy/` に置いたファイルを使います。この段階では、Gitea のリポジトリは**空**で正しい
+（コードを送るのは次の 3.4）。終わったときに、次がそろっていること:
 
 - [ ] ブラウザで `http://<SERVER_IP>:3000/` にログインできる
 - [ ] 組織 `ops` の中にリポジトリ `postgres-migration-poc` がある
@@ -294,11 +332,26 @@ ls -A /srv/ops/bootstrap/deploy
 
 ### 3.4 コードを Gitea へ送る（PC で）
 
-Git Bash で（先に 0.3 の PC の手順）:
+Git Bash で（先に 0.3 の PC の手順）。3.2 で NAS から写したフォルダーの中身を、そのまま送ります（GitHub などの
+ほかのリモートからは取りません。届かないこともあるため）。まず、送る `main` があることを確かめます:
 
 ```sh
 cd /c/p/postgres-migration-poc
-git checkout main && git pull origin main
+git checkout main && git status -sb | head -n 1 && git log -1 --format='%h %ad %s' --date=short
+git status --porcelain | head -n 5
+```
+
+**確認**: 1 行目が `## main` で始まり、2 行目に最後のコミット（短いハッシュ・日付・件名）が出て、それより後には何も
+出ない。
+- `error: pathspec 'main' did not match` や `fatal: not a git repository` → NAS のフォルダーに `.git` が無いか、`main`
+  がありません。先に進まないで、NAS のフォルダーの担当に確かめます。
+- 最後のコマンドがファイル名を出す → コミットされていない変更があります。送られるのはコミットだけなので、その変更は
+  Gitea に届きません。それでよいかを担当に確かめてから進みます。
+- 日付が思っていたより古い → NAS のフォルダーが最新でないかもしれません。担当に確かめます。
+
+Gitea をリモートとして登録します:
+
+```sh
 git remote remove gitea 2>/dev/null; git remote add gitea "http://$SERVER_IP:3000/ops/postgres-migration-poc.git"
 printf 'protocol=http\nhost=%s:3000\n\n' "$SERVER_IP" | git credential reject
 git remote -v | grep gitea

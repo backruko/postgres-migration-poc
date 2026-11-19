@@ -74,7 +74,7 @@ deploy/certs/*.crt
 deploy/certs/*.pem
 # scripts/make_package.py が作るサーバー用の zip
 packages/
-# サーバーの準備で作る tar（deploy/README.md の git archive。scp で送ったら要らない）
+# サーバーの準備で作る tar（deploy/README.md 3.2。scp で送ったら要らない）
 *.tar
 # 開発の引き継ぎメモ（手元だけ。リポジトリには入れない）
 MEMORY.md
