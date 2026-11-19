@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from tests.client_codes import new_client_code
+from src.core.clock import local_date_of, utc_now
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.domain_events.formats import EventType, OrderDeadlineV1
@@ -55,7 +56,13 @@ def biz_id(db):
 
 
 def make_order(db, biz_id, index: int = 3, **kwargs) -> OpeOrder:
-    """毎日 9:00 開始・締切は開始の 5 時間後（14:00）・その 30 分前から「まもなく」のテンプレートの、index 番目のオーダー"""
+    """
+    毎日 9:00 開始・締切は開始の 5 時間後（14:00）・その 30 分前から「まもなく」のテンプレートの、
+    今日（日本時間）から index + 1 日後のオーダー。
+
+    「生成された index 番目」ではなく日付で選ぶ: 今日の枠は、開始の時刻を過ぎていると作られないので、番目で選ぶと
+    実行する時刻によって日がずれる（8:00 と 9:00 のテンプレートを比べるテストが 8:00〜9:00 の間だけ失敗した）
+    """
     data = dict(
         biz_master_id=biz_id, name="Watch daily", template_type=TemplateType.RRULE, timezone="Asia/Tokyo",
         start_time=time(9, 0), duration_minutes=60, anchor_date=date(2026, 1, 1), rrule="FREQ=DAILY",
@@ -64,8 +71,10 @@ def make_order(db, biz_id, index: int = 3, **kwargs) -> OpeOrder:
     data.update(kwargs)
     template = plan_services.create_template(db, RRuleTemplateCreate.model_validate(data))
     db.expire_all()
-    orders = db.scalars(select(OpeOrder).where(OpeOrder.template_id == template.id).order_by(OpeOrder.scheduled_start))
-    return list(orders)[index]
+    target = local_date_of(utc_now()) + timedelta(days=index + 1)
+    return db.scalars(
+        select(OpeOrder).where(OpeOrder.template_id == template.id, OpeOrder.occurrence_date == target)
+    ).one()
 
 
 def events_of(db, order_id: int) -> list[DomainEvent]:
