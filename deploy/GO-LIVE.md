@@ -18,7 +18,7 @@ Gitea とパイプライン（[gitea-runbook.md](gitea-runbook.md) と README.md
 - [ ] main の push で `backend` と `frontend` が緑
 - [ ] `DEPLOY_USERS` に**無い**人が「Run workflow」を押すと、`gate` が赤で止まり、`deploy` は動かない
 - [ ] `DEPLOY_USERS` の人が「Run workflow」を押すと全部緑になり、`/srv/ops/deploys.log` の最後の行が `ok`
-- [ ] 次の日、`/srv/gitea/data/backups/` に `gitea-YYYYMMDD.zip` がある（NAS への同期も）
+- [ ] 次の日、`/srv/gitea/data/backups/` に `gitea-YYYYMMDD.zip` がある
 
 アプリ:
 
@@ -163,7 +163,7 @@ Gitea とパイプライン（[gitea-runbook.md](gitea-runbook.md) と README.md
 
 - [ ] 翌朝: 自動リリースの業務があれば `docker compose logs worker` に `Released … pending automatic orders` が出ている
 - [ ] 翌朝: `/srv/ops/backups/` に 01:00 のファイル `ops_YYYYMMDD_0100xx.dump` がある
-- [ ] NAS への同期を OS 側で設定した（バックアップのフォルダーを同期。`*.partial` は書き込み中なので外す）
+- [ ] バックアップはサーバーの中だけと、関係者が知っている（NAS への同期はあとで。README 3.8）
 - [ ] 2 日目以降: `docker compose logs worker` に毎日 00:05 過ぎの `Plan extension: …` が出ている
 
 ## H. 残りの顧客

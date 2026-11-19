@@ -46,7 +46,7 @@ Compose の名前は `gitea`（アプリの `ops` とは別）。設定は `/srv
 | `/srv/gitea/compose/docker-compose.yml` | Gitea とランナーの Compose（リポジトリの `deploy/gitea/docker-compose.yml` の写し） | 写し直す（3.2） |
 | `/srv/gitea/compose/.env` | サーバーのアドレス（`SERVER_ADDRESS`）・版（`GITEA_VERSION`・`ACT_RUNNER_VERSION`）・ランナーの登録トークン（登録の間だけ）。権限 600 | 作り直す（3.2） |
 | `/srv/gitea/data/` | Gitea のデータ（リポジトリ・アカウント・設定・データベース） | 作り直して、コードを push し直す（5.） |
-| `/srv/gitea/data/backups/gitea-YYYYMMDD.zip` | 毎晩 01:30 のバックアップ（14 日分）。**NAS へ同期する** | 困らない（5.） |
+| `/srv/gitea/data/backups/gitea-YYYYMMDD.zip` | 毎晩 01:30 のバックアップ（14 日分）。今はサーバーの中だけ（3.6） | 困らない（5.） |
 | `/srv/gitea/runner/config.yaml` | ランナーの設定（リポジトリの `deploy/gitea/runner-config.example.yaml` の写し） | 写し直す（3.2） |
 | `/srv/gitea/runner/.runner` | ランナーの登録情報（Gitea に「このランナーは自分」と名乗るための鍵） | 登録し直す（3.4） |
 | `/etc/cron.d/gitea-dump` | 毎晩のバックアップの予定（記録は `/var/log/gitea-dump.log`） | 入れ直す（3.5） |
@@ -229,12 +229,12 @@ sudo ls -l /srv/gitea/data/backups/
 **確認**: `gitea-YYYYMMDD.zip`（今日の日付）が 1 つある。以後は毎晩 01:30 に自動でできます（14 日より古いものは
 消える。記録は `/var/log/gitea-dump.log`）。
 
-### 3.6 NAS への同期
+### 3.6 バックアップの保管場所
 
-`/srv/gitea/data/backups/` を、アプリのバックアップ（`/srv/ops/backups/`）と同じように NAS へ同期します。
+今（MVP の間）は、`/srv/gitea/data/backups/` もサーバーの中だけに置きます。この節ですることはありません。理由と、
+あとで NAS へ同期するときのことは、アプリの手順書の [3.8](README.md#38-バックアップの保管場所)。
 
-> ⚠ 未決: NAS への同期の具体的な手順は、アプリの手順書の [3.8](README.md#38-nas-への同期) と一緒に、運用の担当が
-> 決めて書き足します。
+> ⚠ 未決（あとでやること）: NAS への同期。専用のサービスアカウントができてから、アプリのバックアップと一緒に。
 
 ### 3.7 仕上げ
 

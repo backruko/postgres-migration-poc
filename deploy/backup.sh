@@ -1,7 +1,7 @@
 #!/bin/sh
 # データベースの毎日のバックアップ（docker-compose.yml の backup サービス）。
 # 毎日 BACKUP_TIME（日本時間、既定 01:00）に pg_dump（カスタム形式・圧縮）を /backups に書き、
-# BACKUP_KEEP_DAYS 日（既定 14。0 なら消さない）より古いものを消す。NAS への同期は OS 側で行う。
+# BACKUP_KEEP_DAYS 日（既定 14。0 なら消さない）より古いものを消す。NAS への同期はまだ無い（README 3.8）。
 #
 #   sh /backup.sh        … 毎日の繰り返し（サービスとして）
 #   sh /backup.sh once   … 今すぐ 1 回だけ（docker compose exec backup sh /backup.sh once）
