@@ -2,7 +2,7 @@
 日次の予定生成ジョブ。全顧客の有効なテンプレートについて、生成済み区間を
 「今から90日先」と「次の予定」の遅い方まで延ばします（上限2年）。何度実行しても同じ結果になります。
 
-    python scripts/extend_plans.py
+    python -m scripts.extend_plans
 
 OS のスケジューラーから1日1回実行します（例: cron `5 0 * * *`、Windows のタスク スケジューラー）。
 接続先は .env の DATABASE_URL（環境変数 DATABASE_URL が優先）。

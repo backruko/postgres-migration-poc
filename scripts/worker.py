@@ -14,7 +14,7 @@
 - 健康の記録（並行稼働 P.4a）: 起動・毎回りの心拍・止まった理由を worker_run に、仕事の失敗を 1 回ずつ worker_error に書く
   （src/worker_health。DB に書けない間はメモリーにためて後で書く。記録が失敗してもワーカーは止まらない）
 
-    python scripts/worker.py
+    python -m scripts.worker
 
 接続先は DATABASE_URL（環境変数。無ければ .env）。ログは標準出力（docker compose logs worker で見る）。
 """
@@ -28,10 +28,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from src.core.clock import LOCAL_TIMEZONE, local_date_of, utc_now
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+# src は上の sys.path の後で読む（前に置くと、python scripts/<名前>.py で動かしたときに src が見つからない）
+from src.core.clock import LOCAL_TIMEZONE, local_date_of, utc_now  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("worker")

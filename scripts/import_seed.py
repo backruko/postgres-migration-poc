@@ -2,7 +2,7 @@
 seed_data.json（scripts/export_seed.py が書き出したマスタデータ）を空の本番へ入れる。画面と同じ API で作るので、
 API の確かめ（顧客が有効か・参照先があるか など）がそのまま効く。本番の使い始めの前日に行う（deploy/GO-LIVE.md）。
 
-    python scripts/import_seed.py --target http://<サーバー>/api --login admin --seed seed_data.json [--effective-date 2026-12-01] [--dry-run]
+    python -m scripts.import_seed --target http://<サーバー>/api --login admin --seed seed_data.json [--effective-date 2026-12-01] [--dry-run]
 
 順番（参照の向きに合わせる）:
   1. ログイン   2. 営業日カレンダーと休日   3. 顧客（すべて有効で作る）   4. 業務と設定   5. 業務の依存

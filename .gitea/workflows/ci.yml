@@ -106,9 +106,9 @@ jobs:
       # requirements*.txt はすべての依存を版つきで並べている（間接の依存も）ので、ファイルをそのまま調べる（--no-deps）。
       # 既知の脆弱性が 1 つでもあれば止まる（2026-11-17 の決定: 止める）。直し方は修正版へ上げること。上げられない理由が
       # あるときだけ、requirements-audit-ignore.txt に ID と理由を書いて見送る
-      # （開発 PC でも同じ: python scripts/audit_check.py。理由の無い見送りの行も赤にする）
+      # （開発 PC でも同じ: python -m scripts.audit_check。理由の無い見送りの行も赤にする）
       - name: 依存関係の既知の脆弱性（pip-audit）
-        run: python scripts/audit_check.py
+        run: python -m scripts.audit_check
 
       - name: データベースの起動を待つ
         run: |
@@ -135,10 +135,10 @@ jobs:
 
       - name: API の説明（frontend/openapi.json）が最新
         run: |
-          python scripts/export_openapi.py /tmp/openapi.json
+          python -m scripts.export_openapi /tmp/openapi.json
           if ! diff -u frontend/openapi.json /tmp/openapi.json > /tmp/openapi.diff; then
             head -n 80 /tmp/openapi.diff
-            echo "::error::frontend/openapi.json が古い。python scripts/export_openapi.py と（frontend で）npm run gen:api を実行してコミットする"
+            echo "::error::frontend/openapi.json が古い。python -m scripts.export_openapi と（frontend で）npm run gen:api を実行してコミットする"
             exit 1
           fi
 

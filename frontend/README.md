@@ -56,7 +56,7 @@ src/
 
 ```bash
 # リポジトリのルートで: FastAPI から OpenAPI 仕様を書き出す（サーバーの起動は不要）
-python scripts/export_openapi.py     # -> frontend/openapi.json
+python -m scripts.export_openapi     # -> frontend/openapi.json
 
 # frontend で: 型を再生成
 npm run gen:api                      # -> src/shared/api/schema.gen.ts
@@ -125,7 +125,7 @@ GHSA-xxxx-xxxx-xxxx  # SSR の hydration だけの問題。この画面は SSR �
 
 勧告が出なくなった行は、CI のログに `::warning::` で知らせるので消します。サーバー側（pip-audit）の一覧はリポジトリの
 ルートの `requirements-audit-ignore.txt` で、書き方は同じです（ID は CVE・GHSA・PYSEC のどれでもよい。手元の確かめは
-ルートで `python scripts/audit_check.py`）。
+ルートで `python -m scripts.audit_check`）。
 
 ## スクリプト
 

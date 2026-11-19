@@ -1,8 +1,8 @@
 """
 FastAPI の OpenAPI 仕様を JSON ファイルに書き出します（サーバーを起動せずに生成できます）。
 
-    python scripts/export_openapi.py                      # -> frontend/openapi.json
-    python scripts/export_openapi.py path/to/openapi.json
+    python -m scripts.export_openapi                      # -> frontend/openapi.json
+    python -m scripts.export_openapi path/to/openapi.json
 
 フロントエンドの型はこのファイルから生成します（frontend で `npm run gen:api`）。
 """

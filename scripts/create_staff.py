@@ -2,7 +2,7 @@
 職員を有効（active）な状態で直接登録します。最初のシステム管理者を作るためのスクリプトです
 （それ以降の職員は、システム管理者が API / 画面から登録します）。
 
-    python scripts/create_staff.py <login_id> <氏名> --roles system_admin [--email someone@example.com]
+    python -m scripts.create_staff <login_id> <氏名> --roles system_admin [--email someone@example.com]
 
 パスワードを 2 回たずねます（画面に出ません。LG.2）。この職員はそのパスワードでログインできます（仮パスワードではない）。
 接続先は .env の DATABASE_URL（環境変数 DATABASE_URL が優先）。
@@ -11,10 +11,12 @@ import argparse
 import getpass
 import sys
 from pathlib import Path
-from src.core.clock import utc_now
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+# src は上の sys.path の後で読む（前に置くと、python scripts/<名前>.py で動かしたときに src が見つからない）
+from src.core.clock import utc_now  # noqa: E402
 
 from src.core.exceptions import BusinessException  # noqa: E402
 from src.domain_staff import credentials  # noqa: E402

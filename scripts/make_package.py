@@ -1,7 +1,7 @@
 """
 サーバーへ USB で持っていく zip を作ります（社内のサーバーは GitHub に届かないため）。
 
-    python scripts/make_package.py [--out packages] [--allow-dirty]
+    python -m scripts.make_package [--out packages] [--allow-dirty]
 
 コミット済みの内容（HEAD）だけを `git archive` で固めます。git に入っていないもの（.env、ログ、バックアップ、
 node_modules など）は入りません。ファイル名は ops-<コミットの日付>-<コミット>.zip で、中は同じ名前のフォルダー 1 つ。

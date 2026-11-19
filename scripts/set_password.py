@@ -2,7 +2,7 @@
 既存の職員のパスワードを設定します（LG.2）。ログインを入れたあと、最初に自分（システム管理者）のパスワードを決めるときや、
 画面に入れなくなったときに使います（ふだんは 職員 の画面の「仮パスワードを設定」）。
 
-    python scripts/set_password.py <login_id> [--temporary]
+    python -m scripts.set_password <login_id> [--temporary]
 
 パスワードを 2 回たずねます（画面に出ません）。--temporary なら仮パスワード（次のログインで本人が変える）。
 ロックは解け、その職員の開いているセッションは終わります。接続先は .env の DATABASE_URL（環境変数 DATABASE_URL が優先）。
@@ -11,10 +11,12 @@ import argparse
 import getpass
 import sys
 from pathlib import Path
-from src.core.clock import utc_now
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+# src は上の sys.path の後で読む（前に置くと、python scripts/<名前>.py で動かしたときに src が見つからない）
+from src.core.clock import utc_now  # noqa: E402
 
 from src.core.exceptions import BusinessException  # noqa: E402
 from src.domain_staff import credentials  # noqa: E402

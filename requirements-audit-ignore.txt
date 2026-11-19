@@ -1,5 +1,5 @@
 # サーバーの依存（pip-audit）で、見送ると決めた脆弱性の一覧。scripts/audit_check.py（CI の「依存関係の既知の脆弱性
-# （pip-audit）」。手元ではリポジトリのルートで python scripts/audit_check.py）が読み、1 行ごとに pip-audit --ignore-vuln <ID>
+# （pip-audit）」。手元ではリポジトリのルートで python -m scripts.audit_check）が読み、1 行ごとに pip-audit --ignore-vuln <ID>
 # を付ける（requirements.txt・requirements-dev.txt のすべてが対象。重さを問わず、1 つでもあれば止める）。
 #
 # ■ まず上げる。見送りは最後の手段

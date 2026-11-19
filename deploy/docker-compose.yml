@@ -88,7 +88,7 @@ services:
       args: *build-args
     image: ops-app:latest
     restart: unless-stopped
-    command: ["python", "scripts/worker.py"]
+    command: ["python", "-m", "scripts.worker"]
     environment:
       <<: *app-env
       WORKER_EXTEND_AT: "00:05"

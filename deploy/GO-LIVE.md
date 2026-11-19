@@ -45,9 +45,9 @@ Gitea とパイプライン（[gitea-runbook.md](gitea-runbook.md) と README.md
 ## B. 最初の設定
 
 - [ ] 最初の管理者を作る（パスワードを 2 回たずねます）:
-  `docker compose exec app python scripts/create_staff.py admin "管理者の氏名" --roles system_admin admin`
+  `docker compose exec app python -m scripts.create_staff admin "管理者の氏名" --roles system_admin admin`
 - [ ] 営業日カレンダーを作る（土日休み。2 回動かしても変わりません）:
-  `docker compose exec app python scripts/setup_calendar.py`
+  `docker compose exec app python -m scripts.setup_calendar`
   → `Created business calendar id=1 code=JP_BANK name=銀行営業日 weekend_days=[6, 7]`
 - [ ] `admin` でログインできる。右上の名前のメニューに「パスワードを変更」「ログアウト」がある
 - [ ] 設定 → 休日カレンダー →「銀行営業日」:
@@ -77,12 +77,12 @@ Gitea とパイプライン（[gitea-runbook.md](gitea-runbook.md) と README.md
 
 - [ ] 取り込む前のバックアップ（サーバーで）: `docker compose exec backup sh /backup.sh once`
 - [ ] テスト環境から書き出す（読むだけ）:
-  `python scripts/export_seed.py --source <テスト環境の API の URL> --login <業務管理者> --out seed_data.json`
+  `python -m scripts.export_seed --source <テスト環境の API の URL> --login <業務管理者> --out seed_data.json`
   - URL は、開発 PC の uvicorn なら `http://localhost:8000`、サーバーなら `http://<サーバー>/api`
   - [ ] 最後の行の件数（calendars・clients・businesses・dependencies・sops・sheets・templates）が、テスト環境の画面と合っている
   - [ ] 「人が変えたシートの日付」の一覧を確かめる（今の日付だけを持っていき、動かした・取り消した記録は持っていかない）
 - [ ] 確かめだけ（何も作らない）:
-  `python scripts/import_seed.py --target http://<サーバー>/api --login admin --seed seed_data.json --effective-date <使い始めの日> --dry-run`
+  `python -m scripts.import_seed --target http://<サーバー>/api --login admin --seed seed_data.json --effective-date <使い始めの日> --dry-run`
   → `dry run: OK`。「今日より前の休日 N 件は足さない」は正常です（過去の日付は運用の記録で、予定は今日から先に作るため）
 - [ ] 取り込む: 同じコマンドから `--dry-run` を外す → 最後に `done: 件数はファイルと同じ`
   - 途中で止まったら、作りかけのものが残っています。**上のバックアップに戻して**（[README.md](README.md)「6.3 データベースをバックアップから戻す」）
@@ -148,7 +148,7 @@ Gitea とパイプライン（[gitea-runbook.md](gitea-runbook.md) と README.md
 
 - [ ] 日次ダッシュボードで、パイロットの顧客の予定の行に「未リリース」が付いている
   （テンプレートを作ると、その時点で先の予定のオーダーが自動でできます）
-- [ ] 念のため `docker compose exec app python scripts/create_orders.py` → `Created 0 orders`（足りないものだけ作ります。何回動かしても同じ）
+- [ ] 念のため `docker compose exec app python -m scripts.create_orders` → `Created 0 orders`（足りないものだけ作ります。何回動かしても同じ）
 
 ## F. ブラウザでの確認（パイロットの職員で）
 
@@ -236,7 +236,7 @@ QA のメールボックスだけに届くアラームのメールを出しま�
 - [ ] **予定テンプレートの見直し**（「開始時刻に知らせる」）: 事前確認を CSV つきで動かし、取り出す
 
   ```sh
-  docker compose exec worker python scripts/parallel_run_check.py --qa-address ops-qa-team@corp.com \
+  docker compose exec worker python -m scripts.parallel_run_check --qa-address ops-qa-team@corp.com \
     --smtp-host smtp.internal.corp --smtp-port 25 --smtp-from ops-system-noreply@corp.com \
     --templates-csv /tmp/templates_review.csv
   docker compose cp worker:/tmp/templates_review.csv ./templates_review_$(date +%Y%m%d).csv

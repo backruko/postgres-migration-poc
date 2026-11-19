@@ -2,7 +2,7 @@
 運用開始時のオーダー作成。今以降に開始する有効な予定のうち、オーダーの無い発生枠に pending のオーダーを作ります
 （過去の予定には作りません）。何度実行しても同じ結果になります。以後の予定は plan の変更に合わせて自動で作られます。
 
-    python scripts/create_orders.py
+    python -m scripts.create_orders
 
 接続先は .env の DATABASE_URL（環境変数 DATABASE_URL が優先）。
 """

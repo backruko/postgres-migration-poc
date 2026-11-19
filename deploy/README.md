@@ -347,7 +347,7 @@ curl -s --max-time 10 "http://$SERVER_IP/api/health/app"; echo
 そのまま貼ってよい）:
 
 ```sh
-cd /srv/ops/current/deploy && sudo docker compose exec app python scripts/create_staff.py admin "システム管理者" --roles system_admin admin
+cd /srv/ops/current/deploy && sudo docker compose exec app python -m scripts.create_staff admin "システム管理者" --roles system_admin admin
 ```
 
 **確認**: ブラウザで `http://<SERVER_IP>/` を開き、ログイン名 `admin` と今のパスワードでログインできる。
@@ -618,7 +618,7 @@ cd /srv/ops/current/deploy && sudo docker compose up -d worker && sleep 10 && su
 | 状態を見る | `sudo docker compose ps` |
 | 全部を止める / 動かす | `sudo docker compose stop` / `sudo docker compose up -d` |
 | 1 つだけ動かし直す | `sudo docker compose restart worker`（`worker` を `app` などに） |
-| アプリの職員のパスワードを変える | `sudo docker compose exec app python scripts/set_password.py <ログイン名>` |
+| アプリの職員のパスワードを変える | `sudo docker compose exec app python -m scripts.set_password <ログイン名>` |
 | データベースに入る（調べもの） | `sudo docker compose exec db psql -U ops -d ops`（`\q` で出る） |
 
 ⚠ `sudo docker compose down -v` と `sudo docker volume rm ops_pgdata` と `sudo docker system prune --volumes` は
@@ -822,7 +822,7 @@ printf 'protocol=http\nhost=%s:3000\n\n' "$SERVER_IP" | git credential reject
   動いているコンテナはインターネットに出ません（メールは社内の中継へ）。
 - パイプラインとランナーの権限（main に push できる人が、サーバーの Docker を操作できること）は
   [gitea-runbook.md](gitea-runbook.md)。
-- Gitea が使えないときの予備: PC で `python scripts/make_package.py`（→ `packages/ops-<日付>-<コミット>.zip`）を作り、
+- Gitea が使えないときの予備: PC で `python -m scripts.make_package`（→ `packages/ops-<日付>-<コミット>.zip`）を作り、
   USB でサーバーへ持っていき、`sudo unzip <zip> -d /srv/ops/releases && sudo sh /srv/ops/releases/<zip の名前から .zip を除いたもの>/deploy/install.sh`。
   パイプラインと同じ置き場所・同じ `install.sh` です（`deploys.log` には残りません）。
 - 開発 PC の Windows のタスク スケジューラー（PlanExtendJob / OrderReleaseJob）は開発用のデータベース向けです。

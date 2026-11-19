@@ -1,8 +1,8 @@
 """
 並行稼働の事前確認（P.5a、2026-11-16）。読むだけで、何も変えない。並行稼働の初日の前と、期間中いつでも動かす。
 
-    docker compose exec worker python scripts/parallel_run_check.py --qa-address ops-qa-team@corp.com
-    docker compose exec worker python scripts/parallel_run_check.py --qa-address ops-qa-team@corp.com \\
+    docker compose exec worker python -m scripts.parallel_run_check --qa-address ops-qa-team@corp.com
+    docker compose exec worker python -m scripts.parallel_run_check --qa-address ops-qa-team@corp.com \\
         --templates-csv /tmp/templates_review.csv      # 不定期・スペシャルのテンプレートの見直し用の CSV も書く
 
 メールの設定はワーカーが読む環境変数なので、worker のコンテナの中で動かす（app のコンテナには SMTP の設定が無い）。
@@ -30,10 +30,12 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from pathlib import Path
-from src.core.clock import LOCAL_TIMEZONE, local_date_of, utc_now
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+# src は上の sys.path の後で読む（前に置くと、python scripts/<名前>.py で動かしたときに src が見つからない）
+from src.core.clock import LOCAL_TIMEZONE, local_date_of, utc_now  # noqa: E402
 
 
 

@@ -2,7 +2,7 @@
 テスト環境のマスタデータを seed_data.json に書き出す（読むだけ。GET の API だけを使う）。本番の使い始めの前日に、
 scripts/import_seed.py で空の本番へ入れる（deploy/GO-LIVE.md）。
 
-    python scripts/export_seed.py --source http://localhost:8000 --login admin [--out seed_data.json]
+    python -m scripts.export_seed --source http://localhost:8000 --login admin [--out seed_data.json]
 
 書き出すもの: 営業日カレンダーと休日・顧客（有効・無効）・業務と設定・業務の依存・SOP（現行と予定の版と手順）・
 年間計画シート（マーカーと今の日付・生成のルール）・テンプレート。
