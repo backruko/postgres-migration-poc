@@ -35,6 +35,9 @@
   （Git for Windows に付いてくるターミナル）で行います。PowerShell やコマンド プロンプトでは動きません。
 - サーバーのコマンドには `sudo` が付いています。最初の 1 回だけ、自分のパスワードをたずねます（0.3）。
 - 何かを消すコマンドの前には ⚠ を付けています。⚠ の説明を読んでから実行します。
+- **時刻の読み方**: アプリが出す時刻（画面・ログ・`/srv/ops/deploys.log`）は**日本時間**。サーバーの `date` と
+  Docker（`docker inspect` の `Created` / `StartedAt` など。末尾が `Z`）は **UTC** で、日本時間はそれに 9 時間を足したもの。
+  どちらも、サーバーの時計が合っていること（[2.](#2-再起動のあとの確認) の `--- clock`）が前提です。
 
 ### 0.3 ターミナルを開いたら、毎回最初に（SERVER_IP を決める）
 
@@ -136,6 +139,7 @@ Gitea のパイプライン（`.gitea/workflows/ci.yml`）が確かめるのは�
 **サーバーで**（先に [0.3](#03-ターミナルを開いたら毎回最初にserver_ip-を決める)）:
 
 ```sh
+echo "--- clock";   chronyc tracking | grep -E "Leap status|System time"; TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M 日本時間'
 echo "--- docker";  sudo systemctl is-active docker
 echo "--- ops";     cd /srv/ops/current/deploy && sudo docker compose ps --format '{{.Service}} {{.State}} {{.Health}}'
 echo "--- app health";    curl -s --max-time 10 "http://$SERVER_IP/api/health/app"; echo
@@ -145,6 +149,10 @@ echo "--- worker health"; curl -s --max-time 10 "http://$SERVER_IP/api/health/wo
 **確認**（行の順番は違ってかまいません）:
 
 ```
+--- clock
+Leap status     : Normal
+System time     : 0.000123456 seconds fast of NTP time      ← 数字は違ってよい。1 秒より小さいこと
+2026-11-19 10:44 日本時間                                   ← 手元の時計（スマートフォンなど）と同じ日時
 --- docker
 active
 --- ops
@@ -163,6 +171,7 @@ worker running
 
 | 出たもの | 行うこと |
 |---|---|
+| `--- clock` の `Leap status` が `Normal` でない・`chronyc: command not found`・日時が手元の時計と違う | [T-14](#t-14-サーバーの時計がずれている) |
 | `docker` が `active` でない | `sudo systemctl start docker` → 1 分待ってこのブロックをもう一度 |
 | `ops` のどれかが無い・`exited`・`restarting` | `cd /srv/ops/current/deploy && sudo docker compose up -d` → 2 分待ってもう一度。それでも → [T-2](#t-2-app-が-healthy-にならない画面が出ない502) |
 | `app` が `starting` | 1〜2 分待ってもう一度（起動のたびにデータベースを確かめるため） |
@@ -200,6 +209,19 @@ done
 **確認**: 4 行とも 3 桁の数字が出る（`200`。Docker Hub は `401` でよい = 届いている）。
 `000`・`届かない`・証明書のエラーが出たら、会社のプロキシが要ります → [付録](#付録-プロキシが必要なとき) の 1. と 2. を
 行ってから、このブロックをもう一度。
+
+サーバーの時計を、社内の時刻のサーバー（ふつうはドメインコントローラー。アドレスはネットワークの担当に聞く）に
+合わせます。**時計がずれていると、自動リリース・締切の監視・バックアップがずれた時刻に動き、記録の時刻も
+すべてずれます**（以前、9 時間進んでいたことがある）。最後の行がアドレスをたずねます:
+
+```sh
+sudo apt-get update && sudo apt-get install -y chrony && sudo timedatectl set-local-rtc 0
+read -r -p "時刻のサーバーの IP アドレス（社内のドメインコントローラー）: " NTP_SERVER && echo "server $NTP_SERVER iburst" | sudo tee /etc/chrony/sources.d/intranet.sources && sudo chronyc reload sources && sleep 20 && chronyc tracking | grep -E "Reference ID|Leap status|System time"
+```
+
+**確認**: `Reference ID` に入れたアドレス、`Leap status : Normal`、`System time` が 1 秒より小さい
+（`… seconds fast/slow of NTP time`）。続けて `TZ=Asia/Tokyo date` が手元の時計と同じ日本時間を出す。
+`Leap status : Not synchronised` のまま（1 分待っても）→ [T-14](#t-14-サーバーの時計がずれている)。
 
 Docker を入れます（Docker の公式の apt リポジトリから。Ubuntu の `docker.io` パッケージは使わない）:
 
@@ -810,6 +832,34 @@ printf 'protocol=http\nhost=%s:3000\n\n' "$SERVER_IP" | git credential reject
 - Actions の画面の左の一覧で **checks and deploy** を選んでいない → 選ぶ（ボタンは一覧で選んだ後に右に出る）
 - 自分に書き込みの権限が無い → Gitea の管理者へ（[gitea-runbook.md](gitea-runbook.md)）
 - Actions の一覧が空（ワークフローが無い）→ まだ push していない → [3.4](#34-コードを-gitea-へ送るpc-で)
+
+### T-14. サーバーの時計がずれている
+
+**症状**: 画面やログの時刻が実際と数時間ずれる（`deploys.log` の時刻が押した時刻と違う、ワーカーの開始の時刻が違う、
+Gitea の「〜時間前」が合わない）。オーダーが予定より早く・遅くリリースされる、締切の前に「遅れ」になる。
+
+**確かめる**（サーバーで）: サーバーの UTC と、外のサーバー（GitHub）が返す UTC を比べる:
+
+```sh
+date -u '+%a, %d %b %Y %H:%M:%S'; curl -sI --max-time 10 https://github.com | grep -i '^date:'; chronyc tracking | grep -E "Reference ID|Leap status|System time"
+```
+
+1 行目と 2 行目の時・分が同じなら時計は合っている。違えば、ずれている（例: 9 時間違う = 日本時間を UTC として
+設定してしまっている）。
+
+**直し方**:
+- `chronyc: command not found` → [3.1](#31-os-と-dockerサーバーで) の時計のブロックを行う
+- `Leap status : Not synchronised` → 時刻のサーバーに届いていない。`chronyc sources -v` で状態を見て、ネットワークの
+  担当に、サーバーから時刻のサーバーへの NTP（UDP 123 番）を開けてもらう。アドレスが違うなら 3.1 の時計のブロックを
+  もう一度（同じファイルを書き直す）
+- 合ったら、時刻を元に次の予定を決めているサービスを動かし直す（次のバックアップ・予定の生成の時刻を計算し直す）:
+
+  ```sh
+  cd /srv/ops/current/deploy && sudo docker compose restart worker backup
+  ```
+
+**確認**: 上の「確かめる」のブロックで 1 行目と 2 行目が合い、`Leap status : Normal`。ずれていた間に書かれた記録
+（`deploys.log`・ワーカーの記録・オーダーの日時の記録）は、ずれた時刻のまま残る。
 
 ---
 
