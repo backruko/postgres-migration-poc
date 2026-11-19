@@ -32,6 +32,19 @@ name: checks and deploy
 on:
   push:
     branches: [main]
+    # 文書と運用のスクリプトだけの push ではチェックを動かさない（中身を確かめるジョブが無い。deploy/README.md の 0.4）。
+    # push の中に 1 つでもほかのファイルがあれば動く。デプロイ（Run workflow）は、いつもすべてのチェックを通してから入れる。
+    # テストが読むファイル（deploy/docker-compose.yml・adapters/mfa/*.ini.example）は外さない
+    paths-ignore:
+      - '*.md'
+      - '**/*.md'
+      - 'docs/**'
+      - '*.vbs'
+      - '**/*.vbs'
+      - '*.ttl'
+      - '**/*.ttl'
+      - '*.bat'
+      - '**/*.bat'
   workflow_dispatch: {}
   # 週に 1 回、push が無くてもチェックだけを流す（古くなるコードの見張り: 新しく公表された脆弱性・動く版の名前の
   # イメージ（python:3.14-slim など）の変化・取り下げられたパッケージを、急ぎのデプロイの前に見つける）。
