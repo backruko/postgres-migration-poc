@@ -360,7 +360,7 @@ def _ensure_next_occurrence(db: Session, template: PlanTemplate) -> bool:
     戻り値: 生成済み区間を延ばしたか
     """
     now = _now()
-    cap = now + MAX_LOOKAHEAD
+    cap = _lookahead_cap(now)
     before = template.materialized_until
     # 日単位（UTC の翌0時）に切り上げる。同じ日に何度実行しても区間が動かない（日次ジョブの「延ばした数」が意味を持つ）
     horizon = datetime.combine((now + MATERIALIZE_HORIZON).date() + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
@@ -2093,10 +2093,20 @@ def _validate_range(start: datetime, end: datetime) -> None:
         raise BadRequestError(f"Range must not exceed {MAX_QUERY_SPAN.days} days.")
 
 
+def _lookahead_cap(now: datetime) -> datetime:
+    """
+    予定を作る先の上限（今 + MAX_LOOKAHEAD を UTC の翌 0 時に切り上げる）。
+    切り上げないと上限が 1 秒ごとに進み、上限より先の日付を開くたびに、どのテンプレートも「数秒足りない」と
+    見なされ、全部をロックして作り直していた（1 回の表示で約 180 の文）。同じ日の中では上限が動かない。
+    """
+    day = (now + MAX_LOOKAHEAD).astimezone(UTC).date()
+    return datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+
+
 def _materialize_templates(db: Session, templates: list[PlanTemplate], end: datetime) -> None:
     """範囲が未生成区間にかかるテンプレートだけ、先にその区間を生成します（生成済みなら何もしません）。"""
     now = _now()
-    until = min(end, now + MAX_LOOKAHEAD)
+    until = min(end, _lookahead_cap(now))
     materialized = False
     for template in templates:
         if (template.materialized_until or now) < until:
