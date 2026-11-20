@@ -16,6 +16,7 @@ import pytest
 from sqlalchemy import select
 
 from tests.client_codes import new_client_code
+from src.core.clock import local_date_of, utc_now
 from src.core.exceptions import BadRequestError
 from src.domain_biz.models import SOPStatus, SOPStepTemplate, SOPVersion
 from src.domain_biz.schemas import BizMasterCreate
@@ -35,6 +36,11 @@ from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import biz_master_repo, client_repo
 
 JST = timezone(timedelta(hours=9))
+
+# 「2 週間以上先の火曜日」を、実行の日や時刻によらず同じ日にするため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 # ==========================================
@@ -62,7 +68,7 @@ def staff(db):
 
 def base_tuesday() -> date:
     """2週間以上先の火曜日（その週の月曜日の予定も今より後になる）"""
-    day = datetime.now(JST).date() + timedelta(days=14)
+    day = local_date_of(utc_now()) + timedelta(days=14)
     return day + timedelta(days=(1 - day.weekday()) % 7)
 
 

@@ -7,7 +7,7 @@ SOP バージョンの状態のテスト: 保存は草稿 / 承認済みだけ�
 ※ テストごとに一意な顧客コードを使ってデータを分離しています。
 """
 import uuid
-from datetime import date, datetime, time, timedelta, UTC
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from tests.client_codes import new_client_code
+from src.core.clock import local_date_of, utc_now
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import SOPStatus, SOPStepTemplate, SOPVersion, SopState
@@ -37,6 +38,11 @@ from src.infrastructure.repositories import sop_version_repo
 
 JST = ZoneInfo("Asia/Tokyo")
 
+# 版の発効日（明日以降）と今日（日本時間）を、日本時間の 0 時をまたいでも変わらないようにするため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 @pytest.fixture
 def db():
@@ -58,7 +64,7 @@ def biz(db):
 
 
 def today_jst() -> date:
-    return datetime.now(UTC).astimezone(JST).date()
+    return local_date_of(utc_now())
 
 
 def draft_with_step(db, biz_id, tag):

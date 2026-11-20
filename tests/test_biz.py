@@ -4,19 +4,25 @@ domain_biz のテスト（業務のリリース設定）。
 
 ※ Service層は内部で commit するため、テストごとに一意な顧客コードを使ってデータを分離しています。
 """
-from datetime import time, UTC
+from datetime import time
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from tests.client_codes import new_client_code
+from src.core.clock import utc_now
 from src.domain_biz import services
 from src.domain_biz.models import ReleaseMode
 from src.domain_biz.schemas import BizMasterCreate, BizMasterResponse, BizMasterUpdate
 from src.domain_client.schemas import ClientCreate
 from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import client_repo
+
+# 現行版の発効日時を「いま」から決めるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -81,7 +87,7 @@ def test_release_settings_validation(db, biz):
 # ステップの条件・is_blocking（5.1）
 # ==========================================
 def test_step_template_condition_and_is_blocking(db, biz):
-    from datetime import datetime, timedelta
+    from datetime import timedelta
     from src.domain_biz.models import SOPStatus
     from src.domain_biz.schemas import SOPStepTemplateCreate, SOPStepTemplateResponse, SOPVersionCreate
 
@@ -105,7 +111,7 @@ def test_step_template_condition_and_is_blocking(db, biz):
 
     # 現行版を複製した草稿にも、条件と is_blocking が引き継がれる
     draft.status = SOPStatus.APPROVED
-    draft.effective_at = datetime.now(UTC) - timedelta(days=1)
+    draft.effective_at = utc_now() - timedelta(days=1)
     db.commit()
     clone = services.clone_active_to_draft(db, biz.id, SOPVersionCreate(version_tag="v1.1.0"))
     copied = {s.step_num: (s.condition, s.is_blocking) for s in services.get_steps_by_version(db, clone.id)}
