@@ -22,6 +22,11 @@ from src.domain_plan.models import TemplateType
 from src.domain_plan.schemas import PlanTemplateUpdate, ReferenceSheetImport, ReferenceSheetTemplateCreate
 from src.infrastructure.repositories import biz_master_repo, client_repo
 
+# 変更の前後の決まりを、今日（日本時間）の枠に左右されずに固定するため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 def _two_marker_sheet(db, client_code: str, name: str = "Two markers"):
     """マーカー A と B に、今日より後の日付が 2 件ずつあるシート"""

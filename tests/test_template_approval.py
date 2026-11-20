@@ -8,15 +8,16 @@
 - 承認待ちの下書きがある業務は削除できない
 ※ 顧客コードの先頭文字は空きがないため "I" を共有する（fixture と helper は test_template_drafts.py のもの）
 """
-from datetime import datetime, time, timedelta
+from datetime import time, timedelta
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
 from tests.test_template_drafts import (  # noqa: F401  (fixture は名前で使う)
-    JST, UTC, _future, admin, biz_id, dated, daily, db, refused, releaser, rrule_body, state, update,
+    JST, _future, admin, biz_id, dated, daily, db, refused, releaser, rrule_body, state, update,
 )
+from src.core.clock import utc_now
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, BusinessException, NotFoundError
 from src.domain_biz import services as biz_services
@@ -30,11 +31,16 @@ from src.domain_plan.schemas import (
 )
 from src.infrastructure.repositories import plan_template_change_repo
 
+# 承認で動く「これからの」オーダーと指定日を、同じ「いま」から決めるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 def future_orders(db, biz_id: int, template_id: int | None = None) -> list[OpeOrder]:
     db.expire_all()
     stmt = select(OpeOrder).where(
-        OpeOrder.biz_master_id == biz_id, OpeOrder.scheduled_start > datetime.now(UTC) + timedelta(days=1),
+        OpeOrder.biz_master_id == biz_id, OpeOrder.scheduled_start > utc_now() + timedelta(days=1),
     )
     if template_id is not None:
         stmt = stmt.where(OpeOrder.template_id == template_id)
@@ -136,11 +142,12 @@ def test_a_failing_approval_changes_nothing_and_the_draft_stays_pending(db, biz_
     def fail(*args, **kwargs):
         raise BadRequestError("simulated failure while applying dates")
 
-    monkeypatch.setattr(plan_services, "_apply_explicit_dates", fail)
-    with pytest.raises(BadRequestError, match="simulated"):
-        template_changes.approve_draft(db, draft.id, admin)
-    db.rollback()
-    monkeypatch.undo()
+    # この差し替えだけを外す（monkeypatch.undo() は止めた時計まで戻してしまう）
+    with monkeypatch.context() as m:
+        m.setattr(plan_services, "_apply_explicit_dates", fail)
+        with pytest.raises(BadRequestError, match="simulated"):
+            template_changes.approve_draft(db, draft.id, admin)
+        db.rollback()
 
     assert state(db, biz_id) == before
     pending = db.get(PlanTemplateChange, draft.id)

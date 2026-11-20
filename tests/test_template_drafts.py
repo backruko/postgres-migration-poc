@@ -8,7 +8,7 @@
 ※ 顧客コードの先頭文字は空きがないため "I" を共有する（1 回の実行の中では重複しない）
 """
 import uuid
-from datetime import UTC, date, datetime, time, timedelta, timezone
+from datetime import date, time, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 
 from tests.client_codes import new_client_code
 from tests.openapi_auth import needs_login
+from src.core.clock import local_date_of, utc_now
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, BusinessException, ForbiddenError, NotFoundError
 from src.domain_biz.schemas import BizMasterCreate
@@ -37,6 +38,11 @@ from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import biz_master_repo, client_repo
 
 JST = timezone(timedelta(hours=9))
+
+# 下書きの指定日と「2 日より先の予定」を、同じ「いま」から決めるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -90,7 +96,7 @@ def daily(db, biz_id) -> PlanTemplate:
 
 
 def _future(days: int) -> date:
-    return datetime.now(JST).date() + timedelta(days=days)
+    return local_date_of(utc_now()) + timedelta(days=days)
 
 
 @pytest.fixture
@@ -257,7 +263,7 @@ def test_one_pending_draft_blocks_other_drafts_and_direct_changes(db, biz_id, da
 
 def test_single_occurrence_changes_are_not_blocked_by_a_draft(db, biz_id, daily, releaser):
     template_changes.create_draft(db, update(daily.id, {"start_time": "10:00:00"}), releaser)
-    now = datetime.now(UTC)
+    now = utc_now()
     live = sorted(
         (i for i in plan_services.get_instances(db, daily.id, limit=500) if not i.voided and i.scheduled_start > now + timedelta(days=2)),
         key=lambda i: i.scheduled_start,

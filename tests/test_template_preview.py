@@ -5,13 +5,14 @@
 - 確認は何も保存しない
 """
 import uuid
-from datetime import UTC, date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 from sqlalchemy import func, select
 
 from tests.client_codes import new_client_code
 from tests.openapi_auth import needs_login
+from src.core.clock import local_date_of, utc_now
 from src.coordination.template_preview import preview_template_create, preview_template_update
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.domain_biz.schemas import BizMasterCreate
@@ -28,6 +29,11 @@ from src.infrastructure.dry_run import dry_run
 from src.infrastructure.repositories import biz_master_repo, client_repo
 
 JST = timezone(timedelta(hours=9))
+
+# 下見は「今日」と「もう始まった枠」で結果が変わるので、実行の時刻によらず同じにするため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -80,7 +86,7 @@ def order_of(db, instance_id) -> OpeOrder:
 def set_status(db, order, status, before=None):
     order = db.get(OpeOrder, order.id)
     if status in (OrderStatus.READY, OrderStatus.IN_PROGRESS) or before in (OrderStatus.READY, OrderStatus.IN_PROGRESS):
-        order.released_at = datetime.now(UTC)
+        order.released_at = utc_now()
     order.status = status
     order.status_before_hold = before
     db.commit()
@@ -116,7 +122,7 @@ def in_range(preview, moment: datetime) -> bool:
 
 
 def today() -> date:
-    return datetime.now(JST).date()
+    return local_date_of(utc_now())
 
 
 def not_today(items):
@@ -371,16 +377,13 @@ def test_preview_endpoints_need_a_login_and_releaser_or_admin_while_saving_stays
 # ==========================================
 # もう始まった発生枠は、テンプレートを変えてももう一度作らない
 # ==========================================
-def test_a_slot_that_already_started_today_is_not_generated_again(db, biz_id, monkeypatch):
-    from src.coordination import order_sync
-
+def test_a_slot_that_already_started_today_is_not_generated_again(db, biz_id, frozen_clock):
     # 昨日の時点で作る → 今日 0:00 の予定（今日になった時点でもう始まっている）とそのオーダーがある
     # （0:05 などにすると、日本時間の 0:00〜0:05 に走らせたときだけ「まだ始まっていない」になって失敗する）
-    real = datetime.now(UTC)
-    monkeypatch.setattr(plan_services, "_now", lambda: real - timedelta(days=1))
-    monkeypatch.setattr(order_sync, "_now", lambda: real - timedelta(days=1))
+    now = frozen_clock.now
+    frozen_clock.set(now - timedelta(days=1))
     t = template(db, biz_id, start_time=time(0, 0))
-    monkeypatch.undo()
+    frozen_clock.set(now)
 
     def todays():
         db.expire_all()
@@ -411,7 +414,7 @@ def test_a_slot_that_already_started_today_is_not_generated_again(db, biz_id, mo
 # ==========================================
 def finish(db, order):
     order = db.get(OpeOrder, order.id)
-    order.released_at = order.finished_at = datetime.now(UTC)
+    order.released_at = order.finished_at = utc_now()
     order.status = OrderStatus.FINISHED
     db.commit()
     return order
