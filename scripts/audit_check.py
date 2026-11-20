@@ -6,8 +6,9 @@
     python -m scripts.audit_check <一覧のファイル>
 
 終了コード: 0 = なし、1 = あり（または一覧の書き方の誤り）、ほか = pip-audit の誤り（つながらない など）。
-pip-audit は requirements-dev.txt で入ります。requirements*.txt はすべての依存を版つきで並べているので、ファイルを
-そのまま調べます（--no-deps。仮の環境を作らない）。
+pip-audit は requirements-dev.txt で入ります。requirements*.txt はすべての依存を版とハッシュつきで並べている
+（requirements*.in から pip-compile で作る）ので、ファイルをそのまま調べます（--require-hashes: 仮の環境を作らず、
+ハッシュの無い行があれば誤りにする）。
 """
 import subprocess
 import sys
@@ -44,7 +45,7 @@ def main() -> int:
     if problems:
         return 1
     print(f"見送り（{ignore_file.name} の理由つき）: {len(ids)} 件", flush=True)  # pip-audit の出力より先に出す
-    command = [sys.executable, "-m", "pip_audit", "--no-deps", "--disable-pip", "--progress-spinner", "off"]
+    command = [sys.executable, "-m", "pip_audit", "--require-hashes", "--disable-pip", "--progress-spinner", "off"]
     for name in REQUIREMENTS:
         command += ["-r", str(ROOT / name)]
     for vuln_id in ids:

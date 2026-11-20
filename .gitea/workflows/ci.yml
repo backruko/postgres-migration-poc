@@ -110,13 +110,14 @@ jobs:
               tar.extractall(".", members=members, **extra)
           print(f"{os.environ['COMMIT'][:12]}: {len(members)} entries")
 
+      # ハッシュが requirements*.txt と違うファイルは入れない（requirements*.in から pip-compile で作る。手順は .in の先頭）
       - name: 依存関係を入れる
-        run: pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+        run: pip install --no-cache-dir --require-hashes -r requirements.txt -r requirements-dev.txt
 
       - name: 静的チェック（ruff。設定は ruff.toml）
         run: ruff check --no-cache --output-format concise .
 
-      # requirements*.txt はすべての依存を版つきで並べている（間接の依存も）ので、ファイルをそのまま調べる（--no-deps）。
+      # requirements*.txt はすべての依存を版とハッシュつきで並べている（間接の依存も）ので、ファイルをそのまま調べる。
       # 既知の脆弱性が 1 つでもあれば止まる（知らずに弱い版を本番に入れないため）。直し方は修正版へ上げること。上げられない理由が
       # あるときだけ、requirements-audit-ignore.txt に ID と理由を書いて見送る
       # （開発 PC でも同じ: python -m scripts.audit_check。理由の無い見送りの行も赤にする）

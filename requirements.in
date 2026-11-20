@@ -1,0 +1,22 @@
+# アプリ（API とワーカー）が直接使うパッケージ。ここだけを手で直す。
+# requirements.txt はここから作る（間接の依存もすべて版とハッシュつき）。手で直さない。リポジトリのルートで
+# （pip-tools は requirements-dev.txt で入る）:
+#   pip-compile --generate-hashes --allow-unsafe --no-emit-index-url -o requirements.txt requirements.in
+#   pip-compile --generate-hashes --allow-unsafe --no-emit-index-url -o requirements-dev.txt requirements-dev.in
+#   （2 つ目も必ず: 開発用はアプリと同じ版にそろえるので、アプリの版が変われば作り直す）
+# なぜハッシュ: インストールのとき、取ってきたファイルがこのハッシュと違えば止まる（途中で差し替えられた・
+# 同じ版の名前で中身が違う、を入れない）。web の npm の package-lock.json と同じ役目。
+# 版を上げる: ここの版を直して上のコマンド（間接の依存だけなら --upgrade-package <名前>）。テストと
+# python -m scripts.audit_check が通ってからコミットする。
+fastapi==0.142.2
+uvicorn==0.54.0
+SQLAlchemy==2.1.4
+alembic==1.20.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-dateutil==2.9.0.post0
+# PostgreSQL のドライバー。binary はコンパイル済みのライブラリ（イメージに libpq を入れなくてよい）
+psycopg==3.3.6
+psycopg-binary==3.3.6
+# zoneinfo のタイムゾーンの表（Windows と slim のイメージには OS の表が無いことがある）
+tzdata==2026.5

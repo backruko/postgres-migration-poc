@@ -3,8 +3,9 @@
 # を付ける（requirements.txt・requirements-dev.txt のすべてが対象。重さを問わず、1 つでもあれば止める）。
 #
 # ■ まず上げる。見送りは最後の手段
-#   止まったら、表示された Fix Versions まで requirements.txt（または requirements-dev.txt）の版を上げ、テストを通してコミットする。
-#   間接の依存も、ここでは版を書いて並べているので同じように上げる（上げた版で pip check が通ること）。
+#   止まったら、表示された Fix Versions まで版を上げ、テストを通してコミットする。直接の依存は requirements.in
+#   （または requirements-dev.in）の版を直して pip-compile、間接の依存は pip-compile --upgrade-package <名前>==<版>
+#   （手順は requirements.in の先頭。requirements*.txt は手で直さない: ハッシュも作り直すため）。
 #   見送るのは、すぐには上げられない理由があるときだけ（修正版がまだ無い・修正版がほかの依存と合わない など）。
 #
 # ■ 書き方: 1 行に 1 つ。脆弱性の ID と、# のあとに理由

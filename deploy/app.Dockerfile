@@ -22,7 +22,8 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# --require-hashes: 取ってきたファイルのハッシュが requirements.txt と違えば止める（差し替えられたパッケージを入れない）
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 COPY alembic.ini main.py ./
 COPY alembic ./alembic
