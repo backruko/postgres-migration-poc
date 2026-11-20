@@ -1,0 +1,18 @@
+# 開発とチェック用（テスト・型チェック・静的チェック・脆弱性の確認）が直接使うパッケージ。ここだけを手で直す。
+# requirements-dev.txt はここから作る（版とハッシュつき）。アプリと同じパッケージはアプリと同じ版にそろえる（-c）:
+#   pip-compile --generate-hashes --allow-unsafe --no-emit-index-url -o requirements.txt requirements.in
+#   pip-compile --generate-hashes --allow-unsafe --no-emit-index-url -o requirements-dev.txt requirements-dev.in
+# CI（.gitea/workflows/ci.yml）は両方を入れる: pip install --require-hashes -r requirements.txt -r requirements-dev.txt
+-c requirements.txt
+
+pytest==9.1.1
+# Node.js を pip の wheel で入れる（slim イメージに Node が無くても動く）
+pyright[nodejs]==1.1.414
+# 静的チェック（設定は ruff.toml。ruff check .）
+ruff==0.17.5
+# シードデータの書き出し・取り込み（scripts/export_seed.py・import_seed.py。開発 PC から API を呼ぶ）
+requests==2.34.2
+# 依存関係の既知の脆弱性の確認（CI: pip-audit。見送るものは requirements-audit-ignore.txt に理由つきで）
+pip-audit==2.10.1
+# requirements*.txt を requirements*.in から作る道具（上のコマンド）
+pip-tools==7.7.0
