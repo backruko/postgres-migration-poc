@@ -11,7 +11,7 @@
 """
 from tests.openapi_auth import needs_login
 import uuid
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, time, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -19,6 +19,7 @@ from sqlalchemy import select
 
 from tests.client_codes import new_client_code
 from src.coordination import services as ops_services
+from src.core.clock import utc_now
 from src.core.exceptions import BadRequestError, NotFoundError
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import CompletionMode, ExecutionType
@@ -39,6 +40,9 @@ from src.infrastructure.repositories import biz_master_repo, client_repo
 
 JST = timezone(timedelta(hours=9))
 TYPE = "data_received"
+
+# 信号の受信日時と、遅れ・今日の枠の判定を同じ「いま」で見るため（個別に時刻を決めるテストはその上から差し替える）
+pytestmark = pytest.mark.usefixtures("frozen_clock")
 
 
 @pytest.fixture
@@ -83,7 +87,7 @@ def orders(db, setup) -> list[OpeOrder]:
 
 
 def send(db, setup, staff, key: str, **overrides):
-    values = dict(type=TYPE, client_code=setup["code"].lower(), key=key, received_at=datetime.now(JST))
+    values = dict(type=TYPE, client_code=setup["code"].lower(), key=key, received_at=utc_now())
     values.update(overrides)
     return signals.receive_signal(db, SignalIn.model_validate(values), staff["sender"])
 
