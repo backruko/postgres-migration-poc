@@ -13,7 +13,6 @@ import pytest
 from sqlalchemy import event, select
 
 from tests.client_codes import new_client_code
-from src.coordination import order_sync
 from src.core.clock import LOCAL_TIMEZONE, local_date_of, utc_now
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import DependencyMatchRule
@@ -37,10 +36,10 @@ def _early() -> datetime:
 
 
 @pytest.fixture(autouse=True)
-def fixed_now(monkeypatch):
-    early = _early()
-    monkeypatch.setattr(plan_services, "_now", lambda: early)
-    monkeypatch.setattr(order_sync, "_now", lambda: early)
+def fixed_now(frozen_clock):
+    # 止めた時計の「今日」の 0:30 にする（アプリのどのモジュールも同じ「いま」になる。以前は 2 つだけ差し替えていた）
+    early = datetime.combine(frozen_clock.today, time(0, 30), tzinfo=LOCAL_TIMEZONE)
+    frozen_clock.set(early)
     return early
 
 

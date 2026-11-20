@@ -8,12 +8,13 @@
 
 ※ テストごとに一意な顧客コードを使ってデータを分離しています（制約違反の確認は各テストの中でロールバックする）。
 """
-from datetime import date, datetime, time, UTC
+from datetime import date, time
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 from tests.client_codes import new_client_code
+from src.core.clock import utc_now
 from src.domain_biz.models import BizDependency, DependencyKind, DependencyMatchRule
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
@@ -27,6 +28,11 @@ from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import biz_master_repo, client_repo
 
 HARD, SHEET, DATE = DependencyKind.HARD, DependencyMatchRule.SAME_SHEET_EVENT, DependencyMatchRule.SAME_OCCURRENCE_DATE
+
+# 依存関係のつながる枠（その日の予定）を、実行の日によらず同じにするため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -102,7 +108,7 @@ def test_one_active_link_per_pair_and_one_waiting_row_per_upstream_business(db, 
     db.commit()
 
     # 外れた行は一意性の対象外（同じ組み合わせを作り直せる）
-    removed = link(setup, down, setup["up"][2], removed_at=datetime.now(UTC), removed_reason="定義の削除")
+    removed = link(setup, down, setup["up"][2], removed_at=utc_now(), removed_reason="定義の削除")
     db.add_all([removed, link(setup, down, setup["up"][2])])
     db.commit()
 
@@ -112,7 +118,7 @@ def test_key_self_and_removed_checks(db, setup):
     assert_rejected(db, link(setup, down, down), "ck_ope_dependency_not_self")
     assert_rejected(db, link(setup, down, None, match_rule=SHEET), "ck_ope_dependency_sheet_key")
     assert_rejected(db, link(setup, down, None, match_date=None), "ck_ope_dependency_date_key")
-    assert_rejected(db, link(setup, down, None, removed_at=datetime.now(UTC)), "ck_ope_dependency_removed")
+    assert_rejected(db, link(setup, down, None, removed_at=utc_now()), "ck_ope_dependency_removed")
     assert_rejected(db, link(setup, down, None, removed_reason="x"), "ck_ope_dependency_removed")
     db.add(link(setup, down, None, match_rule=SHEET, match_date=None, match_sheet_event_id=901))
     db.commit()

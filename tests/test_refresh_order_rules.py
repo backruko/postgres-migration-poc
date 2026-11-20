@@ -8,16 +8,23 @@ links.refresh_order（オーダーができた・動いた・取り消された�
 - 依存関係の定義が無い業務（ほとんど）は、問い合わせ 1 回で終える（予定の生成で大量に呼ばれるため）
 状態は普段どおり（テンプレートと定義 → オーダーの追従）に作り、1 つのオーダーだけを直接変えて refresh_order を呼ぶ
 """
-from datetime import date, datetime, time, timedelta
+from datetime import date, time, timedelta
 
+import pytest
 from sqlalchemy import event, select
 
 from tests.test_links_batched import DAILY, DATE, JST, LATEST, SHEET, World, db  # noqa: F401  (fixture は名前で使う)
+from src.core.clock import local_date_of, utc_now
 from src.domain_biz import services as biz_services
 from src.domain_biz.schemas import BizDependencyCreate, BizMasterCreate
 from src.domain_ope import links
 from src.domain_ope.models import OpeDependency, OpeOrder
 from src.infrastructure.repositories import biz_master_repo
+
+# 「3 日後」の枠と直前の上流を、実行の日や時刻によらず同じ日にするため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 def order_of(db, template_id: int, day: date) -> OpeOrder:
@@ -59,7 +66,7 @@ def two_definitions_world(db):
     biz_services.create_dependency(db, d2, BizDependencyCreate(upstream_biz_id=w.up, match_rule=LATEST, lookback_days=2))
     up, down = w.template(w.up, "U", DAILY), w.template(w.down, "D", DAILY, at=time(10, 0))
     down2 = w.template(d2, "D2", DAILY, at=time(10, 0))
-    day = datetime.now(JST).date() + timedelta(days=3)
+    day = local_date_of(utc_now()) + timedelta(days=3)
     u, u_before = order_of(db, up, day), order_of(db, up, day - timedelta(days=1))
     d, dd = order_of(db, down, day), order_of(db, down2, day)
     assert [link.upstream_order_id for link in active(db, d)] == [u.id]   # 同じ日付の上流
@@ -72,7 +79,7 @@ def test_an_upstream_order_without_a_key_touches_no_downstream(db):
     w.define(SHEET)
     w.sheet_templates()  # 上流・下流のシートのテンプレート（シート日付でつながる）
     plain = w.template(w.up, "シート日付なし", DAILY)  # 上流の業務の、シート日付の無いオーダー
-    day = datetime.now(JST).date() + timedelta(days=3)
+    day = local_date_of(utc_now()) + timedelta(days=3)
     keyless = order_of(db, plain, day)
     assert keyless.source_sheet_event_id is None
     downstream = list(db.scalars(select(OpeOrder).where(OpeOrder.biz_master_id == w.down)))
@@ -103,7 +110,7 @@ def test_only_time_based_rechecks_latest_before_and_leaves_date_links_alone(db):
     u, u_before, d, dd = two_definitions_world(db)
     # D の同じ日付のつながりを外しておく: ふつうに直せば作り直される。時刻だけなら作り直されない
     [date_link] = active(db, d)
-    date_link.removed_at, date_link.removed_reason = datetime.now(JST), "テストで外した"
+    date_link.removed_at, date_link.removed_reason = utc_now(), "テストで外した"
     move(u, 2)  # 9:00 → 11:00
     db.flush()
 
@@ -120,7 +127,7 @@ def test_only_time_based_rechecks_latest_before_and_leaves_date_links_alone(db):
 def test_a_business_without_definitions_costs_one_statement(db):
     w = World(db)
     template = w.template(w.up, "定義なし", DAILY)
-    order = order_of(db, template, datetime.now(JST).date() + timedelta(days=3))
+    order = order_of(db, template, local_date_of(utc_now()) + timedelta(days=3))
     db.flush()
     statements: list[str] = []
     engine = db.get_bind()

@@ -7,12 +7,13 @@ plan → オーダーの追従（4.3: coordination.order_sync）のテスト。
 """
 from tests.openapi_auth import needs_login
 import uuid
-from datetime import UTC, date, datetime, time, timedelta, timezone
+from datetime import date, time, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
 
 from tests.client_codes import new_client_code
+from src.core.clock import utc_now
 from src.coordination import order_sync
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import DuplicatedRecordError
@@ -30,6 +31,11 @@ from src.domain_staff.models import RoleCode, StaffStatus
 from src.domain_staff.schemas import StaffCreate
 from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import biz_master_repo, client_repo, ope_order_repo
+
+# オーダーは「いま」より後の枠にだけ作るので、実行の時刻によらず同じ枠を見るため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 # ==========================================
@@ -97,7 +103,7 @@ def set_status(db, order, status, before=None):
     """4.4（状態の操作）の代わりに、テストではオーダーの状態を直接変える"""
     order = db.get(OpeOrder, order.id)
     if status in (OrderStatus.READY, OrderStatus.IN_PROGRESS) or before in (OrderStatus.READY, OrderStatus.IN_PROGRESS):
-        order.released_at = datetime.now(UTC)
+        order.released_at = utc_now()
     order.status = status
     order.status_before_hold = before
     db.commit()
@@ -281,16 +287,16 @@ def test_returning_slot_gets_a_new_order(db, biz_id, staff):
 # 運用開始時のオーダー作成
 # ==========================================
 def test_create_missing_orders_backfills_future_only_and_is_idempotent(db, biz_id, monkeypatch):
-    # 受け手を登録していない状態（運用開始前）で予定を作る
-    monkeypatch.setattr(slot_events, "_listeners", [])
-    t = daily(db, biz_id)
-    monkeypatch.undo()
+    # 受け手を登録していない状態（運用開始前）で予定を作る（この差し替えだけを外す。undo() は止めた時計まで戻す）
+    with monkeypatch.context() as m:
+        m.setattr(slot_events, "_listeners", [])
+        t = daily(db, biz_id)
     assert orders(db, t.id) == []
 
     created = order_sync.create_missing_orders(db)
     assert created >= len(live(db, t.id))
     assert len(orders(db, t.id)) == len(live(db, t.id))
-    assert all(o.scheduled_start >= datetime.now(UTC) - timedelta(minutes=5) for o in orders(db, t.id))
+    assert all(o.scheduled_start >= utc_now() for o in orders(db, t.id))
     assert events(db, orders(db, t.id)[0])[0].detail == {"cause": "initial order creation"}
     assert order_sync.create_missing_orders(db) == 0  # 何度実行しても同じ
 

@@ -13,13 +13,14 @@ links.refresh_orders（まとめて直す）の結果は、1 件ずつ refresh_o
 ※ 顧客コードの先頭文字は空きがないため "I" を共有する
 """
 import json
-from datetime import datetime, time, timedelta, timezone, UTC
+from datetime import time, timedelta, timezone
 from pathlib import Path
 
 import pytest
 from sqlalchemy import select
 
 from tests.client_codes import new_client_code
+from src.core.clock import local_date_of, utc_now
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import DependencyMatchRule
 from src.domain_biz.schemas import BizDependencyCreate, BizMasterCreate
@@ -40,7 +41,14 @@ SHEET, DATE, LATEST = (
     DependencyMatchRule.SAME_SHEET_EVENT, DependencyMatchRule.SAME_OCCURRENCE_DATE, DependencyMatchRule.LATEST_BEFORE,
 )
 MWF, DAILY = "FREQ=WEEKLY;BYDAY=MO,WE,FR", "FREQ=DAILY"
+# 期間は 2023-04-01〜2028-03-31。止めた時計（2026-11-18）より後の日付があるので、シートのつながりが作られる
+# （本当の時計のままだと、2028 年 4 月からシートのテストが黙って失敗し始めていた）
 MOCK_SHEET_PATH = Path(__file__).resolve().parent.parent / "mock_data" / "desensitized_mock_data.json"
+
+# まとめた結果と 1 件ずつの結果を、同じ「いま」から作った枠で比べるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -70,7 +78,7 @@ class World:
     def template(self, biz_id: int, name: str, rrule: str, at: time = time(9, 0)) -> int:
         return plan_services.create_template(self.db, RRuleTemplateCreate(
             biz_master_id=biz_id, name=name, template_type=TemplateType.RRULE, timezone="Asia/Tokyo",
-            start_time=at, duration_minutes=60, anchor_date=datetime.now(JST).date(), rrule=rrule,
+            start_time=at, duration_minutes=60, anchor_date=local_date_of(utc_now()), rrule=rrule,
         )).id
 
     def rule(self, template_id: int, rrule: str) -> None:
@@ -274,7 +282,7 @@ def _old_create_missing_orders(db, template_ids: set[int]) -> int:
     instances = db.scalars(
         select(PlanInstance)
         .join(PlanOccurrenceCache, PlanOccurrenceCache.instance_id == PlanInstance.id)
-        .where(PlanOccurrenceCache.starts_at >= datetime.now(UTC), PlanInstance.template_id.in_(template_ids))
+        .where(PlanOccurrenceCache.starts_at >= utc_now(), PlanInstance.template_id.in_(template_ids))
         .order_by(PlanInstance.template_id, PlanInstance.scheduled_start)
     ).all()
     created = 0
