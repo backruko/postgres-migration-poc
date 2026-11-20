@@ -8,12 +8,13 @@ domain_ope のテスト（4.2: テーブルの制約のみ。オーダーを作�
 ※ テストごとに一意な顧客コードを使ってデータを分離しています（制約違反の確認は各テストの中でロールバックする）。
 """
 import uuid
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, time, timedelta, timezone
 
 import pytest
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from tests.client_codes import new_client_code
+from src.core.clock import utc_now
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.domain_ope.models import EventSource, OpeOrder, OpeOrderEvent, OrderEventType, OrderStatus
@@ -29,6 +30,11 @@ from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import biz_master_repo, client_repo
 
 JST = timezone(timedelta(hours=9))
+
+# リリースの日時と、予定の枠（今日の枠は開始を過ぎると作られない）を同じ「いま」で決めるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 # ==========================================
@@ -172,7 +178,7 @@ def test_order_status_consistency_checks(db, plan):
     # 正しい組み合わせは通る（保留前が ready の保留・リリース済み・理由付きの矛盾）
     ok = order_for(
         plan, plan["instances"][12], status=OrderStatus.ON_HOLD, status_before_hold=OrderStatus.READY,
-        released_at=datetime.now(JST), conflict=True, conflict_reason="作業中に日時が変わりました",
+        released_at=utc_now(), conflict=True, conflict_reason="作業中に日時が変わりました",
     )
     db.add(ok)
     db.commit()

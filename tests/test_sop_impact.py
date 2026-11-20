@@ -8,13 +8,14 @@ SOP バージョンの影響（GET /ope/sop-impact）のテスト: その日の 
 """
 from tests.openapi_auth import needs_login
 import uuid
-from datetime import date, datetime, time, timedelta, UTC
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select
 
 from tests.client_codes import new_client_code
+from src.core.clock import local_date_of, utc_now
 from src.core.exceptions import NotFoundError
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import SOPStatus, SOPVersion
@@ -34,6 +35,11 @@ from src.infrastructure.database import SessionLocal
 
 JST = ZoneInfo("Asia/Tokyo")
 
+# 版を切り替える日とオーダーの予定日を、同じ「今日」から決めるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 @pytest.fixture
 def db():
@@ -49,7 +55,7 @@ def test_impact_splits_upcoming_orders_by_what_decides_their_version(db):
     code = new_client_code("Z")  # 他のテストの顧客とコードが衝突しないよう、別の先頭文字を使う
     client_services.create_client(db, ClientCreate(code=code, name="impact client"))
     biz = biz_services.create_biz(db, BizMasterCreate(client_code=code, name="impact biz", business_seq=None, manager_email=None, description=None))
-    today = datetime.now(UTC).astimezone(JST).date()
+    today = local_date_of(utc_now())
     current = SOPVersion(biz_master_id=biz.id, version_number=1, version_tag="v1.0.0", status=SOPStatus.APPROVED,
                          effective_at=datetime.combine(today - timedelta(days=30), time(0), tzinfo=JST))
     db.add(current)

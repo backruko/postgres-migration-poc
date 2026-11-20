@@ -9,13 +9,14 @@
 ※ 顧客コードの先頭文字は空きがないため "S" を共有する
 """
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 import pytest
 from fastapi.routing import APIRoute
 
 from tests.client_codes import new_client_code
 from tests.openapi_auth import needs_login
+from src.core.clock import local_date_of, utc_now
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, BusinessException, ForbiddenError
 from src.domain_biz import services as biz
@@ -34,10 +35,15 @@ from main import app
 
 JST = timezone(timedelta(hours=9))
 
+# 承認の発効日（明日）を、日本時間の 0 時をまたいでも同じにするため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 def tomorrow():
     """明日（日本時間）。使うときに決める（読み込んだときに決めると、日本時間の 0 時をまたぐ実行で「今日」になる）"""
-    return (datetime.now(JST) + timedelta(days=1)).date()
+    return local_date_of(utc_now()) + timedelta(days=1)
 
 
 @pytest.fixture
