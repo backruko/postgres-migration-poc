@@ -26,6 +26,8 @@ from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import biz_master_repo, client_repo, plan_template_change_repo
 
 NOW = datetime.now(UTC) - timedelta(hours=1)  # 承認待ちの drafted_at（DB の now()）より前
+# 止めた時計（frozen_clock）は使わない: ここで比べる drafted_at は DB が自分の時計で付けるので、アプリの時計を
+# 止めると食い違う。表の決まり（制約）だけを確かめ、実行の日付・時刻で結果は変わらない
 
 
 @pytest.fixture

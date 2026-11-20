@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from tests.openapi_auth import needs_login
 from tests.test_template_drafts import (  # noqa: F401  (fixture は名前で使う)
-    JST, UTC, _future, admin, biz_id, dated, daily, db, refused, releaser, rrule_body, state, update,
+    JST, _future, admin, biz_id, dated, daily, db, refused, releaser, rrule_body, state, update,
 )
 from src.coordination.template_preview import preview_template_create, preview_template_draft, preview_template_update
 from src.core.error_codes import ErrorCode
@@ -25,6 +25,9 @@ from src.domain_plan.models import TemplateChangeKind, TemplateChangeStatus
 from src.domain_plan.schemas import (
     PlanTemplateResponse, PlanTemplateUpdate, RRuleTemplateCreate, TemplateCreateDraft, TemplateDeleteDraft,
 )
+
+# 止めた時計（frozen_clock）は使わない: 一覧は decided_at（アプリの時計）と drafted_at（DB が自分の時計で付ける）を
+# 並べて比べるので、アプリの時計だけを止めると順番が食い違う
 
 
 def live_starts(db, template_id: int, start: datetime, end: datetime) -> list[datetime]:

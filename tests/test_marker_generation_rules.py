@@ -17,6 +17,11 @@ from src.core.exceptions import BadRequestError
 from src.domain_plan import engine, services
 from src.domain_plan.schemas import MarkerRule, ReferenceSheetCreate, ReferenceSheetEventsCreate, ReferenceSheetMarkerCreate, ReferenceSheetMarkerUpdate
 
+# マーカーの日付とシートの期間を、同じ「今日」から決めるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 def _weekday_15th_ahead() -> date:
     """2 か月以上先の、平日の 15 日（休日の扱いで動かない日）"""
