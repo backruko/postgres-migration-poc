@@ -3,7 +3,7 @@
 """
 import inspect
 import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import date, time, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
@@ -12,6 +12,7 @@ from fastapi.routing import APIRoute
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from src.core.clock import local_date_of, utc_now
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
 from src.domain_client.schemas import ClientCreate
@@ -23,6 +24,11 @@ from src.domain_staff.scope import ALL_CLIENTS, ClientScope
 from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import client_repo
 from tests.client_codes import new_client_code
+
+# 担当顧客の範囲の確かめで作るシート・信号・締切を、同じ「いま」から決めるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -370,17 +376,22 @@ def test_template_changes_list_and_count_follow_the_scope_even_for_deleted_busin
 
 
 def test_signals_list_shows_only_the_scope(db, two_clients):
+    from sqlalchemy import func, select
+
     from src.domain_ope import signals
     from src.domain_ope.schemas import SignalIn
 
     sender = make_staff(db, RoleCode.SIGNAL_SENDER)
-    now = datetime.now(JST)
+    now = utc_now().astimezone(JST)
+    # since は recorded_at と比べる。recorded_at は DB が自分の時計で付けるので、since も DB の時計から取る
+    # （アプリの時計は止めてあり、DB の時計と同じではない）
+    since = db.scalar(select(func.now())) - timedelta(minutes=1)
     a, b = two_clients["a"], two_clients["b"]
     for code in (a, b.lower()):  # 小文字で送っても大文字で残る
         signals.receive_signal(db, SignalIn(type="C3_NONE", client_code=code, key="2026-11-12", received_at=now), sender.id)
-    listed = {x.client_code for x in signals.list_signals(db, scope="all", since=now - timedelta(minutes=1), limit=1000)}
+    listed = {x.client_code for x in signals.list_signals(db, scope="all", since=since, limit=1000)}
     assert {a, b} <= listed
-    mine = signals.list_signals(db, scope="all", since=now - timedelta(minutes=1), limit=1000, clients=two_clients["only_a"])
+    mine = signals.list_signals(db, scope="all", since=since, limit=1000, clients=two_clients["only_a"])
     assert mine and {x.client_code for x in mine} == {a}
     assert signals.list_signals(db, scope="all", client_code=b, clients=two_clients["only_a"]) == []
 
@@ -395,7 +406,7 @@ def test_plan_and_ope_guards_answer_404_outside_the_scope(db, two_clients):
     from src.domain_plan.schemas import ReferenceSheetCreate, ReferenceSheetEventsCreate, ReferenceSheetMarkerCreate
 
     b, only_a = two_clients["b"], two_clients["only_a"]
-    today = datetime.now(JST).date()
+    today = local_date_of(utc_now())
     sheet = plan_services.create_sheet(db, ReferenceSheetCreate(
         client_code=b, name=f"範囲 {uuid.uuid4().hex[:6]}", period_start=today, period_end=today + timedelta(days=60),
     ))
@@ -407,7 +418,7 @@ def test_plan_and_ope_guards_answer_404_outside_the_scope(db, two_clients):
     assert instance_id is not None and order is not None
     step_id = db.scalars(select(OpeStep.id).where(OpeStep.order_id == order.id)).first()
     sender = make_staff(db, RoleCode.SIGNAL_SENDER)
-    signals.receive_signal(db, SignalIn(type="C3_GUARD", client_code=b, key="2026-11-12", received_at=datetime.now(JST)), sender.id)
+    signals.receive_signal(db, SignalIn(type="C3_GUARD", client_code=b, key="2026-11-12", received_at=utc_now()), sender.id)
     signal_id = db.scalars(select(OpeSignal.id).where(OpeSignal.signal_type == "C3_GUARD", OpeSignal.client_code == b)).first()
     assert signal_id is not None
 

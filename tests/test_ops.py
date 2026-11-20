@@ -34,6 +34,11 @@ from src.infrastructure.repositories import biz_master_repo, client_repo
 
 JST = timezone(timedelta(hours=9))
 
+# 日次ダッシュボードの「今日」と、先の週・シートの期間を同じ「今日」から決めるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 # ==========================================
 # Fixtures / Helpers
@@ -225,7 +230,7 @@ def test_daily_dashboard_past_day_shows_voided_with_reasons(db, monkeypatch):
 
 def test_daily_dashboard_defaults_and_validation(db, monkeypatch):
     dash = ops_services.get_daily_dashboard(db, None, "Asia/Tokyo")
-    assert dash.date == datetime.now(JST).date()
+    assert dash.date == local_date_of(utc_now())
     with pytest.raises(BadRequestError):
         ops_services.get_daily_dashboard(db, None, "Mars/Olympus")
 

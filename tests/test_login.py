@@ -5,10 +5,10 @@
 利用停止でセッションが終わる・API キーの発行 / 一覧 / 取り消し。
 """
 import uuid
-from datetime import datetime, UTC
 
 import pytest
 
+from src.core.clock import utc_now
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, ForbiddenError, UnauthorizedError
 from src.domain_staff import credentials, services
@@ -17,6 +17,11 @@ from src.domain_staff.schemas import StaffCreate, StaffResponse
 from src.infrastructure.database import SessionLocal
 
 PASSWORD = "first password 1"
+
+# セッションの期限（無操作 12 時間・最長 7 日）とロックの時刻を、実行の時刻に左右されずに確かめるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -35,13 +40,13 @@ def staff_with_password(db, *roles: RoleCode, password: str | None = PASSWORD) -
         actor=None, status=StaffStatus.ACTIVE,
     )
     if password is not None:
-        credentials.set_password(db, staff, password, temporary=False, now=datetime.now(UTC))
+        credentials.set_password(db, staff, password, temporary=False, now=utc_now())
         db.commit()
     return staff
 
 
 def now():
-    return datetime.now(UTC)
+    return utc_now()
 
 
 def test_login_logout_and_failures_are_kept(db):

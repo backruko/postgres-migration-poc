@@ -3,12 +3,13 @@
 （振る舞いはまだ無い。ここで確かめるのは一意・チェック・トリガー・外部キー）
 """
 import uuid
-from datetime import datetime, time, UTC
+from datetime import time, timedelta
 
 import pytest
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from src.core.clock import utc_now
 from src.domain_client.schemas import ClientCreate
 from src.domain_events.models import DomainEvent
 from src.domain_notification.models import (
@@ -18,6 +19,11 @@ from src.domain_notification.models import (
 from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import client_repo
 from tests.client_codes import new_client_code
+
+# 通知の時刻の決まり（作成・送信・確認の順）を、同じ「いま」から確かめるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -31,7 +37,7 @@ def db():
 
 
 def now():
-    return datetime.now(UTC)
+    return utc_now()
 
 
 def event(db, key: str | None = None, **kw) -> DomainEvent:
@@ -95,9 +101,10 @@ def test_an_event_can_only_have_its_processing_columns_changed(db):
     # 処理の列は変えられる
     db.execute(update(DomainEvent).where(DomainEvent.id == e.id).values(processed_at=now(), attempts=1, last_error="x"))
     db.flush()
-    # 記録そのもの（中身・種類・キー・日時）は変えられない
+    # 記録そのもの（中身・種類・キー・日時）は変えられない。日時は本当に違う値にする（同じ値なら変更ではない。
+    # 本当の時計では now() が少し進むので通っていたが、時計を止めると同じ値になり、確かめていなかった）
     for values in ({"payload": {"deadline": "changed"}}, {"event_type": "order.due_soon"}, {"dedupe_key": "other"},
-                   {"occurred_at": now()}, {"client_code": "ZZZZ"}):
+                   {"occurred_at": now() + timedelta(minutes=1)}, {"client_code": "ZZZZ"}):
         expect_refused(db, lambda v=values: db.execute(update(DomainEvent).where(DomainEvent.id == e.id).values(**v)), DBAPIError)
     expect_refused(db, lambda: db.execute(delete(DomainEvent).where(DomainEvent.id == e.id)), DBAPIError)
     db.expire_all()
