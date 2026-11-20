@@ -10,10 +10,7 @@ from src.infrastructure.database import Base
 from src.core.mixin import SoftDeleteMixin
 from src.core.exceptions import DuplicatedRecordError
 
-# ジェネリクス用の型変数を定義します
-# ModelType: SQLAlchemyのORMモデル
-# CreateSchemaType: Pydanticの作成用スキーマ
-# UpdateSchemaType: Pydanticの更新用スキーマ
+# モデル・作成用スキーマ・更新用スキーマの型（各ドメインのリポジトリが具体的な型で使う）
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
@@ -43,13 +40,8 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """
         新しいレコードをデータベースに作成します。
         """
-        # Pydanticモデルを辞書（dict）に変換します (Pydantic V2対応)
         obj_in_data = jsonable_encoder(obj_in)
-
-        # 辞書を展開してSQLAlchemyのモデルインスタンスを作成します
         db_obj = self.model(**obj_in_data)
-
-        # データベースに保存します
         db.add(db_obj)
         try:
             db.commit()
@@ -57,7 +49,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return db_obj
         except IntegrityError as e:
             db.rollback()
-            # ここで500エラーを防ぎ、自作例外に変換して投げます！
+            # 一意の制約の違反は利用者の入力の問題なので、500 ではなく重複のエラー（409）として返す
             raise DuplicatedRecordError(
                 message="Create failed: Record already exists in the database."
             ) from e
@@ -75,19 +67,14 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         :param db_obj: 更新対象の現在のデータベースオブジェクト（取得済みのもの）
         :param obj_in: 更新したいデータ （Pydanticモデル、または辞書）
         """
-        # 現在のデータベースオブジェクトを辞書に変換します
         obj_data = jsonable_encoder(db_obj)
-
-        # 入力データが辞書ならそのまま、Pydanticモデルなら辞書にして使います。
-        # exclude_unset=True は「明示的に設定されていない項目は更新しない(無視する)」ための重要な設定です (Pydantic V2対応)
+        # exclude_unset: 送られなかった項目は変えない（部分更新。送らなかった項目が None で上書きされないように）
         update_data = obj_in if isinstance(obj_in, dict) else obj_in.model_dump(exclude_unset=True)
 
-        # 現在のデータに対して、新しいデータのキーが存在すれば上書きします
         for field in obj_data:
             if field in update_data:
                 setattr(db_obj, field, update_data[field])
 
-        # データベースに変更を保存します
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
@@ -98,26 +85,22 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """
         IDを指定して、レコードをデータベースから削除します。
         """
-        # 削除対象のレコードを取得します
-        # 2.1.4スタイル: db.get はキャッシュを優先し全局scopeをすり抜ける危険があるため、
-        # 通常モデル用であっても select(...).where(...) で確実に最新データを取得します。
+        # db.get ではなく select で取る: db.get はセッションに読み込み済みの行をそのまま返し、
+        # 論理削除の自動の絞り込み（database.py）を通らないことがあるため
         stmt = select(self.model).where(self.model.id == id)
         obj = db.scalars(stmt).first()
 
-        # 削除対象が存在する場合のみ実行
         if obj:
             db.delete(obj)
             db.commit()
 
-        # 削除したオブジェクトの情報を返します（必要に応じてフロントエンドに返すため）
-        return obj
+        return obj  # 呼び出し側が、消したものを応答に使えるように
 
 
 class SoftCRUDBase(CRUDBase[ModelType, CreateSchemaType, UpdateSchemaType]):
 
     def remove(self, db: Session, *, id: int) -> ModelType | None:
-        #  2.1.4スタイル: 全局scopeが有効なので、
-        # すでに削除済みのレコードはここで自動的に見つからなくなり（Noneを返す）、安全なガードがかかります。
+        # 論理削除の自動の絞り込みで、もう削除した行は見つからない（None を返し、二度目の削除は何もしない）
         stmt = select(self.model).where(self.model.id == id)
         obj = db.scalars(stmt).first()
 
@@ -135,8 +118,7 @@ class SoftCRUDBase(CRUDBase[ModelType, CreateSchemaType, UpdateSchemaType]):
         """
         IDを指定して、論理削除されたレコードを復元します。
         """
-        # 普通にselectすると全局scopeに阻まれて削除済みデータが取得できないため、
-        # .execution_options(include_deleted=True) を付与して一時的にscopeを「解除」します。
+        # 削除した行を探すので、論理削除の自動の絞り込みを外す
         stmt = (
             select(self.model)
             .where(self.model.id == id)
@@ -144,12 +126,10 @@ class SoftCRUDBase(CRUDBase[ModelType, CreateSchemaType, UpdateSchemaType]):
         )
         obj = db.scalars(stmt).first()
 
-        # すでにscopeを解除して全件対象になっているため、
-        # まだ削除されていない有効なデータ（is_deleted == False）を誤って復元しないようチェックします。
+        # 絞り込みを外したので、削除されていない行も見つかる。それは復元の対象ではない
         if not obj or not cast(SoftDeleteMixin, obj).is_deleted:
             return None
 
-        # 復元処理の実行
         cast(SoftDeleteMixin, obj).restore()
 
         try:

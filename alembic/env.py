@@ -1,11 +1,5 @@
-#Migration（マイグレーション）の実行方法
-#今後、models.py にテーブル（クラス）を書いたり変更したりしたら、必ず以下の2つのコマンドをセットで実行します。
-
-#① 変更を検知してスクリプトを自動生成する（造図面）
-#alembic revision --autogenerate -m "initialize_database"
-
-#② データベースに適用する（施工）
-#alembic upgrade head
+# Alembic の実行環境。モデルを変えたら `alembic revision --autogenerate -m "..."` で移行を作り、生成された内容を
+# 必ず読んで直す（CHECK 制約などは検出されない）。適用は `alembic upgrade head`（サーバーではアプリの起動時）。
 
 from logging.config import fileConfig
 
@@ -14,11 +8,10 @@ from sqlalchemy import pool
 
 from alembic import context
 
-# --- ここを追加・修正 ---
 from src.infrastructure.config import settings
 from src.infrastructure.database import Base
-# 注意: モデルがBaseを継承して作られていることをAlembicに知らせるために、
-# ここで全てのmodels.pyをインポートしておく必要があります（後で作成した際に追加します）
+# autogenerate は Base.metadata に登録された表しか比べない。表は models.py を読み込んだときに登録されるので、
+# ここに無い models.py の表は「消えた」と見なされ、DROP する移行が作られてしまう。新しいドメインはここに足す
 import src.domain_biz.models
 import src.domain_client.models
 import src.domain_plan.models
@@ -27,14 +20,13 @@ import src.domain_ope.models
 import src.domain_events.models
 import src.domain_notification.models
 import src.worker_health.models  # noqa: F401  (表を Base に登録するための import)
-# import src.domain_schedule.models
-# -------------------------
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-# --- ここを追加！ almebic.iniのURLを上書きして、.envの設定を使うようにする ---
+# alembic.ini の URL は使わず、アプリと同じ設定（.env か環境変数の DATABASE_URL）で上書きする。
+# 移行先がいつもアプリの使う DB になり、接続先を 2 か所で持たずに済む
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.
@@ -42,16 +34,7 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
 target_metadata = Base.metadata
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
 
 
 def run_migrations_offline() -> None:

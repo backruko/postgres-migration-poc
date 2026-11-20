@@ -321,16 +321,12 @@ class SOPVersion(Base):
         # version_number は必ず1以上の正の整数
         CheckConstraint("version_number > 0", name="chk_sop_version_number_positive"),
 
-        # 💡【解拘：修正点】
-        # 人間が自由にタグを入力できるようにするため、以前存在した
-        # ガチガチのフォーマット強制チェック制約（chk_sop_version_tag_format）を完全に削除しました！
+        # タグ（version_tag）の書式は決めない: 運用が自分たちの呼び方（例: v1.1.0-draft-teamA）で付けるため
 
-        # 同一業務内では、内部連番は絶対に重複させない
-        # これが裏側で「最大値 + 1」の自動発番と組み合わさり、データの堅牢性を完璧に担保します。
+        # 同じ業務の中で内部の版番号は重ならない（番号は「最大 + 1」で振るので、同時に作ったときの重なりをここで止める）
         Index("uq_biz_version_number", "biz_master_id", "version_number", unique=True),
 
-        # 同一業務内では、外部タグ（例：v1.1.0-draft-teamA）も絶対に重複させない
-        # 人間の入力ミスによって全く同じ名前の草稿が作られるのを防ぎます。
+        # 同じ業務の中でタグも重ならない（同じ名前の版が 2 つあると、どちらを指しているか分からない）
         Index("uq_biz_version_tag", "biz_master_id", "version_tag", unique=True),
 
         # 草稿は日付を持たない。承認済みは発効日時を持ち、終了日時（次の版の発効日時）はその後（M2.1）

@@ -28,12 +28,10 @@ class ClientMaster(Base):
         comment="レコード最終更新日時"
     )
 
-    # Boolean は import 不要、Python標準の bool を使います。
-    # default=True を設定すると、新規作成時は自動的に True になります。
-
+    # 顧客は消さずに無効にする（業務・シート・オーダーの記録が顧客を参照し続けるため）
     is_active: Mapped[bool] = mapped_column(default=True, comment="有効フラグ（論理削除）")
 
-    # 複合ユニーク制約
+    # 顧客コードは重ならない（業務コードの先頭 4 文字になるため）
     __table_args__ = (
         UniqueConstraint('code', name='uq_client_id'),
     )

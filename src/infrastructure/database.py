@@ -19,29 +19,23 @@ class Base(DeclarativeBase):
     if TYPE_CHECKING:
         id: Mapped[int]
 
-# ==========================================
-# 【追加】全局scope（グローバルフィルター）の制御コード
-# ==========================================
+# 論理削除した行を、すべての ORM の問い合わせから自動で外す。問い合わせごとに条件を書くと、1 か所の書き忘れで
+# 削除した業務や SOP が画面やオーダーの作成に出てしまうため。削除した行も要るとき（復元、使い回さない番号の確認、
+# 記録や通知に削除済みのものの名前を出すとき）だけ `.execution_options(include_deleted=True)` で外す
 @event.listens_for(SessionLocal, "do_orm_execute")
 def _add_soft_delete_filter(execute_state):
-    """
-    全てのSQL実行時に割り込み、論理削除されたデータを自動で除外するフィルターを挟みます。
-    ただし、`.execution_options(include_deleted=True)` が指定されている場合はスキップします。
-    """
     from src.domain_biz.models import BizMaster, SOPVersion
 
-    # 復元処理（Restore）など、明示的に解除オプションが指定されていないかチェック
     if not execute_state.execution_options.get("include_deleted", False):
         execute_state.statement = execute_state.statement.options(
             with_loader_criteria(
-                SoftDeleteMixin,                 # 対象となるMixin
-                # 自動適用する条件式（== false() は SQL の「= false」。.is_(False) の「IS false」とは別の式になる）
+                SoftDeleteMixin,
+                # == false() は SQL の「= false」。.is_(False) の「IS false」とは別の式になる
                 lambda cls: cls.is_deleted == false(),
                 include_aliases=True
             )
         )
-    # SOPVersionのクエリ時、親が消えているものを自動で除外するスコープ
-        # これにより、SOPVersion単体を取得しようとしても、親が消えていればNoneになります
+        # SOP の版は自分では削除されないが、業務が削除されたら一緒に見えなくする（版だけ取っても None になる）
         execute_state.statement = execute_state.statement.options(
             with_loader_criteria(
                 SOPVersion,

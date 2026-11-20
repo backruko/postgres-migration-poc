@@ -6,7 +6,6 @@ from src.core.clock import utc_now
 
 class SoftDeleteMixin:
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
-    # timezone=True になっているため、PostgreSQL側は完璧にタイムゾーンを解釈できます
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         default=None,
@@ -15,7 +14,7 @@ class SoftDeleteMixin:
 
     def soft_delete(self) -> None:
         self.is_deleted = True
-        # タイムゾーン情報（+00:00）を持たせたままDBに渡すことで、DB側の設定が何であれ絶対に時間がズレなくなります。
+        # タイムゾーン付きの UTC で持つ（DB やサーバーのタイムゾーンの設定に左右されない）
         self.deleted_at = utc_now()
 
     def restore(self) -> None:
