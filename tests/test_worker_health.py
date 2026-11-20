@@ -127,7 +127,14 @@ def test_the_loop_records_a_crash_and_a_clean_stop(connection):
         if len(passes) == 2:
             stop.set()
 
-    worker.run_loop(r, stop, one_pass)
+    waits = []
+
+    def no_wait():  # 次の分を待たない（実際の待ちは最大 60 秒）
+        waits.append(1)
+        return 0
+
+    worker.run_loop(r, stop, one_pass, seconds_to_wait=no_wait)
+    assert len(waits) == 2  # 毎回の実行のあとに 1 回ずつ待つ
     run = rows(connection, WorkerRun)[-1]
     assert (run.passes, run.stop_reason) == (2, "signal")
 

@@ -173,8 +173,21 @@ def run_pass(recorder, state: PassState) -> None:
     run_job(recorder, "delivery", run_deliveries, state.channels)
 
 
-def run_loop(recorder, stop: threading.Event, one_pass: Callable[[], None]) -> None:
-    """止めるまで毎分回す。起動・心拍・止まった理由を健康の記録に書く。ループの外まで落ちたら crash として記録してから落ちる"""
+def wait_until_next_run() -> float:
+    """今から次の実行までの秒数（ループの既定の待ち）"""
+    return seconds_until_next_run(utc_now())
+
+
+def run_loop(
+    recorder,
+    stop: threading.Event,
+    one_pass: Callable[[], None],
+    seconds_to_wait: Callable[[], float] = wait_until_next_run,
+) -> None:
+    """止めるまで毎分回す。起動・心拍・止まった理由を健康の記録に書く。ループの外まで落ちたら crash として記録してから落ちる。
+
+    待ちは stop.wait で行うので、止める合図が来ればすぐに起きる。seconds_to_wait はテストが次の分を待たずに回すため
+    """
     from src.worker_health.models import StopReason
 
     recorder.start()
@@ -183,7 +196,7 @@ def run_loop(recorder, stop: threading.Event, one_pass: Callable[[], None]) -> N
             began = time_module.monotonic()
             one_pass()
             recorder.beat(round((time_module.monotonic() - began) * 1000))
-            stop.wait(seconds_until_next_run(utc_now()))
+            stop.wait(seconds_to_wait())
     except Exception as error:
         logger.exception("Worker crashed")
         recorder.error("worker", error)

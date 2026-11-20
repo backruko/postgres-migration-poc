@@ -1,6 +1,7 @@
 # tests/test_worker.py
 """定期処理のワーカー（scripts/worker.py）の時刻の決め方のテスト（DB は使わない）"""
 import importlib.util
+import inspect
 import sys
 from datetime import date, datetime, time, UTC
 from pathlib import Path
@@ -18,6 +19,11 @@ def test_release_runs_just_after_each_minute():
     assert worker.seconds_until_next_run(datetime(2026, 11, 6, 9, 0, 0, tzinfo=UTC)) == 61
     assert worker.seconds_until_next_run(datetime(2026, 11, 6, 9, 0, 30, tzinfo=UTC)) == 31
     assert worker.seconds_until_next_run(datetime(2026, 11, 6, 9, 0, 59, 999999, tzinfo=UTC)) >= 1.0
+
+
+def test_the_loop_waits_for_the_next_minute_by_default():
+    assert 1.0 <= worker.wait_until_next_run() <= 61
+    assert inspect.signature(worker.run_loop).parameters["seconds_to_wait"].default is worker.wait_until_next_run
 
 
 def test_plan_extension_once_a_day_after_0005_jst():
