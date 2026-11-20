@@ -7,16 +7,22 @@
 - 戻した後、末端のオーバーライドは REVERTED で無効になり、同じ発生枠がルールから作り直される（キャッシュも）
 """
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
 from tests.test_plan import JST, biz_id, daily_template, db, live  # noqa: F401  (fixture は名前で使う)
+from src.core.clock import utc_now
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
 from src.domain_plan import services
 from src.domain_plan.models import InstanceOrigin, VoidReason
 from src.domain_plan.schemas import PlanInstanceCancel, PlanInstanceOverride, PlanInstanceRevert, PlanOneOffCreate
+
+# 「過去の枠は作り直せない」を、時計を動かして確かめるため（実行の時刻によらない）
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 def _exact(message: str) -> str:
@@ -41,7 +47,7 @@ def test_an_instance_of_a_deleted_template_is_refused(db, biz_id):
 
 def test_a_one_off_instance_is_refused(db, biz_id):
     t = daily_template(db, biz_id)
-    start = datetime.now(JST).replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=2)
+    start = utc_now().astimezone(JST).replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=2)
     one = services.add_one_off_instance(db, t.id, PlanOneOffCreate(scheduled_start=start))
 
     message = "One-off instances are not tied to the rule, so they cannot be reverted. Cancel it instead."
@@ -50,7 +56,7 @@ def test_a_one_off_instance_is_refused(db, biz_id):
     db.rollback()
 
 
-def test_refusal_messages_and_already_reverted_comes_before_the_past(db, biz_id, monkeypatch):
+def test_refusal_messages_and_already_reverted_comes_before_the_past(db, biz_id, frozen_clock):
     t = daily_template(db, biz_id)
     untouched, target = live(db, t.id)[1], live(db, t.id)[5]
 
@@ -67,15 +73,16 @@ def test_refusal_messages_and_already_reverted_comes_before_the_past(db, biz_id,
     assert caught.value.error_code == ErrorCode.INSTANCE_ALREADY_VOIDED
     db.rollback()
     # 解除済みの発生枠が過去になっても、先に「解除済み」で断る
-    monkeypatch.setattr(services, "_now", lambda: target.scheduled_start + timedelta(hours=1))
+    now = frozen_clock.now
+    frozen_clock.set(target.scheduled_start + timedelta(hours=1))
     with pytest.raises(DuplicatedRecordError):
         services.revert_instance(db, target.id, PlanInstanceRevert())
     db.rollback()
 
     other = live(db, t.id)[7]
-    monkeypatch.undo()
+    frozen_clock.set(now)
     services.cancel_instance(db, other.id, PlanInstanceCancel())
-    monkeypatch.setattr(services, "_now", lambda: other.scheduled_start + timedelta(hours=1))
+    frozen_clock.set(other.scheduled_start + timedelta(hours=1))
     message = "The original occurrence is in the past and cannot be regenerated. Cancel or override it instead."
     with pytest.raises(BadRequestError, match=_exact(message)):
         services.revert_instance(db, other.id, PlanInstanceRevert())
