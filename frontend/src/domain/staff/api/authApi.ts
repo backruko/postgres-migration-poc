@@ -1,7 +1,7 @@
 import { http, unwrap } from "../../../shared/api/http";
 import type { LoginInput, PasswordChangeInput, Staff } from "../types";
 
-/** ログイン・ログアウト・本人のパスワードの変更（LG.3）。セッションは HttpOnly の Cookie で、画面からは読めない */
+/** ログイン・ログアウト・本人のパスワードの変更。セッションは HttpOnly の Cookie で、画面からは読めない */
 export const authApi = {
   /** ログイン（Cookie が設定される）（POST /auth/login） */
   login(input: LoginInput): Promise<Staff> {

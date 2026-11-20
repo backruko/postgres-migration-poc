@@ -1,5 +1,5 @@
 """
-ログイン・ログアウト・本人のパスワードの変更（LG.2）。
+ログイン・ログアウト・本人のパスワードの変更。
 
 ログインはセッションの Cookie（ops_session: HttpOnly・SameSite=Lax・Path=/。COOKIE_SECURE=1 なら Secure）を設定します。
 画面は同じオリジンから API を呼ぶため、SameSite=Lax で別サイトからの書き込み（CSRF）を防げます。

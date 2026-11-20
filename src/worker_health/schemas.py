@@ -1,4 +1,4 @@
-"""ワーカーの健康（並行稼働 P.4b）の API の形"""
+"""ワーカーの健康（並行稼働）の API の形"""
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field

@@ -22,7 +22,7 @@ import { SignalsPanel } from "./SignalsPanel";
 import { workerBannerText } from "../worker-health/workerHealth";
 import { addDays, calendarDayLabel, dayLabel, parseDateParam, summarize } from "./dailyDashboard";
 
-/** 自動で読み直す間隔（N.4） */
+/** 自動で読み直す間隔 */
 const AUTO_REFRESH_MS = 2 * 60 * 1000;
 
 /** タブ（URL の ?tab=。未指定・不明なら予定） */
@@ -34,9 +34,9 @@ const parseTab = (value: string | null): TabKey => (TABS as readonly string[]).i
  * 日次ダッシュボード（全顧客横断）。タブで 予定 / 締切・遅れ / 信号 を切り替える（件数はタブに小さく出す）。
  * - 予定: 選んだ日に開始する全顧客の予定を、顧客 → 業務の順に。その日のシート日付と各営業日カレンダーでの休日も。
  *   過去の日付では、無効化・取消された予定と取り消されたシート日付も理由付きで（実績の確認用）。
- * - 締切・遅れ: 日付によらず、締切が近い・過ぎたオーダー（N.4）。
+ * - 締切・遅れ: 日付によらず、締切が近い・過ぎたオーダー。
  * - 信号: 照合できなかった信号（人の対応が必要なもの）。
- * - 通知の失敗: 再試行の後も届かなかったアラーム（N.4b-2）。まだ確認していないものがあれば、どのタブでも上に赤い帯を出す。
+ * - 通知の失敗: 再試行の後も届かなかったアラーム。まだ確認していないものがあれば、どのタブでも上に赤い帯を出す。
  *   いま再試行中の配信があれば黄色の行（メールサーバーの不調の早い知らせ）。
  * 選択した日とタブは URL の ?date= と ?tab= に保持する（未指定なら今日・予定）。開いている間は 2 分ごとに読み直す。
  */
@@ -86,7 +86,7 @@ export function DailyDashboardPage() {
   const failureCount = active ? (failures.data?.unacknowledged ?? 0) : 0;
   const banner = active ? failureBannerText(failures.data) : null;
   const retrying = active ? retryingText(failures.data, TIMEZONE) : null;
-  // ワーカーが動いていなければ、どのタブでも一番上に赤い帯（P.4c）。動き出せば次の読み直し（1 分ごと）で自然に消える
+  // ワーカーが動いていなければ、どのタブでも一番上に赤い帯。動き出せば次の読み直し（1 分ごと）で自然に消える
   const workerBanner = workerBannerText(worker.data, TIMEZONE);
   const tabLabel = (text: string, count: number, color: string) => (
     <span>

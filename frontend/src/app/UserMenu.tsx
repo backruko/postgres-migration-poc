@@ -9,7 +9,7 @@ import type { Staff } from "../domain/staff/types";
 import { PasswordChangeForm } from "../features/auth/PasswordChangeForm";
 import { markSignedOut } from "../shared/api/session";
 
-/** ナビのログイン中の職員（LG.3: 「操作する職員」の置き換え）。パスワードの変更とログアウト */
+/** ナビのログイン中の職員（ログインしている本人。操作の記録に残る名前）。パスワードの変更とログアウト */
 export function UserMenu({ me, onChanged }: { me: Staff; onChanged: () => void }) {
   const navigate = useNavigate();
   const [passwordOpen, setPasswordOpen] = useState(false);

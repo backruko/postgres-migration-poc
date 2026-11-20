@@ -1,9 +1,9 @@
 # tests/test_plan_settings_guard.py
 """
-事前設定の変更は業務管理者（admin）のみ（U.3: テンプレート・業務の設定、U.4: シート・休日カレンダー・残りの biz）。
+事前設定の変更は業務管理者（admin）のみ（テンプレート・業務の設定、シート・休日カレンダー・残りの biz）。
 予定 1 件の手動操作（変更・取消・臨時・ルールに戻す・取消の復元）は、オーダーの取消・予定日前の開始の承認と同じく
 リリース担当・業務管理者（どれもオーダーを動かす・取り消す・作るため。作業者が予定日を今日に動かして承認なしで
-開始する抜け道も塞ぐ。U.4）。参照は誰でも。
+開始する抜け道も塞ぐ）。参照は誰でも。
 （ガードの動作そのもの = 401 / 403 は test_staff.py のデコレーターのテストで確認済み。ここでは付け忘れを防ぐ）
 """
 from tests.openapi_auth import needs_login
@@ -20,11 +20,11 @@ RELEASER_OR_ADMIN = {
     ("/plans/instances/{instance_id}/revert", "post"),
     ("/plans/instances/{instance_id}/cancel", "post"),
     ("/plans/instances/{instance_id}/restore", "post"),
-    # テンプレートの変更の下書き（Level 2、D.2）: 書くのはリリース担当も。承認・直接の保存は admin のみのまま
+    # テンプレートの変更の下書き: 書くのはリリース担当も。承認・直接の保存は admin のみのまま
     ("/plans/template-changes", "post"),
     ("/plans/template-changes/{change_id}", "put"),
     ("/plans/template-changes/{change_id}/withdraw", "post"),
-    # SOP の草稿（細かな権限、P.2、2026-11-11）: 書く・承認を依頼するのはリリース担当も。承認・差し戻し・取消は admin のみ
+    # SOP の草稿（細かな権限）: 書く・承認を依頼するのはリリース担当も。承認・差し戻し・取消は admin のみ
     ("/biz/{biz_id}/versions", "post"),
     ("/biz/{biz_id}/versions/clone", "post"),
     ("/biz/versions/{version_id}", "patch"),
@@ -35,7 +35,7 @@ RELEASER_OR_ADMIN = {
     ("/biz/steps/{step_id}", "delete"),
     ("/biz/versions/{version_id}/submit", "post"),
     ("/biz/versions/{version_id}/withdraw", "post"),
-    # 業務のリリース設定だけ（P.3）: リリース担当も変えられる（ほかの業務の設定は admin のみ）
+    # 業務のリリース設定だけ: リリース担当も変えられる（ほかの業務の設定は admin のみ）
     ("/biz/{biz_id}/release", "patch"),
 }
 
@@ -51,7 +51,7 @@ def _operations(prefixes: tuple[str, ...]):
 
 def test_every_plan_and_biz_write_needs_a_login():
     writes = [(p, m, op) for p, m, op in _operations(("/plans", "/biz")) if m in WRITE_METHODS]
-    assert len(writes) >= 30  # 一覧が空になってテストが素通りしないように（2026-11-05 時点で 35）
+    assert len(writes) >= 30  # 一覧が空になってテストが素通りしないように
     for path, method, op in writes:
         params = {p["name"] for p in op.get("parameters", [])}
         assert needs_login(op), (path, method)
@@ -87,7 +87,7 @@ def test_settings_writes_need_admin_and_occurrence_changes_any_active_staff():
 
 
 def test_reads_need_a_login_but_no_role():
-    """参照はロールを問わない（ログインは必要。LG.2）"""
+    """参照はロールを問わない（ログインは必要）"""
     for path, method, op in _operations(("/plans", "/biz")):
         if method == "get":
             assert needs_login(op), (path, method)

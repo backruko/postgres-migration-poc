@@ -62,7 +62,7 @@ type PreviewState =
 interface Props {
   open: boolean;
   /**
-   * 保存のしかた（Level 2）。
+   * 保存のしかた。
    * - direct: 業務管理者。これまでどおり直接保存・作成する
    * - draft: リリース担当。保存すると下書きになり、業務管理者の承認を待つ（同じ確認の流れ）
    * - preview: 確認だけ（保存のボタンは出ない）。今は使う人がいないが、形として残す
@@ -81,7 +81,7 @@ interface Props {
 
 /**
  * 予定テンプレートの新規作成・編集（削除は未対応）。種類と業務は作成後に変更できない。
- * 保存の前の確認（Level 1）: 編集で日付に関わる項目を変えたときは、保存の前に必ず「何が変わるか」（予定の違いとオーダーへの影響）を
+ * 保存の前の確認: 編集で日付に関わる項目を変えたときは、保存の前に必ず「何が変わるか」（予定の違いとオーダーへの影響）を
  * 見せ、そこで保存を確定する。名前・締切・表示だけの変更は、これまでどおりそのまま保存する。新規作成では「予定を確認」で見られる（任意）。
  */
 export function TemplateFormModal({ open, mode, draft = null, biz, template, onClose, onSaved }: Props) {
@@ -218,7 +218,7 @@ export function TemplateFormModal({ open, mode, draft = null, biz, template, onC
     const body = current ? updateDraftBody(v, current) : createDraftBody(v, biz.id);
     if (!body) {
       // 保存するものが無いときは、送信中の印を必ず外す。編集の「保存」は確認を取りに行く間 submitting を立ててから
-      // ここへ来るため、外さないとフォームもキャンセルも押せないまま固まる（開き直しても戻らなかった。2026-11-11）
+      // ここへ来るため、外さないとフォームもキャンセルも押せないまま固まる（開き直しても戻らなかった）
       setSubmitting(false);
     }
     if (!body && draft) {

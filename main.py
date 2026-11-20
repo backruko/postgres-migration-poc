@@ -72,7 +72,7 @@ app.add_exception_handler(Exception, global_exception_handler)
 # ----------------------------------------
 
 # クライアントのAPIを本体に登録！
-# すべての API はログインが必要（LG.2）。ログイン・ログアウト・パスワードの変更は auth_router が自分で扱う
+# すべての API はログインが必要。ログイン・ログアウト・パスワードの変更は auth_router が自分で扱う
 LOGIN = [Depends(require_login)]
 app.include_router(auth_router)
 app.include_router(client_router, dependencies=LOGIN)
@@ -81,7 +81,7 @@ app.include_router(plan_router, dependencies=LOGIN)
 app.include_router(ops_router, dependencies=LOGIN)
 app.include_router(staff_router, dependencies=LOGIN)
 app.include_router(ope_router, dependencies=LOGIN)
-app.include_router(events_router, dependencies=LOGIN)  # 出来事の一覧（読み取りのみ。N.2b）
-app.include_router(notification_router, dependencies=LOGIN)  # 届かなかったアラーム（N.4b）
-app.include_router(worker_health_router, dependencies=LOGIN)  # ワーカーの健康のまとめ（並行稼働 P.4b）
-app.include_router(health_router)  # ワーカーが動いているか（ログインなし。外の監視用。P.4b）
+app.include_router(events_router, dependencies=LOGIN)  # 出来事の一覧（読み取りのみ）
+app.include_router(notification_router, dependencies=LOGIN)  # 届かなかったアラーム
+app.include_router(worker_health_router, dependencies=LOGIN)  # ワーカーの健康のまとめ（並行稼働）
+app.include_router(health_router)  # ワーカーが動いているか（ログインなし。外の監視用）

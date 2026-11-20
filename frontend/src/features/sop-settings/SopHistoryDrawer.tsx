@@ -41,8 +41,8 @@ function details(e: SopVersionEvent) {
 }
 
 /**
- * SOP の版の履歴（P.4）: 作成（写し元）・承認の依頼・取り下げ・差し戻し（理由）・承認（発効日・自分の草稿か）・承認の取消。
- * 新しい順。ステップの細かな編集は出さない（版の「最終編集」に最後の人と日時）。2026-11-11 より前の版には記録が無い。
+ * SOP の版の履歴: 作成（写し元）・承認の依頼・取り下げ・差し戻し（理由）・承認（発効日・自分の草稿か）・承認の取消。
+ * 新しい順。ステップの細かな編集は出さない（版の「最終編集」に最後の人と日時）。記録を取り始める前に作った版には記録が無い。
  */
 export function SopHistoryDrawer({ open, version, onClose }: Props) {
   const changes = useTemplateChangesVersion(); // 依頼・判断の直後に読み直す

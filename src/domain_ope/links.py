@@ -8,7 +8,7 @@
   何も無ければ待ち先なしの行（upstream_order_id NULL。条件を満たさない）。
 - 直すのは開始前の下流のオーダーだけ（pending / ready / それらから保留）。開始後・完了・取消のつながりはそのまま。
 - 合わなくなったつながりは消さずに removed_at と理由を付ける。待ち先なしの行は、上流が見つかったらその行を埋める。
-- latest_before（直前の上流。L.2、2026-11-05 の決定）: キーではなく時刻で決める。下流の予定開始以前で、
+- latest_before（直前の上流）: キーではなく時刻で決める。下流の予定開始以前で、
   lookback_days 日前までに開始する上流のオーダーのうち最新の1件（取消済みでも。人が判断するまで待つ）。
   無ければ待ち先なしの行。上流のオーダーができた・動いた・取り消されたら、その後 lookback_days 日の間に
   開始する開始前の下流のオーダーを直し、下流が動いたら（時刻だけでも）その下流を直す。
@@ -31,7 +31,7 @@ FINAL = (OrderStatus.FINISHED, OrderStatus.CANCELED)
 
 
 def is_late(order: OpeOrder, now: datetime) -> bool:
-    """遅れ = 保存した締切（deadline_at）を過ぎても完了・取消になっていない（N.3。締切の決め方はテンプレートごと）"""
+    """遅れ = 保存した締切（deadline_at）を過ぎても完了・取消になっていない（締切の決め方はテンプレートごと）"""
     return order.status not in FINAL and order.deadline_at < now
 
 
@@ -234,7 +234,7 @@ def refresh_order(db: Session, order: OpeOrder, only_time_based: bool = False) -
     only_time_based: 時刻だけが動いた（発生枠のキー = ルール上の日付・シート日付は同じ）。同じシート日付・同じ日付の
     つながりはキーだけで決まるので変わらない。予定開始で突き合わせる「直前の上流」だけを直す
     （テンプレートの時刻の変更で数百のオーダーが動いても、つながりを 1 件ずつ読み直さない）。
-    refresh_orders に 1 件を渡すのと同じ（R.6、2026-11-17。同じ下流を同じ問い合わせで選ぶので、別のやり方を持たない。
+    refresh_orders に 1 件を渡すのと同じ（同じ下流を同じ問い合わせで選ぶので、別のやり方を持たない。
     1 件ずつのやり方は tests/test_links_batched.py の _reference_refresh_order に残し、まとめた結果と比べ続ける）。
     """
     refresh_orders(db, [order], only_time_based=only_time_based)

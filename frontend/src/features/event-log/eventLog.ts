@@ -1,4 +1,4 @@
-// 出来事の一覧画面（N.2c）の純粋な処理（種類の表示・期間・処理の状態・中身の読み取り）。UI から独立している。
+// 出来事の一覧画面の純粋な処理（種類の表示・期間・処理の状態・中身の読み取り）。UI から独立している。
 import type { DomainEvent } from "../../domain/events/types";
 import { ORDER_STATUS_LABEL } from "../../domain/ope/lib/orderActions";
 import { dayjs } from "../../shared/lib/datetime";
@@ -7,7 +7,7 @@ import { dayjs } from "../../shared/lib/datetime";
 export const EVENT_TYPES: { value: string; label: string; color: string }[] = [
   { value: "OrderLate", label: "遅れ", color: "red" },
   { value: "OrderDueSoon", label: "まもなく", color: "orange" },
-  { value: "DestinationTestRequested", label: "テスト送信", color: "blue" },  // 宛先のテスト送信（N.5a）
+  { value: "DestinationTestRequested", label: "テスト送信", color: "blue" },  // 宛先のテスト送信
 ];
 
 export const eventTypeInfo = (type: string) =>
@@ -33,7 +33,7 @@ export const recordDelayMinutes = (e: Pick<DomainEvent, "occurred_at" | "recorde
 
 export type Processing = { kind: "pending" | "done" | "failing"; label: string };
 
-/** 通知の仕組みの処理の状態（N.3 から通知の仕組みが書く。今はすべて未処理） */
+/** 通知の仕組みの処理の状態（振り分けが済むと通知の仕組みが書く） */
 export function processingOf(e: Pick<DomainEvent, "processed_at" | "attempts" | "last_error">, tz: string): Processing {
   if (e.processed_at) return { kind: "done", label: `処理済み ${dayjs(e.processed_at).tz(tz).format("M/D HH:mm")}` };
   if (e.attempts > 0) return { kind: "failing", label: `失敗 ${e.attempts} 回` };

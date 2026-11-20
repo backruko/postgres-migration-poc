@@ -26,7 +26,7 @@ interface Props {
 const ymd = (d: Dayjs) => d.format("YYYY-MM-DD");
 
 /**
- * 年間計画シートを作る（名前と期間だけの空のシート。マーカーと日付はあとから足す）・名前と期間を変える（E.3）。
+ * 年間計画シートを作る（名前と期間だけの空のシート。マーカーと日付はあとから足す）・名前と期間を変える。
  * 期間はいつでも延ばせる（ルールのマーカーは新しい期間まで日付を作る）。縮めるのは、外に残る日付が無いときだけ（サーバーが判定）。
  */
 export function SheetFormModal({ open, clientCode, sheet, sheets, onClose, onSaved }: Props) {

@@ -26,7 +26,7 @@ const ALL = "__all__";
 type Values = Omit<RuleForm, "quiet_start" | "quiet_end" | "client_code"> & { client: string; quiet_range?: [Dayjs, Dayjs] };
 
 /**
- * ルールを作る・直す（N.5c）。どの出来事を・どの顧客（業務）について・どの宛先に・どの文面で知らせるか、
+ * ルールを作る・直す。どの出来事を・どの顧客（業務）について・どの宛先に・どの文面で知らせるか、
  * 重複の期間と知らせない時間帯。変えた後に処理する出来事から効く（作った通知はそのまま）。
  */
 export function RuleFormModal({ open, rule, me, options, destinations, onClose, onSaved }: Props) {

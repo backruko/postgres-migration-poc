@@ -43,7 +43,7 @@ export type TemplateChangePreview = Schemas["TemplateChangePreview"];
 /** テンプレートをこの内容で作ったらできる予定 */
 export type TemplateCreatePreview = Schemas["TemplateCreatePreview"];
 
-// ---- テンプレートの変更依頼（下書き → 承認 → 反映。Level 2） ----
+// ---- テンプレートの変更依頼（下書き → 承認 → 反映） ----
 export type TemplateChangeKind = Schemas["TemplateChangeKind"];
 export type TemplateChangeStatus = Schemas["TemplateChangeStatus"];
 /** 変更依頼 1 件（職員・業務・テンプレートの名前つき） */
@@ -68,7 +68,7 @@ export type MarkerRule = Schemas["MarkerRule"];
 export type CreateMarkerInput = Schemas["ReferenceSheetMarkerCreate"];
 /** rule: 指定で置き換えて再生成、null で生成をやめる、省略で変更しない */
 export type UpdateMarkerInput = Schemas["ReferenceSheetMarkerUpdate"];
-// ---- シートの作成・名前と期間の変更・日付のまとめての変更（E.3 / E.4） ----
+// ---- シートの作成・名前と期間の変更・日付のまとめての変更 ----
 export type CreateSheetInput = Schemas["ReferenceSheetCreate"];
 export type UpdateSheetInput = Schemas["ReferenceSheetUpdate"];
 export type SheetEventsBatchInput = Schemas["ReferenceSheetEventsBatch"];

@@ -1,4 +1,4 @@
-// 「ワーカーの状態」（並行稼働 P.4c）と日次ダッシュボードの赤い帯の純粋な処理（言葉・帯の文・期間・表の行・CSV）。UI から独立している。
+// 「ワーカーの状態」（並行稼働）と日次ダッシュボードの赤い帯の純粋な処理（言葉・帯の文・期間・表の行・CSV）。UI から独立している。
 import type { WorkerHealthDay, WorkerHealthState, WorkerHealthTotal } from "../../domain/worker/types";
 import { dayjs } from "../../shared/lib/datetime";
 

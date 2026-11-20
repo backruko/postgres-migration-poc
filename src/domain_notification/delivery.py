@@ -1,17 +1,17 @@
 """
-配信（通知の仕組み N.3b、2026-11-12）。ワーカーが毎分、振り分けのすぐ後に呼びます。
+配信（通知の仕組み）。ワーカーが毎分、振り分けのすぐ後に呼びます。
 
 送る時刻（next_attempt_at）が来た配信を、宛先のチャネルで送り、結果を記録する。知らせない時間帯で待たせた配信も、
-時間帯の終わりの時刻が来れば、ここでふつうに送られる（文面はその時刻の事実のまま。2026-11-12 の決定）。
+時間帯の終わりの時刻が来れば、ここでふつうに送られる（文面はその時刻の事実のまま）。
 
 - 送れた → sent（送った日時・送り先の ID）
-- 一時的な失敗 → retrying。次は 1・5・15・60 分後。5 回目も失敗したら failed（約 80 分であきらめる。2026-11-12 の決定）
+- 一時的な失敗 → retrying。次は 1・5・15・60 分後。5 回目も失敗したら failed（約 80 分であきらめる）
 - 永続的な失敗（宛先が存在しない など）→ すぐ failed。宛先が無効・削除されていても failed（送らない）
 - 宛先がすべて終わったら、通知の状態をまとめる: 全部届いた sent・一部 partly_failed・全部だめ failed（終わった日時も）
 - 1 件ずつ、自分のトランザクションで送って記録する（コミットする）。送った後・記録の前にプロセスが止まると、
   その 1 件だけもう一度送られることがある（少なくとも 1 回届ける）。まとめてコミットすると、重複が最大 1 回分の件数になるため
-- 1 回ごとに notification_delivery_attempt を 1 行書く（どのアドレスへ・結果・返事。N.5b）
-- 宛先のテスト送信（ルールなしの通知）は再試行しない: 1 回の結果をそのまま見せる（N.5a）
+- 1 回ごとに notification_delivery_attempt を 1 行書く（どのアドレスへ・結果・返事）
+- 宛先のテスト送信（ルールなしの通知）は再試行しない: 1 回の結果をそのまま見せる
 - 1 件ずつ FOR UPDATE SKIP LOCKED で取るので、ワーカーが 2 つ動いても同じ配信を 2 回送らない
 """
 from dataclasses import dataclass, field
@@ -97,7 +97,7 @@ def _deliver_one(
 
     delivery.attempts += 1
     delivery.last_attempt_at = now
-    # 1 回ごとの記録（このときのアドレス。アドレスを直した後の再試行は、新しいアドレスになる。N.5b）
+    # 1 回ごとの記録（このときのアドレス。アドレスを直した後の再試行は、新しいアドレスになる）
     db.add(NotificationDeliveryAttempt(
         delivery_id=delivery.id, attempt_no=delivery.attempts, attempted_at=now, address=destination.address, ok=outcome.ok,
         permanent=bool(not outcome.ok and outcome.permanent),
@@ -109,7 +109,7 @@ def _deliver_one(
         result.sent += 1
     else:
         delivery.last_error = (outcome.error or "unknown error")[:2000]
-        # テスト送信（ルールなし）は 1 回だけ: 頼んだ人に、すぐ結果を見せる（N.5a）
+        # テスト送信（ルールなし）は 1 回だけ: 頼んだ人に、すぐ結果を見せる
         if outcome.permanent or delivery.attempts >= MAX_ATTEMPTS or notification.rule_id is None:
             delivery.status, delivery.next_attempt_at = DeliveryStatus.FAILED, None
             result.failed += 1

@@ -1,4 +1,4 @@
-"""通知の仕組みのエンドポイント（N.4b: 届かなかったアラームの一覧と「確認した」。ルール・宛先の画面と API は N.5）"""
+"""通知の仕組みのエンドポイント（届かなかったアラームの一覧と「確認した」、通知の設定（宛先・ルール）、通知の記録）"""
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -14,7 +14,7 @@ from src.infrastructure.database import get_db
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
-# 「確認した」を押せる人（日々の運用。閲覧者・監査担当・システム管理者は見るだけ。2026-11-12 の決定）
+# 「確認した」を押せる人（日々の運用。閲覧者・監査担当・システム管理者は見るだけ）
 ACKNOWLEDGERS = [RoleCode.OPERATOR, RoleCode.CHECKER, RoleCode.RELEASER, RoleCode.ADMIN]
 
 
@@ -41,9 +41,9 @@ def acknowledge_failure_endpoint(
 
 
 # ==========================================
-# 通知の設定（宛先・ルール。N.5a）
+# 通知の設定（宛先・ルール）
 # 読むのは有効な職員なら誰でも（範囲のある職員には、その顧客と全顧客のもの）。変えるのは業務管理者だけ
-# （範囲のある業務管理者は自分の顧客のものだけ。全顧客のものは 403）。2026-11-12 の決定
+# （範囲のある業務管理者は自分の顧客のものだけ。全顧客のものは 403）
 # ==========================================
 from src.domain_notification import services as settings  # noqa: E402
 from src.domain_notification.schemas import (  # noqa: E402
@@ -214,7 +214,7 @@ def restore_rule_endpoint(
 
 
 # ==========================================
-# 通知の記録（N.5b）。有効な職員なら誰でも（範囲のある職員には、その顧客のものだけ）
+# 通知の記録。有効な職員なら誰でも（範囲のある職員には、その顧客のものだけ）
 # ==========================================
 from datetime import datetime  # noqa: E402
 

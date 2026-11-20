@@ -14,7 +14,7 @@ export type Staff = Schemas["StaffResponse"];
 export type CreateStaffInput = Schemas["StaffCreate"];
 export type UpdateStaffInput = Schemas["StaffUpdate"];
 
-// ---- ログイン・API キー（LG.3） ----
+// ---- ログイン・API キー ----
 export type LoginInput = Schemas["LoginIn"];
 export type PasswordChangeInput = Schemas["PasswordChangeIn"];
 export type ApiKey = Schemas["ApiKeyResponse"];

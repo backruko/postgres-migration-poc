@@ -1,4 +1,4 @@
-// 通知の設定（宛先・ルール。N.5c）の純粋な処理: 権限・表示の言葉・フォームの値と API の形の変換・日本語のエラー文。
+// 通知の設定（宛先・ルール）の純粋な処理: 権限・表示の言葉・フォームの値と API の形の変換・日本語のエラー文。
 // React に依存しない（jsdom の確認でそのまま呼べる）。
 import type { Staff } from "../../staff/types";
 import type {
@@ -10,7 +10,7 @@ export const canEditNotificationSettings = (s: Staff | null | undefined) => s?.s
 
 /**
  * その行（顧客なし = 全顧客）を、この職員が変えられるか。担当顧客が限られた業務管理者は、自分の顧客のものだけ
- * （全顧客のものは見えるが変えられない。2026-11-12 の決定）
+ * （全顧客のものは見えるが変えられない）
  */
 export function canEditRow(s: Staff | null | undefined, clientCode: string | null): boolean {
   if (!canEditNotificationSettings(s) || !s) return false;

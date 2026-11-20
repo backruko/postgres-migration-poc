@@ -18,7 +18,7 @@ export const isClientLimited = (s: Staff | null | undefined) => (s?.client_codes
 /** 全顧客に共通の設定を変えられるか（ロールの判定に加えて、担当顧客が限られていないこと） */
 export const handlesAllClients = (s: Staff | null | undefined): s is Staff => isActive(s) && !isClientLimited(s);
 
-/** 担当顧客の表示（例: 「全顧客」「MOCK, YA64」） */
+/** 担当顧客の表示（例: 「全顧客」「EFGH, WXYZ」） */
 export const clientScopeText = (s: Pick<Staff, "client_codes">) => (s.client_codes.length ? s.client_codes.join(", ") : "全顧客");
 
 /** 職員の一覧を見られるか（職員は全顧客に共通: 担当顧客が限られた職員は見られない） */
@@ -36,7 +36,7 @@ export const canConfirmFailure = (s: Staff | null | undefined) => isActive(s) &&
 
 /**
  * 機械用のロール（API キーを持てる）。system_agent の職員は、これ以外のロールもパスワードも持てない
- * （バックエンドの MACHINE_ROLES / _check_machine_only と同じ。2026-11-12）
+ * （バックエンドの MACHINE_ROLES / _check_machine_only と同じ）
  */
 export const MACHINE_ROLES: RoleCode[] = ["signal_sender", "system_agent"];
 

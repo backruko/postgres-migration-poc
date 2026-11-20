@@ -1,5 +1,5 @@
-// 画面に入る依存（dependencies）の既知の脆弱性を調べ、high 以上があれば止める（CI の「依存関係の既知の脆弱性」。
-// 2026-11-17 の決定: 止める）。npm audit には見送りの一覧が無いので、この道具が audit-ignore.txt に書いた勧告を外す。
+// 画面に入る依存（dependencies）の既知の脆弱性を調べ、high 以上があれば止める（CI の「依存関係の既知の脆弱性」）。
+// npm audit には見送りの一覧が無いので、この道具が audit-ignore.txt に書いた勧告を外す。
 //
 //   node scripts/audit-check.mjs                 … frontend で（npm run audit:check と同じ）
 //   node scripts/audit-check.mjs <一覧のファイル> … 別の一覧で試す

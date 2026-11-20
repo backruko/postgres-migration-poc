@@ -71,7 +71,7 @@ def check_sop_step(db: Session, scope: ClientScope, step_id: int) -> None:
 
 
 def check_biz_dependency(db: Session, scope: ClientScope, dependency_id: int) -> None:
-    # 依存関係は同じ顧客の業務どうしだけ（2026-11-04）なので、下流の業務の顧客で決まる
+    # 依存関係は同じ顧客の業務どうしだけなので、下流の業務の顧客で決まる
     _check(
         db, scope,
         select(BizMaster.client_code).join(BizDependency, BizDependency.downstream_biz_id == BizMaster.id)

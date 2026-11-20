@@ -18,13 +18,13 @@ export const ALL_CLIENTS_ONLY = "全顧客に共通の設定のため、担当�
 /**
  * 変更の内容を「確認」できるか（業務管理者・リリース担当）。確認は何も保存しない:
  * テンプレートの「何が変わるか」の確認と、シートの取り込みの「取り込むと何が変わるか」の表示。
- * リリース担当は準備に加わり、保存・作成・取り込みは業務管理者が行う（2026-11-10。下書きと承認の仕組みができるまでの形）
+ * リリース担当は準備に加わり、保存・作成・取り込みは業務管理者が行う（変更は下書きと承認を通すため）
  */
 export const canPreviewPlanSettings = (s: Staff | null | undefined) =>
   s?.status === "active" && (s.roles.includes("admin") || s.roles.includes("releaser"));
 
 /**
- * 業務のリリース設定（方法・時刻・何日前）を変えられるか（リリース担当・業務管理者。細かな権限 P.5、2026-11-11）。
+ * 業務のリリース設定（方法・時刻・何日前）を変えられるか（リリース担当・業務管理者。細かな権限）。
  * ほかの業務の設定は業務管理者のみ（canEditPlanSettings）
  */
 export const canEditReleaseSettings = (s: Staff | null | undefined) =>

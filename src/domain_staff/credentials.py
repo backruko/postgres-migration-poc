@@ -1,5 +1,5 @@
 """
-ログインの部品（LG.1）: パスワード・セッション・API キー。エンドポイントへの組み込みは LG.2。
+ログインの部品: パスワード・セッション・API キー。エンドポイントへの組み込みは auth.py。
 
 - パスワード: 標準ライブラリの scrypt（塩付き）。保存形式 "scrypt$n$r$p$<塩>$<ハッシュ>"（どちらも base64）
 - セッション・API キー: 推測できない乱数（secrets）を渡し、DB には SHA-256 だけを持つ（値が十分に長いので塩は不要）
@@ -23,7 +23,7 @@ from src.core.exceptions import BadRequestError, ForbiddenError, UnauthorizedErr
 from src.domain_staff.models import MACHINE_ROLES, RoleCode, StaffApiKey, StaffSession, StaffStatus, StaffUser
 from src.core.clock import LOCAL_TIMEZONE
 
-# --- 決まり（設計書の決定。2026-11-06） ---
+# --- 決まり（設計書の決定） ---
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
 MAX_FAILED_LOGINS = 5

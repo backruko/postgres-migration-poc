@@ -1,5 +1,5 @@
 """
-通知の文面（通知の仕組み N.3a、2026-11-12）。文面は当面コードにある（ルールの template_code で選ぶ）。
+通知の文面（通知の仕組み）。文面は当面コードにある（ルールの template_code で選ぶ）。
 
 文面は出来事の中身（formats の写し）だけから作る: オーダーや予定の表は読まない（依存は一方向。設計書の決定）。
 そのため、知らせない時間帯で後から送るときも、文面は「その時刻の事実」を書く（例: 13:00 の締切を過ぎた・その時点で作業中）。
@@ -76,7 +76,7 @@ def _order_deadline(event: DomainEvent, rule_name: str) -> Rendered:
 
 
 def _destination_test(event: DomainEvent, rule_name: str) -> Rendered:
-    """テスト送信の文面（N.5a）。本物のアラームと同じ道（ワーカー → チャネル）で送る"""
+    """テスト送信の文面。本物のアラームと同じ道（ワーカー → チャネル）で送る"""
     t = DestinationTestV1.model_validate(event.payload)
     requested = _local(event.occurred_at)
     who = t.requested_by_name or "（不明）"

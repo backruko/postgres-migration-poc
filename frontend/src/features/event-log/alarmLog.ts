@@ -1,4 +1,4 @@
-// 出来事のページの「通知」タブ（通知の記録。N.5d）の純粋な処理（状態・理由・試みの言葉）。UI から独立している。
+// 出来事のページの「通知」タブ（通知の記録）の純粋な処理（状態・理由・試みの言葉）。UI から独立している。
 import type { DeliveryAttempt, LogEntry, NotificationStatus } from "../../domain/notifications/types";
 
 export const NOTIFICATION_STATUSES: { value: NotificationStatus; label: string; color: string | undefined }[] = [

@@ -94,7 +94,7 @@ class StaffResponse(BaseModel):
 
 
 # ==========================================
-# ログイン（LG.2）
+# ログイン
 # ==========================================
 class LoginIn(BaseModel):
     login_id: str = Field(..., min_length=1, max_length=100)

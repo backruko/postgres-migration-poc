@@ -1,10 +1,10 @@
 """
-ワーカーが自分の健康を書く（並行稼働 P.4a、2026-11-16）。
+ワーカーが自分の健康を書く（並行稼働）。
 
     recorder = HealthRecorder()
     recorder.start()                 # 起動: worker_run に 1 行
     recorder.error("release", err)   # 仕事が失敗した: worker_error に 1 行（ワーカーは続ける）
-    recorder.beat(duration_ms)       # 1 回りが終わった: 最後の心拍と回数を更新し、worker_beat に 1 行（P.4b）
+    recorder.beat(duration_ms)       # 1 回りが終わった: 最後の心拍と回数を更新し、worker_beat に 1 行
     recorder.stop(StopReason.SIGNAL) # 止まった
 
 - 記録のために、ワーカーを止めない: どの呼び出しも例外を外に出さない（書けなければログに警告を出すだけ）

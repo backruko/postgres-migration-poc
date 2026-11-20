@@ -1,8 +1,8 @@
 """
-オーダーの締切（N.2、2026-11-05 の決定）。締切はオーダーの行に保存する（SLA の正。表示のたびに計算しない）。
+オーダーの締切。締切はオーダーの行に保存する（SLA の正。表示のたびに計算しない）。
 
 - 作成時に、テンプレートの締切の決め方（予定の終了 / 開始から / 固定の時刻）とタイムゾーンをオーダーに写す（copy_rule）。
-  以後テンプレートを変えても、写した決め方は変わらない（リリース前のオーダーだけ写し直す: N.3）。
+  以後テンプレートを変えても、写した決め方は変わらない（リリース前のオーダーだけ写し直す:）。
 - 予定が動いたら、このオーダー自身の写した決め方で締切を計算し直す（restamp）。
   開始から = 予定開始 + 分（予定と一緒に動く）。固定の時刻 = 予定日（予定開始のローカル日付）+ 何日 の その時刻
   （同じ日の中で動いても締切は動かない。日が変われば、その日の時刻）。予定の終了 = scheduled_end。
@@ -16,7 +16,7 @@ from src.domain_plan.models import DeadlineMode, PlanTemplate
 
 
 def copy_rule(order: OpeOrder, template: PlanTemplate) -> None:
-    """テンプレートの締切の決め方を、オーダーに写す（作成時。N.3 ではリリース前の写し直しにも使う）"""
+    """テンプレートの締切の決め方を、オーダーに写す（作成時と、テンプレートが変わったときのリリース前の写し直し）"""
     order.deadline_mode = template.deadline_mode
     order.deadline_offset_minutes = template.deadline_offset_minutes
     order.deadline_time = template.deadline_time

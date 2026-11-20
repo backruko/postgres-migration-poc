@@ -12,7 +12,7 @@ export type DependencyKind = components["schemas"]["DependencyKind"];
 
 // ---- 業務の設定（リリース・顧客側の出来事） ----
 export type BizMasterUpdate = components["schemas"]["BizMasterUpdate"];
-// ---- リリース設定だけの変更と履歴（細かな権限、P.5） ----
+// ---- リリース設定だけの変更と履歴（細かな権限） ----
 export type BizReleaseUpdate = components["schemas"]["BizReleaseUpdate"];
 export type BizReleaseChange = components["schemas"]["BizReleaseChangeResponse"];
 export type ReleaseMode = components["schemas"]["ReleaseMode"];
@@ -23,13 +23,13 @@ export type CompletionMode = components["schemas"]["CompletionMode"];
 export type SopVersion = components["schemas"]["SOPVersionResponse"];
 export type SopState = components["schemas"]["SopState"];
 
-// ---- SOP の画面（M2.4〜）: 版とステップ ----
+// ---- SOP の画面: 版とステップ ----
 export type SopVersionDetail = components["schemas"]["SOPVersionDetailResponse"];
 export type SopStep = components["schemas"]["SOPStepTemplateResponse"];
 export type SopStepCreate = components["schemas"]["SOPStepTemplateCreate"];
 export type SopStepUpdate = components["schemas"]["SOPStepTemplateUpdate"];
 
-// ---- SOP の草稿の承認の依頼・記録（細かな権限、P.4） ----
+// ---- SOP の草稿の承認の依頼・記録（細かな権限） ----
 export type SopVersionEvent = components["schemas"]["SOPVersionEventResponse"];
 export type SopVersionEventType = components["schemas"]["SOPVersionEventType"];
 export type SubmittedSopDraft = components["schemas"]["SubmittedSOPDraftResponse"];

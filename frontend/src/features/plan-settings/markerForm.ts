@@ -13,7 +13,7 @@ import { dayjs, type Dayjs } from "../../shared/lib/datetime";
 export interface MarkerFormValues {
   marker: string;
   description?: string;
-  /** 作るときの日付の作り方（E.3）: ルール / 日付を選ぶ */
+  /** 作るときの日付の作り方: ルール / 日付を選ぶ */
   kind?: "rule" | "dates";
   /** 日付を選んで作るときの日付 */
   dates?: Dayjs[];
@@ -84,7 +84,7 @@ export function toCreateMarkerInput(v: MarkerFormValues): CreateMarkerInput {
  * 取り込んだマーカーは説明だけを送る（ルールを付けると取り込んだ日付と生成した日付が混ざるため、ここでは扱わない）。
  */
 export function toUpdateMarkerInput(v: MarkerFormValues, current: ReferenceSheetMarker): UpdateMarkerInput {
-  // cancel_future_dates は生成をやめるとき（SheetSettingsPage）だけ true にする。名前は変わったときだけ送る（E.3）
+  // cancel_future_dates は生成をやめるとき（SheetSettingsPage）だけ true にする。名前は変わったときだけ送る
   const name = v.marker.trim();
   const renamed = name !== current.marker ? { name } : {};
   return current.is_generated
@@ -92,7 +92,7 @@ export function toUpdateMarkerInput(v: MarkerFormValues, current: ReferenceSheet
     : { ...renamed, description: toDescription(v), cancel_future_dates: false };
 }
 
-/** 日付を選んで作るマーカー（ルールなし）の作成の入力。日付はあとからまとめて足す（E.3） */
+/** 日付を選んで作るマーカー（ルールなし）の作成の入力。日付はあとからまとめて足す */
 export const toCreateHandMarkerInput = (v: MarkerFormValues): CreateMarkerInput => ({
   marker: v.marker.trim(), description: toDescription(v), rule: null,
 });

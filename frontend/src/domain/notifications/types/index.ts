@@ -1,4 +1,4 @@
-// 通知の仕組み（届かなかったアラーム。N.4b）の型。OpenAPI から生成した型の別名で、手書きの型は持たない。
+// 通知の仕組み（届かなかったアラーム）の型。OpenAPI から生成した型の別名で、手書きの型は持たない。
 import type { components } from "../../../shared/api/schema.gen";
 
 type Schemas = components["schemas"];
@@ -7,7 +7,7 @@ export type NotificationFailures = Schemas["NotificationFailuresResponse"];
 export type FailedNotification = Schemas["FailedNotification"];
 export type FailedDelivery = Schemas["FailedDelivery"];
 
-// ---- 通知の設定（宛先・ルール。N.5a / N.5c） ----
+// ---- 通知の設定（宛先・ルール） ----
 export type NotificationDestination = Schemas["DestinationOut"];
 export type DestinationInput = Schemas["DestinationIn"];
 export type NotificationRule = Schemas["RuleOut"];
@@ -16,7 +16,7 @@ export type NotificationOptions = Schemas["NotificationOptions"];
 export type LastTest = Schemas["LastTest"];
 export type QuietMode = Schemas["QuietMode"];
 
-// ---- 通知の記録（N.5b / N.5d） ----
+// ---- 通知の記録 ----
 export type NotificationLog = Schemas["NotificationLogResponse"];
 export type LogEntry = Schemas["LogEntry"];
 export type LogEntryDetail = Schemas["LogEntryDetail"];

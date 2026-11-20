@@ -1193,7 +1193,7 @@ def test_annual_template_keeps_its_next_occurrence_generated(db, biz_id):
 
 
 def test_extend_job_fixes_old_templates_and_finds_the_next_slot(db, biz_id, monkeypatch):
-    # Phase 2 より前に作られたテンプレート（90日先までしか生成していない）を再現する
+    # 先の日付を作る前の古いテンプレート（90日先までしか生成していない）を再現する
     def old_behaviour(db_, template):
         services._ensure_materialized(db_, template, services._now() + services.MATERIALIZE_HORIZON)
         return False

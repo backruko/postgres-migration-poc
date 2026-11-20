@@ -1,4 +1,4 @@
-"""出来事の一覧（読み取りのみ。通知の仕組み N.2b）の応答の形"""
+"""出来事の一覧（読み取りのみ。通知の仕組み）の応答の形"""
 from datetime import datetime
 from typing import Any
 

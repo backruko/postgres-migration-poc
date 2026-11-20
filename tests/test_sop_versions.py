@@ -1,6 +1,6 @@
 # tests/test_sop_versions.py
 """
-SOP バージョンの状態（M2.1）のテスト: 保存は草稿 / 承認済みだけで、予定 / 現行 / 過去は日付から決まる。
+SOP バージョンの状態のテスト: 保存は草稿 / 承認済みだけで、予定 / 現行 / 過去は日付から決まる。
 承認（発効日は明日以降の 0:00 日本時間・ステップの無い草稿は不可・予定は 1 つまで・今有効な版をつなぐ）と、
 承認の取消（予定のときだけ・オーダーが指定している版は不可・前の版の終了日時を外す）。
 
@@ -175,7 +175,7 @@ def test_cancel_only_while_scheduled_and_unused(db, biz):
 
 
 # ==========================================
-# 草稿の編集（M2.2）
+# 草稿の編集
 # ==========================================
 def test_new_draft_copies_the_newest_approved_version_or_starts_empty(db, biz):
     first = biz_services.clone_active_to_draft(db, biz.id, SOPVersionCreate(version_tag="v1.0.0"))

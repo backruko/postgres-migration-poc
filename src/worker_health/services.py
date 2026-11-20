@@ -1,4 +1,4 @@
-"""ワーカーの健康（並行稼働 P.4b）: まとめを API の形に、エラーの一覧"""
+"""ワーカーの健康（並行稼働）: まとめを API の形に、エラーの一覧"""
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 

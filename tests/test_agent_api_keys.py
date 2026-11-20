@@ -1,5 +1,5 @@
 """
-読み取り専用の API キー（system_agent。K.1、2026-11-12）: キーは職員の機械用のロールに許された呼び出しでだけ通る。
+読み取り専用の API キー（system_agent）: キーは職員の機械用のロールに許された呼び出しでだけ通る。
 system_agent は機械用のアカウントだけ（signal_sender のほかのロール・パスワードは持てない）。
 """
 import uuid
@@ -98,7 +98,7 @@ def test_revoked_and_forged_keys_are_refused(db):
 
 def test_the_route_table_is_read_only_for_system_agent():
     assert API_KEY_ROUTES_BY_ROLE[RoleCode.SYSTEM_AGENT] == {
-        ("GET", "/ops/attention"), ("GET", "/ops/schedule-feed"), ("GET", "/ops/daily"), ("GET", "/staff/me"),  # schedule-feed: 並行稼働 P.1
+        ("GET", "/ops/attention"), ("GET", "/ops/schedule-feed"), ("GET", "/ops/daily"), ("GET", "/staff/me"),  # schedule-feed: 並行稼働の時刻表
     }
     assert all(method == "GET" for method, _ in API_KEY_ROUTES_BY_ROLE[RoleCode.SYSTEM_AGENT])
     assert set(API_KEY_ROUTES_BY_ROLE) == MACHINE_ROLES

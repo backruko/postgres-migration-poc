@@ -205,7 +205,7 @@ def test_system_move_follows_or_flags_in_progress(db, biz_id):
     assert (rec.detail or {})["plan_reasons"] == ["template_revised"]
     # 保留中は追従して保留のまま
     assert held.status == OrderStatus.ON_HOLD and held.scheduled_start.astimezone(timezone(timedelta(hours=9))).hour == 14
-    # 作業中: テンプレートの変更では予定ごと動かさない（矛盾にもしない。2026-11-10 の決定）。
+    # 作業中: テンプレートの変更では予定ごと動かさない（矛盾にもしない）。
     # 休日の追加など別の理由で枠が動いたときの矛盾は tests/test_template_preview.py、枠が消えたときは次のテスト
     assert working.status == OrderStatus.IN_PROGRESS and working.scheduled_start == working_start
     assert not working.conflict and working.current_instance_id == inst[5].id
@@ -303,5 +303,5 @@ def test_plan_manual_endpoints_require_an_acting_staff():
                  "/plans/instances/{instance_id}/revert", "/plans/instances/{instance_id}/restore",
                  "/plans/templates/{template_id}/instances"):
         assert needs_login(paths[path]["post"]), path
-    # 参照もログインが必要（LG.2）
+    # 参照もログインが必要
     assert needs_login(paths["/plans/clients/{client_code}/calendar"]["get"])

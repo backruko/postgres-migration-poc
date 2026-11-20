@@ -16,7 +16,7 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, ""
  */
 export const http = createClient<paths>({ baseUrl: API_BASE });
 
-// ログインのセッションは Cookie（同じオリジン）で送られる。401（未ログイン・期限切れ）ならログイン画面へ（LG.3）。
+// ログインのセッションは Cookie（同じオリジン）で送られる。401（未ログイン・期限切れ）ならログイン画面へ。
 // ログインの失敗（POST /auth/login の 401）は画面が自分で表示するので除く
 http.use({
   onResponse({ request, response }) {

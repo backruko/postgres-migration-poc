@@ -1,8 +1,8 @@
 # tests/test_links_batched.py
 """
-links.refresh_orders（まとめて直す）の結果は、1 件ずつ refresh_order したのと同じ（2026-11-11、オーダーの作成をまとめた件）。
+links.refresh_orders（まとめて直す）の結果は、1 件ずつ refresh_order したのと同じ（オーダーの作成をまとめて速くしたので、結果が変わらないことを確かめる）。
 同じ場面を 2 回、別の顧客のデータで作る: 1 回はそのまま（まとめて）、1 回は refresh_orders を 1 件ずつのやり方
-（_reference_refresh_order: R.6 の前の links.refresh_order の写し。今の refresh_order は refresh_orders に 1 件を
+（_reference_refresh_order: まとめる前の links.refresh_order の写し。今の refresh_order は refresh_orders に 1 件を
 渡すだけなので、独立したやり方と比べるために残す）の繰り返しに差し替えて。つながりの行（取り外したものも理由ごと）を、id によらない形にして比べる。
 - 同じ日付: 下流のルールの変更でできた下流 / 上流のルールの変更でできた上流（待ち先なしの行が埋まる）/ 上流が 2 つ
 - 直前の上流（latest_before）: 上流側・下流側
@@ -124,7 +124,7 @@ class World:
 
 def _reference_refresh_order(db, order: OpeOrder, only_time_based: bool = False) -> None:
     """
-    1 件ずつ直す、比べるための元のやり方（R.6 の前の links.refresh_order をそのまま写したもの。2026-11-17）。
+    1 件ずつ直す、比べるための元のやり方（まとめる前の links.refresh_order をそのまま写したもの）。
     links.refresh_order は今は refresh_orders に 1 件を渡すだけなので、まとめて直す結果をこの独立した 1 件ずつの
     やり方と比べ続ける（links の中の関数と問い合わせはそのまま使う）。
     """
@@ -224,7 +224,7 @@ def latest_before_downstream_moved_earlier(w: World) -> None:
     w.define(LATEST, lookback_days=2)
     w.template(w.up, "U", DAILY)
     down = w.template(w.down, "D", DAILY, at=time(10, 0))
-    w.retime(down, time(8, 0))  # 下流が上流より前に → 直前の上流が前の日に変わる（S.3: 動いたオーダーをまとめて直す）
+    w.retime(down, time(8, 0))  # 下流が上流より前に → 直前の上流が前の日に変わる（動いたオーダーをまとめて直す）
 
 
 def latest_before_upstream_moved_later(w: World) -> None:

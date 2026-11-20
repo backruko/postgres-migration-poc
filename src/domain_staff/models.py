@@ -27,7 +27,7 @@ class RoleCode(str, enum.Enum):
     VIEWER = "viewer"              # 閲覧者: 参照のみ
     AUDITOR = "auditor"            # 監査担当: 参照のみ（履歴・監査記録を含む）
     SYSTEM_ADMIN = "system_admin"  # システム管理者: 職員アカウントの管理（業務の操作は含まない）
-    SIGNAL_SENDER = "signal_sender"  # 信号の送信: 顧客側の出来事の信号（POST /ope/signals）を送る仕組み用（Phase 7）
+    SIGNAL_SENDER = "signal_sender"  # 信号の送信: 顧客側の出来事の信号（POST /ope/signals）を送る仕組み用
     SYSTEM_AGENT = "system_agent"    # システム連携（読み取り）: API キーで日々のアラート・状況を読む仕組み用（mfa のアダプターなど）
 
 
@@ -69,7 +69,7 @@ class StaffUser(Base):
         Enum(StaffStatus, name="staff_status_enum"), nullable=False, default=StaffStatus.PENDING, comment="アカウントの状態"
     )
 
-    # --- ログイン（LG.1）。パスワードはハッシュだけを持つ（scrypt。src/domain_staff/credentials.py） ---
+    # --- ログイン。パスワードはハッシュだけを持つ（scrypt。src/domain_staff/credentials.py） ---
     password_hash: Mapped[str | None] = mapped_column(String(255), comment="パスワードのハッシュ（未設定ならログインできない）")
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"),
@@ -148,7 +148,7 @@ class StaffClient(Base):
 
 class StaffSession(Base):
     """
-    ログインのセッション（LG.1）。ブラウザの Cookie には推測できない値（トークン）を入れ、ここにはその SHA-256 だけを持つ。
+    ログインのセッション。ブラウザの Cookie には推測できない値（トークン）を入れ、ここにはその SHA-256 だけを持つ。
     最後の利用から 12 時間で切れ、最長でも作成から 7 日（expires_at）。ログアウト・利用停止・パスワード変更で revoked_at を付ける。
     """
     __tablename__ = "staff_session"
@@ -164,7 +164,7 @@ class StaffSession(Base):
 
 class StaffApiKey(Base):
     """
-    機械（信号を送るスクリプトなど）用の API キー（LG.1）。信号の送信（signal_sender）の職員にだけ発行する。
+    機械（信号を送るスクリプトなど）用の API キー。信号の送信（signal_sender）の職員にだけ発行する。
     キーは発行のときに一度だけ見せ、ここには SHA-256 と、見分けるための先頭の数文字だけを持つ。取り消すと使えない。
     """
     __tablename__ = "staff_api_key"

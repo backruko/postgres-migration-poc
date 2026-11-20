@@ -48,7 +48,7 @@ class OrderEventType(str, enum.Enum):
     EARLY_START_APPROVED = "early_start_approved"  # 予定日より前の開始をリリース担当が承認
     CONFLICT_RAISED = "conflict_raised"            # plan の変更と矛盾（作業中に日時が動いた・発生枠が消えた等）
     CONFLICT_RESOLVED = "conflict_resolved"        # 矛盾の解決（新しい日時を採用・そのまま・取消）
-    DEPENDENCY_OVERRIDE_APPROVED = "dependency_override_approved"  # 満たされていない依存関係のまま開始することを承認（Phase 6）
+    DEPENDENCY_OVERRIDE_APPROVED = "dependency_override_approved"  # 満たされていない依存関係のまま開始することを承認
 
 
 class StepState(str, enum.Enum):
@@ -127,8 +127,8 @@ class OpeOrder(Base):
     conflict: Mapped[bool] = mapped_column(default=False, server_default=text("false"), comment="plan の変更と矛盾しているか")
     conflict_reason: Mapped[str | None] = mapped_column(Text, comment="矛盾の内容（conflict のときのみ）")
 
-    # --- 締切（N.2、2026-11-05 の決定）: SLA の正。作成時にテンプレートの決め方を写し、締切を保存する ---
-    # テンプレートの後の変更では変わらない（リリース前のオーダーだけ写し直す: N.3）。
+    # --- 締切: SLA の正。作成時にテンプレートの決め方を写し、締切を保存する ---
+    # テンプレートの後の変更では変わらない（リリース前のオーダーだけ写し直す:）。
     # 予定が動いたら、このオーダー自身の写した決め方で締切を計算し直す（domain_ope/deadlines.py）
     deadline_mode: Mapped[DeadlineMode] = mapped_column(
         Enum(DeadlineMode, name="plan_deadline_mode_enum"), nullable=False, comment="締切の決め方（テンプレートの写し）",
@@ -364,7 +364,7 @@ event.listen(
 
 
 # ==========================================
-# OpeDependency（オーダー同士の依存関係。Phase 6）
+# OpeDependency（オーダー同士の依存関係）
 # biz_dependency（業務間の定義）から、下流のオーダーごとに作る「この上流のオーダーを待つ」というつながり。
 # 上流のオーダーがまだ無い（見つからない）ときは upstream_order_id が NULL の行（待ち先なし = 条件を満たさない）を置き、
 # 上流のオーダーができたら埋める（6.3）。定義が削除されたら行は残して removed_at を付ける（記録として残す）。
@@ -422,7 +422,7 @@ class OpeDependency(Base):
 
 
 # ==========================================
-# OpeSignal（顧客側の出来事の信号。Phase 7）
+# OpeSignal（顧客側の出来事の信号）
 # POST /ope/signals で受け取った信号をすべて残す（照合できなかったもの・重複も捨てない）。
 # 照合の結果は受け取ったときに決まり、変えない。人が「対応済み」にする handled_* だけを一度だけ書ける（DB トリガー）。
 # ==========================================

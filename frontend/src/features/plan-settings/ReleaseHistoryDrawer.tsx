@@ -17,8 +17,8 @@ interface Props {
 const when = (iso: string) => inZone(iso, TIMEZONE).format("YYYY/M/D HH:mm");
 
 /**
- * 業務のリリース設定の変更履歴（P.5）。新しい順。リリース担当の変更も、業務管理者の業務の設定の保存も載る。
- * 2026-11-11 より前の変更は記録が無い。
+ * 業務のリリース設定の変更履歴。新しい順。リリース担当の変更も、業務管理者の業務の設定の保存も載る。
+ * 履歴を取り始める前の変更は記録が無い。
  */
 export function ReleaseHistoryDrawer({ open, biz, reloadKey, onClose }: Props) {
   const changes = useApiQuery((signal) => bizApi.releaseChanges(biz.id, signal), [biz.id, reloadKey], { enabled: open });

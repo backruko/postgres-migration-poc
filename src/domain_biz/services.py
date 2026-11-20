@@ -68,7 +68,7 @@ def get_bizes(
 
 def _check_client_event_settings(db: Session, biz: BizMaster, biz_in: BizMasterUpdate) -> None:
     """
-    顧客側の出来事の設定（Phase 7）を、変更後の値で確かめる（DB の CHECK・一意制約の前に、分かりやすい理由で返す）。
+    顧客側の出来事の設定を、変更後の値で確かめる（DB の CHECK・一意制約の前に、分かりやすい理由で返す）。
     信号での完了は LIGHTWEIGHT のみ・信号の種類が必須・信号の種類は同じ顧客の業務どうしで一意。
     """
     data = biz_in.model_dump(exclude_unset=True)
@@ -103,7 +103,7 @@ def update_biz(db: Session, biz_id: int, biz_in: BizMasterUpdate, actor_id: int 
 
 
 # ==========================================
-# リリース設定（細かな権限、P.3、2026-11-11）: リリース担当も変えられる。どの API で変えても履歴を残す
+# リリース設定（細かな権限）: リリース担当も変えられる。どの API で変えても履歴を残す
 # ==========================================
 def _get_biz_locked(db: Session, biz_id: int) -> BizMaster:
     """業務を行ロック付きで（変更前の値を確かに読むため。同時の変更は順に）"""
@@ -173,7 +173,7 @@ def staff_names(db: Session, ids: set[int | None]) -> dict[int | None, str]:
 
 def delete_biz(db: Session, biz_id: int) -> BizMaster:
     """
-    業務を論理削除します。使われている間（依存関係の定義・テンプレート・未完了のオーダーが残る間）は断ります（M1.1）。
+    業務を論理削除します。使われている間（依存関係の定義・テンプレート・未完了のオーダーが残る間）は断ります。
     テンプレートを先に削除すると、未リリース・リリース済のオーダーは取消になります。
     """
     biz = biz_master_repo.get(db, id=biz_id)
@@ -301,7 +301,7 @@ def get_current_active_version(db: Session, biz_id: int) -> SOPVersion:
 
 
 # ==========================================
-# 1. 新しい版: 最新の承認済みの版（予定があればそれ、なければ現行）を写した草稿。承認済みが無ければ空（M2.2）
+# 1. 新しい版: 最新の承認済みの版（予定があればそれ、なければ現行）を写した草稿。承認済みが無ければ空
 # ==========================================
 def _authored(actor_id: int | None) -> dict:
     """新しい草稿の作った人・最後に直した人と日時"""
@@ -362,7 +362,7 @@ def clone_active_to_draft(db: Session, biz_id: int, version_in: SOPVersionCreate
 
 
 # ==========================================
-# 2. 草稿の編集（タグ・ステップの追加 / 変更 / 削除 / 並べ替え・草稿の削除）。承認済みの版は変えられない（M2.2）
+# 2. 草稿の編集（タグ・ステップの追加 / 変更 / 削除 / 並べ替え・草稿の削除）。承認済みの版は変えられない
 # ==========================================
 def list_versions(db: Session, biz_id: int, include_drafts: bool = False) -> list[SOPVersion]:
     """業務の版、新しい順。include_drafts=False なら承認済みだけ（オーダーに指定できる選択肢）"""
@@ -492,7 +492,7 @@ def reorder_steps(db: Session, version_id: int, order_in: SOPStepOrderIn, actor_
 
 
 # ==========================================
-# 2b. 承認の依頼（P.2、2026-11-11）: リリース担当が書いた草稿を、業務管理者に判断してもらう
+# 2b. 承認の依頼: リリース担当が書いた草稿を、業務管理者に判断してもらう
 # ==========================================
 def submit_draft(db: Session, version_id: int, actor_id: int) -> SOPVersion:
     """
@@ -547,7 +547,7 @@ def reject_draft(db: Session, version_id: int, actor_id: int, reason: str) -> SO
 
 
 # ==========================================
-# 3. 承認: 草稿を「予定」にする（発効は指定日の 0:00 日本時間。M2.1）
+# 3. 承認: 草稿を「予定」にする（発効は指定日の 0:00 日本時間）
 # ==========================================
 def _versions_of(db: Session, biz_id: int) -> list[SOPVersion]:
     return list(db.scalars(
@@ -610,7 +610,7 @@ def approve_and_schedule_version(
     return draft
 
 # ==========================================
-# 4. 承認の取消: 「予定」の版を草稿に戻し、今有効な版の終了日時を外す（M2.1）
+# 4. 承認の取消: 「予定」の版を草稿に戻し、今有効な版の終了日時を外す
 # ==========================================
 def cancel_future_version(db: Session, biz_id: int, future_version_id: int, actor_id: int | None = None) -> SOPVersion:
     """
@@ -643,7 +643,7 @@ def cancel_future_version(db: Session, biz_id: int, future_version_id: int, acto
     return version
 
 # ==========================================
-# SOP の版を返す形・記録・承認待ち（P.3、2026-11-11）
+# SOP の版を返す形・記録・承認待ち
 # ==========================================
 def describe_versions(db: Session, versions: list[SOPVersion]) -> list[SOPVersionResponse]:
     """版に職員の名前を付けて返す形に（名前はまとめて 1 回で読む）"""
@@ -705,7 +705,7 @@ def count_submitted_drafts(db: Session, scope: ClientScope = ALL_CLIENTS) -> int
 
 
 # ==========================================
-# 業務間の依存関係（Phase 6）
+# 業務間の依存関係
 # ==========================================
 def _dependency_response(db: Session, dep: BizDependency) -> BizDependencyResponse:
     # 論理削除された業務も表示できるよう、全局の論理削除フィルタを外して読む
@@ -750,7 +750,7 @@ def _creates_cycle(edges: list[tuple[int, int]], upstream: int, downstream: int)
 
 def create_dependency(db: Session, downstream_biz_id: int, dep_in: BizDependencyCreate) -> BizDependencyResponse:
     """
-    この業務（下流）が上流の業務を待つ定義を作ります。同じ顧客の業務どうしのみ（2026-11-04 の決定）。
+    この業務（下流）が上流の業務を待つ定義を作ります。同じ顧客の業務どうしのみ。
     自分自身・同じ組み合わせの二重登録・循環（A → B → A など）は保存しない。
     """
     downstream = get_biz(db, downstream_biz_id)

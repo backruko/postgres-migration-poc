@@ -293,7 +293,7 @@ def _reconcile(db: Session, template: PlanTemplate, lower: datetime, upper: date
     }
     # 上の境目（upper）をまたいで動いた枠: 今の予定がある枠は、新しい開始が upper 以降になっても、その枠の新しい予定を作る
     # （無効にして作らないと、範囲の最後の日の枠だけ「無くなった」になり、オーダーが取り消される。取り消されたオーダーは
-    # 直前の上流（L.2）として下流を止め続ける。例: 境目が 9:00（ふつうのホライズンは UTC の 0 時 = 日本時間 9:00）のとき
+    # 直前の上流として下流を止め続ける。例: 境目が 9:00（ふつうのホライズンは UTC の 0 時 = 日本時間 9:00）のとき
     # 8:30 → 9:30）。時刻の変更で枠が動くのは 1 日より短いので、upper から BOUNDARY_SHIFT だけ先を見る。
     # materialized_until は変えない（後で範囲を延ばすと、その予定は範囲の中にあり、同じキーなのでそのまま残る）
     slots_with_instance = {_slot(i.occurrence_date, i.source_sheet_event_id) for i in existing.values()}
@@ -529,7 +529,7 @@ def delete_holiday(db: Session, calendar_id: int, holiday_date: date) -> Calenda
 # ReferenceSheet Service
 # ==========================================
 def create_sheet(db: Session, sheet_in: ReferenceSheetCreate) -> ReferenceSheet:
-    require_active_client(db, sheet_in.client_code)  # 無い顧客は 404、無効な顧客は 400（M1.1）
+    require_active_client(db, sheet_in.client_code)  # 無い顧客は 404、無効な顧客は 400
 
     sheet = ReferenceSheet(**sheet_in.model_dump())
     db.add(sheet)
@@ -763,7 +763,7 @@ def update_marker(
 
 
 # ==========================================
-# シート・マーカーの編集（E.1、2026-11-11）: 名前・期間の変更、マーカーの名前の変更・削除
+# シート・マーカーの編集: 名前・期間の変更、マーカーの名前の変更・削除
 # ==========================================
 def _template_label(t: PlanTemplate) -> str:
     return f"{t.name} (#{t.id})"
@@ -897,7 +897,7 @@ def import_sheet(db: Session, import_in: ReferenceSheetImport, replace_events: b
     - 日付: 無いものは追加。replace_events=True の場合はファイルに無い日付を削除し、シートをファイルと完全一致させる
     - 日付が変わったマーカーを参照しているテンプレートは、未来分を自動で再照合する
     """
-    require_active_client(db, import_in.client_code)  # 無い顧客は 404、無効な顧客は 400（M1.1）
+    require_active_client(db, import_in.client_code)  # 無い顧客は 404、無効な顧客は 400
     sheet, created = _sheet_to_import_into(db, import_in, replace_events)
     markers, markers_created, markers_updated = _import_markers(sheet, import_in)
     wanted = _wanted_dates(import_in, markers)
@@ -1113,7 +1113,7 @@ def change_sheet_events(
     db: Session, sheet_id: int, marker: str, batch_in: ReferenceSheetEventsBatch,
 ) -> ReferenceSheetMarker:
     """
-    マーカーの日付をまとめて足す・消します（E.2、2026-11-11。年間の日付の画面の「保存」）。1 トランザクションで、
+    マーカーの日付をまとめて足す・消します（年間の日付の画面の「保存」）。1 トランザクションで、
     参照しているテンプレートの予定の作り直しは最後に 1 回だけ（1 件ずつの API だと、日付ごとに作り直す）。
     規則は 1 件ずつの追加（add_sheet_events）・削除（delete_sheet_event）と同じ: 期間の外・今日より前は不可、
     消す日付は取り込み・ルール由来なら「取消」の記録を残し、人が足した日付なら消える。
@@ -1373,7 +1373,7 @@ def _apply_template_create(db: Session, template_in: PlanTemplateCreate) -> Plan
 
     template = PlanTemplate(**template_in.model_dump(exclude={"dates", "ui_metadata", "start_prompt"}))
     template.ui_metadata = ui_metadata_to_dict(template_in.ui_metadata)
-    # 開始時刻に知らせる: 指定がなければ、顧客側の出来事（外からの合図を待つ）の業務はオフ、ほかはオン（並行稼働 P.1）
+    # 開始時刻に知らせる: 指定がなければ、顧客側の出来事（外からの合図を待つ）の業務はオフ、ほかはオン（並行稼働）
     template.start_prompt = (
         template_in.start_prompt if template_in.start_prompt is not None else biz.execution_type != ExecutionType.LIGHTWEIGHT
     )

@@ -31,7 +31,7 @@ from src.core.clock import utc_now
 
 
 class ExecutionType(str, enum.Enum):
-    """業務の実行のしかた（Phase 7）"""
+    """業務の実行のしかた"""
     SOP = "sop"                  # SOP バージョンのステップで作業する（既定）
     LIGHTWEIGHT = "lightweight"  # ステップなし（顧客側の出来事: データの受領など）。完了は人の受領操作か信号
 
@@ -135,7 +135,7 @@ class BizMaster(Base, SoftDeleteMixin):
         comment="自動リリースを予定日の何日前に行うか（0 = 予定日当日）"
     )
 
-    # --- 顧客側の出来事（Phase 7）。AUTOMATIC は LIGHTWEIGHT のみ・signal_type 必須（顧客ごとに一意） ---
+    # --- 顧客側の出来事。AUTOMATIC は LIGHTWEIGHT のみ・signal_type 必須（顧客ごとに一意） ---
     execution_type: Mapped[ExecutionType] = mapped_column(
         Enum(ExecutionType, name="biz_execution_type_enum"),
         nullable=False,
@@ -232,7 +232,7 @@ class BizMaster(Base, SoftDeleteMixin):
 # ==========================================
 class SOPStatus(str, enum.Enum):
     """
-    SOPバージョンの保存される状態（M2.1）。草稿か承認済みかだけを持つ。
+    SOPバージョンの保存される状態。草稿か承認済みかだけを持つ。
     承認済みの「予定 / 現行 / 過去」は effective_at / expired_at と現在日時から決まる（SopState・SOPVersion.state）。
     """
     DRAFT = "draft"          # 草稿：編集できる。オーダーには使われない（複数並行可）
@@ -290,7 +290,7 @@ class SOPVersion(Base):
         nullable=True,
         comment="有効終了日時（この日時を過ぎたら自動で無効化）"
     )
-    # 誰が作った・直した・承認を依頼した（P.1、2026-11-11。リリース担当も草稿を書く。これより前の版は NULL）
+    # 誰が作った・直した・承認を依頼した（リリース担当も草稿を書くため。記録を取り始める前の版は NULL）
     created_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("staff_user.id", ondelete="RESTRICT"), comment="版（草稿）を作った職員"
     )
@@ -329,7 +329,7 @@ class SOPVersion(Base):
         # 同じ業務の中でタグも重ならない（同じ名前の版が 2 つあると、どちらを指しているか分からない）
         Index("uq_biz_version_tag", "biz_master_id", "version_tag", unique=True),
 
-        # 草稿は日付を持たない。承認済みは発効日時を持ち、終了日時（次の版の発効日時）はその後（M2.1）
+        # 草稿は日付を持たない。承認済みは発効日時を持ち、終了日時（次の版の発効日時）はその後
         CheckConstraint(
             "(status = 'DRAFT') = (effective_at IS NULL)", name="ck_sop_version_effective_iff_approved"
         ),
@@ -419,7 +419,7 @@ class SOPStepTemplate(Base):
 
 
 # ==========================================
-# 業務間の依存関係の定義（Phase 6）
+# 業務間の依存関係の定義
 # 「下流の業務のオーダーは、上流の業務の対応するオーダーが終わってから」。オーダー同士の具体的なつながりは ope が作る。
 # ==========================================
 class DependencyMatchRule(str, enum.Enum):
@@ -465,7 +465,7 @@ class BizDependency(Base):
 
 
 # ==========================================
-# SOP の版の記録（P.1、2026-11-11）: リリース担当が草稿を書き、業務管理者が承認する流れの履歴
+# SOP の版の記録: リリース担当が草稿を書き、業務管理者が承認する流れの履歴
 # ==========================================
 class SOPVersionEventType(str, enum.Enum):
     CREATED = "created"      # 草稿を作った（新規 / 承認済みの版の写し: detail.cloned_from_version_id）
@@ -501,7 +501,7 @@ class SOPVersionEvent(Base):
 
 
 # ==========================================
-# 業務のリリース設定の変更履歴（P.1、2026-11-11）: リリース担当も変えられるため、誰がいつ何を変えたかを残す
+# 業務のリリース設定の変更履歴: リリース担当も変えられるため、誰がいつ何を変えたかを残す
 # ==========================================
 RELEASE_FIELDS = ("release_mode", "release_time", "release_days_before")
 

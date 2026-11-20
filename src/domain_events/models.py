@@ -1,5 +1,5 @@
 """
-業務の出来事の記録（アウトボックス。通知の仕組み N.1、2026-11-12）。
+業務の出来事の記録（アウトボックス。通知の仕組み）。
 
 どのドメインも、起きたこと（例: オーダーが遅れた）を、その変更と同じトランザクションで domain_event に 1 行書きます。
 書いた後に送らない・相手を呼ばない: 読むのは通知のドメイン（src/domain_notification）で、コミットの後にワーカーが読みます。
@@ -7,7 +7,7 @@
 
 - 同じ事実は 2 回記録しない: dedupe_key が一意（期限の監視なら「オーダー 123 の遅れ、締切 …」。締切が動けば別のキー）
 - 書いた後に変えられるのは処理の列（processed_at・attempts・last_error）だけ。削除もできない（データベースのトリガー）
-- 処理済みの印は行そのものに付ける（読み手は今は通知だけ。2026-11-12 の決定）。未処理の行は部分インデックスで引く
+- 処理済みの印は行そのものに付ける（読み手は今は通知だけ）。未処理の行は部分インデックスで引く
 """
 from datetime import datetime
 from typing import Any
@@ -25,7 +25,7 @@ class DomainEvent(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     # 種類の名前は formats.EventType（例: OrderLate）、キーは deadline_watch.dedupe_key（例: order:123:OrderLate:<締切>）。
-    # 下の列のコメント（DB に入っている）の例は N.1 の時点の仮の書き方です
+    # 下の列のコメント（DB に入っている）の例は、作った時点の仮の書き方です
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, comment="出来事の種類（例: order.late）")
     schema_version: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default=text("1"), comment="payload の形の版（読み手が形を見分ける）"

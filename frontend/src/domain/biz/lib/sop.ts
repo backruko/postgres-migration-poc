@@ -8,7 +8,7 @@ import type { SopState, SopStep, SopStepCreate, SopStepUpdate, SopVersion, SopVe
 
 const isActive = (s: Staff | null | undefined): s is Staff => s?.status === "active";
 
-/** 草稿を作る・直す・削除する・承認を依頼するか（リリース担当・業務管理者。P.2） */
+/** 草稿を作る・直す・削除する・承認を依頼するか（リリース担当・業務管理者） */
 export const canDraftSop = (s: Staff | null | undefined) => isActive(s) && (s.roles.includes("releaser") || s.roles.includes("admin"));
 
 /** 承認する・差し戻す・予定の承認を取り消すか（業務管理者） */
@@ -18,7 +18,7 @@ export const canDecideSop = (s: Staff | null | undefined) => isActive(s) && s.ro
 export const isSubmitted = (v: Pick<SopVersion, "state" | "submitted_at">) => v.state === "draft" && !!v.submitted_at;
 
 /**
- * 承認を依頼するボタンを出すか: 業務管理者でないリリース担当だけ（業務管理者は自分で承認する。2026-11-11 の決定）。
+ * 承認を依頼するボタンを出すか: 業務管理者でないリリース担当だけ（業務管理者は自分で承認する）。
  * 依頼していない草稿だけ
  */
 export const canSubmitSop = (v: Pick<SopVersion, "state" | "submitted_at">, s: Staff | null | undefined) =>
@@ -115,7 +115,7 @@ export function conditionText(condition: Record<string, unknown>): string {
   }
 }
 
-// ---- 草稿のステップの編集（M2.5） ----
+// ---- 草稿のステップの編集 ----
 export type ConditionType = "always" | "month_in" | "first_in_week";
 
 export const CONDITION_LABEL: Record<ConditionType, string> = {
@@ -190,7 +190,7 @@ export function movedStepIds(steps: readonly Pick<SopStep, "id">[], index: numbe
 /** 番号に抜けがあるか（削除の後など。並べ替えで 1 から振り直せる） */
 export const hasNumberGaps = (steps: readonly Pick<SopStep, "step_num">[]) => steps.some((s, i) => s.step_num !== i + 1);
 
-// ---- 承認と承認の取消（M2.6） ----
+// ---- 承認と承認の取消 ----
 /** 承認できない理由（なければ null）。バックエンドと同じ: ステップが 1 つ以上、予定の版が他に無いこと */
 export function approveBlockedReason(draft: SopVersion, versions: readonly SopVersion[], stepCount: number): string | null {
   if (draft.state !== "draft") return "草稿だけ承認できます";

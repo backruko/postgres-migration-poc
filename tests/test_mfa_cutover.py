@@ -1,12 +1,12 @@
 # tests/test_mfa_cutover.py
 """
-mfa の切り替え（アダプターの M.1 組み合わせ・M.2 読み直し。GO-LIVE.md の J.）のテスト。DB は使わない。
-- M.1: Excel の txt を元に、新しいシステムが出す知らせ（同じ作業・3 分以内。照合と同じ決まり・別名の表）を置き換え、
+mfa の切り替え（アダプターの組み合わせと読み直し。GO-LIVE.md の J.）のテスト。DB は使わない。
+- 組み合わせ: Excel の txt を元に、新しいシステムが出す知らせ（同じ作業・3 分以内。照合と同じ決まり・別名の表）を置き換え、
   その音（Excel の Mplay）を新しい時刻へ移す。Excel だけの知らせは音つきのまま、Shell・知らせの無い音・ほかの命令はそのまま。
   いまより前の行は書かない。日時を読めない行は先頭にそのまま
 - run: [output] の新しいシステムだけのファイルと照合の写しは、切り替えの前と同じ。本物のファイルの写しは live_… の名前で、
   照合の写しと取り違えない。Excel の txt が無ければ何も書かない（終了コード 6）。dry-run は書かず、mfa も動かさない
-- M.2: 前後 2 分に行の無い分まで待って MFA.exe /R。失敗・静かな分が無いと終了コード 7。終わらない MFA.exe は止めない
+- 読み直し: 前後 2 分に行の無い分まで待って MFA.exe /R。失敗・静かな分が無いと終了コード 7。終わらない MFA.exe は止めない
 """
 from datetime import datetime
 from pathlib import Path
@@ -44,7 +44,7 @@ def lines_of(text: str) -> list[str]:
 
 
 # ==========================================
-# M.1 組み合わせ
+# 組み合わせ
 # ==========================================
 def test_covered_prompts_are_replaced_with_the_excel_sound_and_everything_else_passes(tmp_path):
     text, counts = adapter.combine(EXCEL, NEW, now=NOW, tolerance=3, aliases={})
@@ -138,7 +138,7 @@ def test_dry_run_prints_the_combined_file_and_starts_nothing(tmp_path, api, caps
 
 
 # ==========================================
-# M.2 読み直し
+# 読み直し
 # ==========================================
 def at(hh: int, mm: int) -> datetime:
     return datetime(2026, 9, 16, hh, mm, tzinfo=JST)

@@ -8,7 +8,7 @@ runner:
   file: .runner          # 登録情報（/srv/gitea/runner/.runner。消すと登録し直し）
   capacity: 2            # 同時に動くジョブの数（backend と frontend を並べて動かす）
   timeout: 1h
-  # ジョブのコンテナに渡す環境変数。ふつうは無し（2026-11-17: サーバーは直接インターネットに出られ、pip / npm / pyright
+  # ジョブのコンテナに渡す環境変数。ふつうは無し（サーバーは直接インターネットに出られ、pip / npm / pyright
   # の取得もそのまま届く）。プロキシが要るときだけ、`envs: {}` の行を消し、下のブロックの # を外してアドレスを直す。
   # Gitea（同じサーバー）とジョブの中のデータベース（testdb / migrationdb）はプロキシを通さない
   envs: {}

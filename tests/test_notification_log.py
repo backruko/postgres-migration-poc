@@ -1,6 +1,6 @@
 # tests/test_notification_log.py
 """
-通知の記録（N.5b）のテスト。
+通知の記録のテスト。
 - 1 回ごとの試み: 送ったアドレス・結果・返事。アドレスを直した後の再試行は新しいアドレス（記録で確かめられる）
 - 絞り込み: 種類（アラーム / テスト送信）・状態・出来事（出来事 → 通知のつながり）・オーダー・ルール・顧客・期間・件数
 - 顧客の範囲: ほかの顧客のもの・顧客のないテスト送信は出ない。1 件の詳細は本文も、範囲の外は 404
@@ -140,7 +140,7 @@ def test_suppressed_alarms_show_their_reason(db):
 
 
 def test_refusals_have_exact_messages_and_the_period_is_checked_before_the_kind(db):
-    # R.6 / C901 で list_log を分ける前に固定する: 断るときの文面と、確かめる順番（期間 → 種類）
+    # C901（複雑さの上限）で list_log を分ける前に固定する: 断るときの文面と、確かめる順番（期間 → 種類）
     with pytest.raises(BadRequestError, match=r"^'from' must be earlier than 'to'\.$"):
         list_log(db, created_from=NOON + MIN, created_to=NOON, kind="everything")
     with pytest.raises(BadRequestError, match=r"^kind must be one of alarm, test\.$"):

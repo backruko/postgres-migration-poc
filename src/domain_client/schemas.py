@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# 顧客コードは英数字4文字（業務コード = 顧客コード + 連番4桁 のため）。作成後は変更できない（M1.1）
+# 顧客コードは英数字4文字（業務コード = 顧客コード + 連番4桁 のため）。作成後は変更できない
 CLIENT_CODE_PATTERN = r"^[A-Za-z0-9]{4}$"
 
 # 作成と応答に共通の項目

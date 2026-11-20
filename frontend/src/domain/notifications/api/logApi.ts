@@ -1,7 +1,7 @@
 import { http, unwrap } from "../../../shared/api/http";
 import type { LogEntryDetail, LogFilter, NotificationLog } from "../types";
 
-/** 通知の記録（N.5b の API）。有効な職員なら誰でも（担当顧客が限られた職員には、その顧客のものだけ） */
+/** 通知の記録。有効な職員なら誰でも（担当顧客が限られた職員には、その顧客のものだけ） */
 export const notificationLogApi = {
   /** 新しい順。event_id で絞ると、その出来事から作った通知（出来事 → 通知のつながり） */
   list(filter: LogFilter, signal?: AbortSignal): Promise<NotificationLog> {

@@ -13,7 +13,7 @@ interface Props {
 }
 
 /**
- * 締切が近い・遅れのオーダー（日付によらず。N.4）。日次ダッシュボードの「締切・遅れ」タブ。
+ * 締切が近い・遅れのオーダー（日付によらず）。日次ダッシュボードの「締切・遅れ」タブ。
  * 遅れ = 締切を過ぎて完了・取消になっていない、まもなく = テンプレートで設定した「何分前」から締切まで。
  */
 export function AttentionPanel({ data, today, timezone, onOpenOrder }: Props) {

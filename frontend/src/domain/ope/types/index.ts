@@ -14,7 +14,7 @@ export type OrderDetail = Schemas["OrderDetailResponse"];
 export type OrderEvent = Schemas["OrderEventResponse"];
 export type OrderSopVersion = Schemas["OrderSopVersion"];
 
-// ---- SOP の版の影響（承認の前に見せる。M2.3 / M2.6） ----
+// ---- SOP の版の影響（承認の前に見せる） ----
 export type SopImpact = Schemas["SopImpactResponse"];
 export type SopImpactGroup = Schemas["SopImpactGroup"];
 export type SopImpactOrder = Schemas["SopImpactOrder"];

@@ -30,7 +30,7 @@ from src.domain_staff.models import RoleCode, StaffUser
 
 router = APIRouter(prefix="/biz", tags=["biz"])
 
-# SOP の草稿を書く人（P.2、2026-11-11）: リリース担当も草稿を作る・直す・承認を依頼する。承認・差し戻し・取消は業務管理者
+# SOP の草稿を書く人: リリース担当も草稿を作る・直す・承認を依頼する。承認・差し戻し・取消は業務管理者
 SOP_DRAFTERS = [RoleCode.RELEASER, RoleCode.ADMIN]
 
 # ==========================================
@@ -76,7 +76,7 @@ def update_release_endpoint(
     biz_id: int, release_in: BizReleaseUpdate, db: Session = Depends(get_db), current_staff: StaffUser = Depends(get_current_staff),
 ):
     """
-    業務のリリース設定（release_mode / release_time / release_days_before）だけを変えます（リリース担当・業務管理者。P.3）。
+    業務のリリース設定（release_mode / release_time / release_days_before）だけを変えます（リリース担当・業務管理者）。
     送った項目だけ変わり、すぐに効きます（まだリリースされていないオーダーの自動リリースの日時も）。
     ほかの項目は受け付けません（422）。値が変わったときは変更履歴が残ります。
     """
@@ -269,7 +269,7 @@ def delete_step_template_endpoint(step_id: int, db: Session = Depends(get_db), c
 
 
 # ==========================================
-# SOP の草稿の承認の依頼（P.2、2026-11-11）
+# SOP の草稿の承認の依頼
 # ==========================================
 @router.post("/versions/{version_id}/submit", response_model=SOPVersionResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS}, dependencies=[SOP_VERSION_IN_SCOPE])
 @require_roles(SOP_DRAFTERS)
@@ -303,7 +303,7 @@ def reject_draft_endpoint(
 
 
 # ==========================================
-# 業務間の依存関係（Phase 6）。定義の変更は業務管理者のみ（参照は他の biz エンドポイントと同じく制限なし）
+# 業務間の依存関係。定義の変更は業務管理者のみ（参照は他の biz エンドポイントと同じく制限なし）
 # ==========================================
 
 @router.get("/clients/{client_code}/dependencies", response_model=list[BizDependencyResponse], responses={**COMMON_ERRORS}, dependencies=[CLIENT_CODE_IN_SCOPE])

@@ -304,7 +304,7 @@ class PlanTemplate(Base, SoftDeleteMixin):
         comment="非営業日に当たった場合の扱い",
     )
 
-    # --- 締切とその前の知らせ（N.1、2026-11-05）。生成には影響しない（変えても改訂・再生成しない） ---
+    # --- 締切とその前の知らせ。生成には影響しない（変えても改訂・再生成しない） ---
     # 締切の決め方: END = 予定の終了（従来どおり）/ OFFSET = 予定開始の何分後（所要時間を超えてよい。社内の工程）/
     # FIXED_TIME = 予定日の何日後の何時（外部との受け渡しの締切。予定が同じ日の中で動いても締切は動かない）
     deadline_mode: Mapped[DeadlineMode] = mapped_column(
@@ -320,7 +320,7 @@ class PlanTemplate(Base, SoftDeleteMixin):
 
     # --- 表示用メタデータ（例: {"bg_color": "#FF0000", "icon": "money-bag"}）。生成ルールには影響しない ---
     ui_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, comment="カレンダー表示用スタイル（インスタンス側で上書き可）")
-    # 開始時刻に知らせる（並行稼働 P.1、2026-11-16）: 予定の開始の時刻に、人に「始めて」と知らせる作業か。外からの合図（ファイルの到着
+    # 開始時刻に知らせる（並行稼働）: 予定の開始の時刻に、人に「始めて」と知らせる作業か。外からの合図（ファイルの到着
     # など）を待つ作業はオフにする。GET /ops/schedule-feed はオンの作業だけを出す。生成には影響しない
     start_prompt: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true"), comment="開始時刻に知らせる（外からの合図を待つ作業はオフ）",
@@ -348,7 +348,7 @@ class PlanTemplate(Base, SoftDeleteMixin):
         ForeignKeyConstraint(
             ["reference_sheet_id", "reference_event_marker"],
             ["reference_sheet_marker.sheet_id", "reference_sheet_marker.marker"],
-            # マーカーの名前の変更はテンプレートへ伝わる（E.1、2026-11-11）。削除は参照があれば断る
+            # マーカーの名前の変更はテンプレートへ伝わる。削除は参照があれば断る
             ondelete="RESTRICT", onupdate="CASCADE", name="fk_plan_template_sheet_marker",
         ),
         CheckConstraint(

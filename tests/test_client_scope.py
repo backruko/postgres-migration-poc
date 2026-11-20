@@ -1,5 +1,5 @@
 """
-顧客の範囲（担当顧客が限られた職員。C.1）: 範囲の設定、全顧客に共通の操作の拒否、ClientScope、すべてのルートの目印。
+顧客の範囲（担当顧客が限られた職員）: 範囲の設定、全顧客に共通の操作の拒否、ClientScope、すべてのルートの目印。
 """
 import inspect
 import uuid
@@ -198,7 +198,7 @@ def test_client_scope_filters_in_sql_and_requires_with_the_same_404(db):
 
 
 # ==========================================
-# C.2: biz / clients / ops の一覧と1件の確認
+# biz / clients / ops の一覧と1件の確認
 # ==========================================
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -338,7 +338,7 @@ def test_single_item_guards_answer_404_outside_the_scope(db, two_clients):
 
 
 # ==========================================
-# C.3: plans / ope
+# plans / ope
 # ==========================================
 def test_template_changes_list_and_count_follow_the_scope_even_for_deleted_businesses(db, two_clients):
     from sqlalchemy import update
@@ -430,7 +430,7 @@ def test_plan_and_ope_guards_answer_404_outside_the_scope(db, two_clients):
 # ==========================================
 # すべてのルートに目印（ScopeKind）があること
 # ==========================================
-# まだ確かめないルーターの prefix（C.3 で空になった。新しいルーターも初めから目印を付ける）
+# まだ確かめないルーターの prefix（今は空。新しいルーターも初めから目印を付ける）
 NOT_YET_DECLARED: tuple[str, ...] = ()
 
 

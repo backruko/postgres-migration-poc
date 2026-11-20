@@ -16,9 +16,9 @@ import { DraftViewModal } from "./DraftViewModal";
 const when = (iso: string) => inZone(iso, TIMEZONE).format("YYYY/M/D(dd) HH:mm");
 
 /**
- * 承認待ち（Level 2、D.6b）: 全業務の、承認待ちのテンプレートの下書き。古い順（承認の順番待ち）。顧客で絞り込める（?client=）。
+ * 承認待ち: 全業務の、承認待ちのテンプレートの下書き。古い順（承認の順番待ち）。顧客で絞り込める（?client=）。
  * 行の「見る」で下書きの窓（今のデータでの確認・承認・差し戻し）を開く。見るのはだれでも、承認・差し戻しは業務管理者。
- * その下に、承認を依頼された SOP の草稿（P.4）。行から SOP の画面のその版へ移り、ステップを見て承認・差し戻しする。
+ * その下に、承認を依頼された SOP の草稿。行から SOP の画面のその版へ移り、ステップを見て承認・差し戻しする。
  */
 export function ApprovalsPage() {
   const { message } = App.useApp();

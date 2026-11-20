@@ -13,7 +13,7 @@ from src.domain_client.schemas import ClientCreate, ClientResponse, ClientUpdate
 from src.domain_client.services import activate_client, create_client, deactivate_client, get_clients, update_client
 
 # 参照は制限なし（担当顧客が限られた職員には、その顧客だけ）。登録・編集・無効 / 有効は業務管理者（admin）のみで、
-# 顧客マスタは全顧客に共通のため、担当顧客が限られた職員は使えない（all_clients）。顧客は削除しない（M1.1）
+# 顧客マスタは全顧客に共通のため、担当顧客が限られた職員は使えない（all_clients）。顧客は削除しない
 router = APIRouter(prefix="/clients", tags=["Clients"])
 
 

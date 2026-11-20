@@ -24,7 +24,7 @@ interface Props {
   biz: BizMaster;
   /** すべての設定を編集できるか（業務管理者のみ。できない場合も設定は表示する） */
   canEdit: boolean;
-  /** リリース設定だけを編集できるか（リリース担当。P.5）。canEdit なら使わない */
+  /** リリース設定だけを編集できるか（リリース担当）。canEdit なら使わない */
   canEditRelease: boolean;
   onSaved: () => void;
 }
@@ -32,7 +32,7 @@ interface Props {
 /**
  * 業務の設定（リリースの方法・顧客側の出来事）。テンプレート設定画面の上に表示し、編集はモーダルで行う。
  * 信号での完了は「顧客側の出来事」（LIGHTWEIGHT）の業務だけ・信号の種類が必須（顧客ごとに一意。バックエンドが判定する）。
- * リリース担当はリリース設定（方法・時刻・何日前）だけを変えられる（P.5。専用の API。ほかの項目は出さない）。
+ * リリース担当はリリース設定（方法・時刻・何日前）だけを変えられる（専用の API。ほかの項目は出さない）。
  * リリース設定の変更は、どちらの保存でも履歴に残り、「履歴」で見られる（誰でも）。
  */
 export function BizSettingsPanel({ biz, canEdit, canEditRelease, onSaved }: Props) {

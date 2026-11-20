@@ -24,10 +24,10 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
 
     # 通知の文面に入れる画面へのリンクの先頭（APP_BASE_URL。例: http://10.0.0.5）。空なら通知にリンクを付けない
-    # （サーバーのアドレスが決まるまで。通知の仕組み N.3、2026-11-12）
+    # （サーバーのアドレスが決まるまで。通知の仕組み）
     app_base_url: str | None = None
 
-    # 通知のメール（SMTP。通知の仕組み N.4、2026-11-12）。SMTP_HOST が空なら、開発・テストでは偽物のチャネル（送らない）、
+    # 通知のメール（SMTP。通知の仕組み）。SMTP_HOST が空なら、開発・テストでは偽物のチャネル（送らない）、
     # 本番（ENVIRONMENT=production）ではメールのチャネルなし（配信は再試行の後に失敗として見える。黙って捨てない）
     smtp_host: str | None = None
     smtp_port: int = 587

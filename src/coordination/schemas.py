@@ -111,7 +111,7 @@ class AttentionItem(BaseModel):
 
 
 class ScheduleFeedItem(BaseModel):
-    """mfa への開始の時刻表の 1 行（並行稼働 P.1）。時刻は予定の開始（mfa はここで「始めて」と知らせる）"""
+    """mfa への開始の時刻表の 1 行（並行稼働）。時刻は予定の開始（mfa はここで「始めて」と知らせる）"""
     key: str = Field(description="stable line key for comparing files: order:<id>:start:<scheduled start, UTC>")
     scheduled_start: datetime = Field(description="when mfa should prompt staff to start the task")
     category: Literal["regular", "adhoc", "special"] = Field(description="the template's category (one-off additions are special)")

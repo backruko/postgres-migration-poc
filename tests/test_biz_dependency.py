@@ -81,7 +81,7 @@ def test_refused_combinations(db):
         link(db, b, a)  # 逆向きの直接の循環
     link(db, a, c)  # 循環しない近道は作れる
 
-    # 削除された業務とは結べない（定義の残る業務は delete_biz では消せない（M1.1）ので、リポジトリで直接論理削除する）
+    # 削除された業務とは結べない（定義の残る業務は delete_biz では消せないので、リポジトリで直接論理削除する）
     with pytest.raises(BadRequestError, match="dependency definition"):
         biz_services.delete_biz(db, c)
     biz_master_repo.remove(db, id=c)
@@ -139,7 +139,7 @@ def test_only_admins_change_definitions():
     from main import app
 
     paths = app.openapi()["paths"]
-    # すべてログインが必要（LG.2）。変更（作成・削除）は業務管理者（ロールは test_plan_settings_guard.py で確認）
+    # すべてログインが必要。変更（作成・削除）は業務管理者（ロールは test_plan_settings_guard.py で確認）
     assert needs_login(paths["/biz/{biz_id}/dependencies"]["post"])
     assert needs_login(paths["/biz/dependencies/{dependency_id}"]["delete"])
     assert needs_login(paths["/biz/{biz_id}/dependencies"]["get"])

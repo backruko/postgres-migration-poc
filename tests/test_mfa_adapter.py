@@ -1,6 +1,6 @@
 # tests/test_mfa_adapter.py
 """
-mfa 連携アダプター（adapters/mfa/mfa_sync_adapter.py。並行稼働 P.2）のテスト。DB は使わない（テストの中の小さな API サーバー）。
+mfa 連携アダプター（adapters/mfa/mfa_sync_adapter.py。並行稼働）のテスト。DB は使わない（テストの中の小さな API サーバー）。
 - mfa.txt: 「YY/MM/DD HH:MM 命令（7 桁）引数」、CP932・CRLF。Msg の文面（締切の言い方: 同じ日 / 翌日 / それより後、ちょうどの時）。
   音を設定すれば同じ時刻の Mplay の行が前に入る
 - CSV: 全部をダブルクォート、CP932・CRLF。状態は 未処理 / リリース済

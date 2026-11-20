@@ -1,8 +1,8 @@
 """
-届かなかったアラームの一覧と「確認した」（通知の仕組み N.4b、2026-11-12）。日次ダッシュボードが使う。
+届かなかったアラームの一覧と「確認した」（通知の仕組み）。日次ダッシュボードが使う。
 
 - 届かなかった = 再試行の後も、宛先のどれかに届かなかった通知（failed: どこにも / partly_failed: 一部に）
-- 職員が「確認した」を押すまで、赤い帯と件数に出続ける（古くても消えない。2026-11-12 の決定）。確認したものは 7 日間、
+- 職員が「確認した」を押すまで、赤い帯と件数に出続ける（古くても消えない）。確認したものは 7 日間、
   一覧に薄く残る
 - 確認できるのは、作業者・確認者・リリース担当・業務管理者（閲覧者・監査担当・システム管理者は見るだけ）。自分の範囲の顧客のものだけ
 - 再試行中の配信の数と、いちばん新しい失敗の理由も返す（メールサーバーが落ちたことに、約 80 分待たずに気づける）
@@ -30,7 +30,7 @@ LIMIT = 200
 
 def get_failures(db: Session, *, scope: ClientScope = ALL_CLIENTS, now: datetime | None = None, limit: int = LIMIT) -> NotificationFailuresResponse:
     now = now or _now()
-    # 範囲のある職員には、顧客のない通知は出ない（IN）。宛先のテスト送信（ルールなし）はアラームではないので数えない（N.5a）
+    # 範囲のある職員には、顧客のない通知は出ない（IN）。宛先のテスト送信（ルールなし）はアラームではないので数えない
     in_scope = scope.clause(Notification.client_code) & Notification.rule_id.is_not(None)
     unacknowledged = db.scalar(
         select(func.count(Notification.id))
