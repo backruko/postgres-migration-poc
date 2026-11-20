@@ -80,3 +80,4 @@ packages/
 MEMORY.md
 # 手元だけの取り込み・抽出の道具（本物の顧客名・コードを含むので、リポジトリには入れない）
 scripts/first*Tool.py
+scripts/exctractor.py

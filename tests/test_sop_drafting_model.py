@@ -8,13 +8,14 @@
 ※ 顧客コードの先頭文字は空きがないため "S" を共有する
 """
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from tests.client_codes import new_client_code
+from src.core.clock import utc_now
 from src.domain_biz import services as biz_services
 from src.domain_biz.models import BizMaster, SOPStatus, SOPVersion, SOPVersionEvent, SOPVersionEventType
 from src.domain_biz.schemas import BizMasterCreate, SOPVersionCreate
@@ -26,6 +27,12 @@ from src.infrastructure.database import SessionLocal
 from src.infrastructure.repositories import (
     biz_master_repo, biz_release_change_repo, client_repo, sop_version_event_repo,
 )
+
+# 依頼の日時・発効日時を同じ「いま」から決めるため（版の記録の日時は DB が付けるが、記録どうしでしか
+# 比べないので、アプリの時計を止めても順番は変わらない）
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -66,14 +73,14 @@ def submit(db, version: SOPVersion, staff_id: int, at: datetime) -> None:
 
 def test_submission_needs_both_fields_and_only_drafts_can_be_submitted(db, world):
     version = draft(db, world["biz"][0])
-    version.submitted_at = datetime.now(UTC)  # 依頼した人が無い
+    version.submitted_at = utc_now()  # 依頼した人が無い
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
 
     version = db.get(SOPVersion, version.id)
-    version.status, version.effective_at = SOPStatus.APPROVED, datetime.now(UTC) + timedelta(days=1)
-    version.submitted_by_id, version.submitted_at = world["staff"], datetime.now(UTC)  # 承認済みの版は依頼できない
+    version.status, version.effective_at = SOPStatus.APPROVED, utc_now() + timedelta(days=1)
+    version.submitted_by_id, version.submitted_at = world["staff"], utc_now()  # 承認済みの版は依頼できない
     with pytest.raises(IntegrityError):
         db.commit()
 
@@ -102,7 +109,7 @@ def test_events_are_listed_oldest_first_and_go_with_a_deleted_draft(db, world):
 
 def test_submitted_drafts_are_listed_oldest_first_and_skip_deleted_businesses(db, world):
     first, second = world["biz"]
-    now = datetime.now(UTC)
+    now = utc_now()
     newer, older, not_submitted = draft(db, first, "v1.0.0"), draft(db, second, "v1.0.0"), draft(db, first, "v2.0.0")
     submit(db, newer, world["staff"], now)
     submit(db, older, world["staff"], now - timedelta(hours=1))

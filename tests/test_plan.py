@@ -49,6 +49,12 @@ from src.infrastructure.repositories import biz_master_repo, client_repo
 
 JST = timezone(timedelta(hours=9))
 
+# 予定の生成・取り消し・休日・シートの日付は「今日」と「もう始まった枠」で結果が変わり、
+# 年間計画シート（mock_data、2023-04〜2028-03）の「これからの日付」も使うため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 # ==========================================
 # Fixtures / Helpers
@@ -96,7 +102,7 @@ def by_id(db, template_id, instance_id):
 
 
 def cache_rows(db, biz_id, days=120):
-    now = datetime.now(UTC)
+    now = utc_now()
     return services.get_occurrences(db, biz_id, now, now + timedelta(days=days))
 
 
@@ -303,7 +309,7 @@ def test_revert_rejections(db, biz_id, monkeypatch):
 # ==========================================
 def test_one_off_instance_lifecycle(db, biz_id):
     t = daily_template(db, biz_id, duration_minutes=90)
-    start = datetime.now(JST).replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=2)
+    start = utc_now().astimezone(JST).replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=2)
 
     one = services.add_one_off_instance(db, t.id, PlanOneOffCreate(scheduled_start=start))
     assert one.origin == InstanceOrigin.ONE_OFF and one.overrides_instance_id is None
@@ -329,7 +335,7 @@ def test_one_off_instance_lifecycle(db, biz_id):
 
     # テンプレート削除で単発追加も無効化される
     services.delete_template(db, t.id)
-    assert all(i.voided for i in services.get_instances(db, t.id, limit=1000) if i.scheduled_start >= datetime.now(UTC))
+    assert all(i.voided for i in services.get_instances(db, t.id, limit=1000) if i.scheduled_start >= utc_now())
 
 
 # ==========================================
@@ -547,7 +553,7 @@ def test_skip_policy_and_weekend_change(db, biz_id):
 
     # 週末を「金土」に変更すると、日曜が営業日・金曜が非営業日になる
     services.update_calendar(db, calendar.id, BusinessCalendarUpdate(weekend_days=[5, 6]))
-    now = datetime.now(UTC)
+    now = utc_now()
     weekdays = {i.scheduled_start.astimezone(JST).isoweekday() for i in live(db, t.id) if i.scheduled_start > now}
     assert weekdays == {1, 2, 3, 4, 7}
 
@@ -983,7 +989,7 @@ def test_client_calendar_validation(db, biz_id):
 def test_cannot_schedule_into_the_past(db, biz_id):
     t = daily_template(db, biz_id)
     target = live(db, t.id)[2]
-    past = datetime.now(UTC) - timedelta(hours=1)
+    past = utc_now() - timedelta(hours=1)
 
     with pytest.raises(BadRequestError, match="past"):
         services.override_instance(db, target.id, PlanInstanceOverride(scheduled_start=past))
@@ -1059,7 +1065,7 @@ def test_cancelled_list_and_restore(db, biz_id, monkeypatch):
     ft = daily_template(db, foreign_biz.id)
     services.cancel_instance(db, live(db, ft.id)[2].id, PlanInstanceCancel())
 
-    now = datetime.now(UTC)
+    now = utc_now()
     listing = services.get_cancelled_instances(db, code, now, now + timedelta(days=60))
     by_id_ = {c.instance_id: c for c in listing}
     assert set(by_id_) == {direct.id, ov.id, one_off.id}
@@ -1137,7 +1143,7 @@ def test_stop_generating_can_cancel_future_dates_when_the_routine_ends(db, biz_i
     assert events[moved_id].original_date == moved_from
     assert not any(e.event_date == added for e in m.events)
     # 参照しているジョブの未来の予定も無くなる（1回の再照合で）
-    assert not [i for i in live(db, job.id) if i.scheduled_start >= datetime.now(UTC)]
+    assert not [i for i in live(db, job.id) if i.scheduled_start >= utc_now()]
 
 
 def test_past_holidays_are_read_only(db, biz_id):
@@ -1199,9 +1205,9 @@ def test_extend_job_fixes_old_templates_and_finds_the_next_slot(db, biz_id, monk
         return False
 
     anchor = local_date_of(utc_now()) + timedelta(days=200)
-    monkeypatch.setattr(services, "_ensure_next_occurrence", old_behaviour)
-    old = daily_template(db, biz_id, name="Old annual", anchor_date=anchor, rrule="FREQ=YEARLY")
-    monkeypatch.undo()
+    with monkeypatch.context() as m:  # この差し替えだけを外す（undo() は止めた時計まで戻す）
+        m.setattr(services, "_ensure_next_occurrence", old_behaviour)
+        old = daily_template(db, biz_id, name="Old annual", anchor_date=anchor, rrule="FREQ=YEARLY")
     assert old.next_occurrence_at is None and live(db, old.id) == []  # type: ignore[attr-defined]
 
     # 次の予定が無いテンプレート（ルールが終わっている）
