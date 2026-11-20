@@ -38,6 +38,11 @@ from src.infrastructure.repositories import biz_master_repo, client_repo
 SHEET, DATE = DependencyMatchRule.SAME_SHEET_EVENT, DependencyMatchRule.SAME_OCCURRENCE_DATE
 MOCK_SHEET_PATH = Path(__file__).resolve().parent.parent / "mock_data" / "desensitized_mock_data.json"
 
+# 年間計画シート（mock_data、2023-04〜2028-03）の「これからの日付」を使うので、本当の時計だと 2028 年 4 月から失敗する
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 @pytest.fixture
 def db():

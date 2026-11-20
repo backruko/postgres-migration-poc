@@ -9,12 +9,13 @@
 ※ 顧客コードの先頭文字は空きがないため "N" を共有する
 """
 import uuid
-from datetime import datetime, time, timedelta, timezone, UTC
+from datetime import time, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
 
 from tests.client_codes import new_client_code
+from src.core.clock import local_date_of, utc_now
 from src.core.error_codes import ErrorCode
 from src.core.exceptions import BadRequestError, BusinessException
 from src.domain_biz.schemas import BizMasterCreate
@@ -36,6 +37,11 @@ from src.infrastructure.repositories import biz_master_repo, client_repo
 
 JST = timezone(timedelta(hours=9))
 
+# シートの期間と作る予定の範囲を、同じ「今日」から決めるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 @pytest.fixture
 def db():
@@ -54,7 +60,7 @@ def world(db):
     biz_id = biz_master_repo.create(db, obj_in=BizMasterCreate(
         client_code=code, name="sheet biz", business_seq=1, manager_email=None, description=None,
     )).id
-    today = datetime.now(JST).date()
+    today = local_date_of(utc_now())
     sheet = plan.create_sheet(db, ReferenceSheetCreate(
         client_code=code, name="計画 " + uuid.uuid4().hex[:4], period_start=today - timedelta(days=30),
         period_end=today + timedelta(days=120),
@@ -137,7 +143,7 @@ def test_extending_the_period_generates_rule_dates_and_moves_templates(db, world
     extended = dates_of(db, world, "週次")
     assert max(extended) > end + timedelta(days=50)  # 新しい月まで作られた
     template = plan._get_locked_template(db, template_id)
-    plan._ensure_materialized(db, template, datetime.now(UTC) + timedelta(days=200))
+    plan._ensure_materialized(db, template, utc_now() + timedelta(days=200))
     db.commit()
     starts = {i.scheduled_start.astimezone(JST).date() for i in db.scalars(select(PlanInstance).where(PlanInstance.template_id == template_id))}
     assert max(extended) in starts

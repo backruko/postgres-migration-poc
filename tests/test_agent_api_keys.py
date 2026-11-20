@@ -3,19 +3,24 @@
 system_agent は機械用のアカウントだけ（signal_sender のほかのロール・パスワードは持てない）。
 """
 import uuid
-from datetime import datetime, UTC
 from types import SimpleNamespace
 
 import pytest
 from fastapi.security import HTTPAuthorizationCredentials
 from starlette.requests import Request
 
+from src.core.clock import utc_now
 from src.core.exceptions import BadRequestError, UnauthorizedError
 from src.domain_staff import credentials, services
 from src.domain_staff.auth import API_KEY_ROUTES, API_KEY_ROUTES_BY_ROLE, api_key_allows, get_current_staff
 from src.domain_staff.models import MACHINE_ROLES, RoleCode, StaffStatus
 from src.domain_staff.schemas import StaffCreate
 from src.infrastructure.database import SessionLocal
+
+# API キーの最後の利用日時と、読む予定（今日・これから）を同じ「いま」で見るため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 @pytest.fixture
@@ -29,7 +34,7 @@ def db():
 
 
 def now():
-    return datetime.now(UTC)
+    return utc_now()
 
 
 def make_staff(db, *roles: RoleCode):

@@ -14,9 +14,8 @@ import pytest
 from sqlalchemy import select
 
 from tests.test_deadline_watch import biz_id, db  # noqa: F401  同じ準備（顧客・業務）
-from src.coordination import order_sync
 from src.coordination.template_preview import preview_template_update
-from src.core.clock import LOCAL_TIMEZONE, local_date_of, utc_now
+from src.core.clock import LOCAL_TIMEZONE
 from src.domain_ope.models import OpeOrder, OpeOrderEvent, OrderEventType, OrderStatus
 from src.domain_plan import services as plan_services
 from src.domain_plan.models import TemplateType
@@ -27,10 +26,10 @@ FAR = datetime.max.replace(tzinfo=UTC)
 
 
 @pytest.fixture
-def now(monkeypatch):
-    early = datetime.combine(local_date_of(utc_now()), time(0, 30), tzinfo=LOCAL_TIMEZONE)
-    monkeypatch.setattr(plan_services, "_now", lambda: early)
-    monkeypatch.setattr(order_sync, "_now", lambda: early)
+def now(frozen_clock):
+    # 止めた時計の「今日」の 0:30（アプリのどのモジュールも同じ「いま」。以前は 2 つだけ差し替えていた）
+    early = datetime.combine(frozen_clock.today, time(0, 30), tzinfo=LOCAL_TIMEZONE)
+    frozen_clock.set(early)
     return early
 
 

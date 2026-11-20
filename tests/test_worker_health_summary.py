@@ -10,12 +10,13 @@
 期待: D は 途切れ 2（21 分・7 分）+ きれいに止まらなかった 1 + エラー 2 = 問題 5、D+1 は エラー 1
 """
 import uuid
-from datetime import date, datetime, timedelta, UTC
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import insert
 
+from src.core.clock import utc_now
 from src.domain_events.models import DomainEvent
 from src.domain_notification.models import Notification, NotificationRule, NotificationStatus
 from src.domain_staff.scope import ClientScope
@@ -27,6 +28,11 @@ from src.worker_health.summary import current_status, summarize
 JST = ZoneInfo("Asia/Tokyo")
 D = date(2031, 3, 10)
 MIN = timedelta(minutes=1)
+
+# 最後の心拍から何分たったか（止まった判定）を、同じ「いま」で確かめるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
 
 
 def at(day: date, hh: int, mm: int = 0) -> datetime:
@@ -184,10 +190,10 @@ def test_health_endpoint_answers_503_when_not_ok_and_is_mounted_without_login(db
     from src.domain_staff.auth import require_login
     from src.worker_health.router import worker_health_endpoint
 
-    r = run(db, datetime.now(UTC) - timedelta(minutes=1), datetime.now(UTC))
+    r = run(db, utc_now() - timedelta(minutes=1), utc_now())
     ok = worker_health_endpoint(db)
     assert ok.status_code == 200 and b'"state":"ok"' in ok.body and b"host" not in ok.body
-    r.last_beat_at = datetime.now(UTC) - timedelta(minutes=6)
+    r.last_beat_at = utc_now() - timedelta(minutes=6)
     db.flush()
     stale = worker_health_endpoint(db)
     assert stale.status_code == 503 and b'"state":"stale"' in stale.body

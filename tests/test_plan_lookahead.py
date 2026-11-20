@@ -14,8 +14,6 @@ import pytest
 from sqlalchemy import event
 
 from tests.client_codes import new_client_code
-from src.coordination import order_sync
-from src.core.clock import utc_now
 from src.domain_biz.schemas import BizMasterCreate
 from src.domain_client.schemas import ClientCreate
 from src.domain_plan import services as plan_services
@@ -25,26 +23,12 @@ from src.infrastructure.database import SessionLocal, engine
 from src.infrastructure.repositories import biz_master_repo, client_repo
 
 
-class Clock:
-    """止めた時計。advance で進める（本当の時計だと、上限が動くかどうかが実行の時刻で変わる）"""
-
-    def __init__(self, at: datetime):
-        self.at = at
-
-    def __call__(self) -> datetime:
-        return self.at
-
-    def advance(self, **kw) -> None:
-        self.at += timedelta(**kw)
-
-
 @pytest.fixture
-def clock(monkeypatch):
-    # 日付の境目（UTC の 0 時）から遠い時刻: 今日の 12:00 UTC
-    c = Clock(datetime.combine(utc_now().date(), time(12, 0), tzinfo=UTC))
-    monkeypatch.setattr(plan_services, "_now", c)
-    monkeypatch.setattr(order_sync, "_now", c)
-    return c
+def clock(frozen_clock):
+    # 上限は UTC の 0 時に動くので、そこから遠い時刻にする: 止めた時計の日の 12:00 UTC
+    # （本当の時計だと、上限が動くかどうかが実行の時刻で変わる）
+    frozen_clock.set(datetime.combine(frozen_clock.now.date(), time(12, 0), tzinfo=UTC))
+    return frozen_clock
 
 
 @pytest.fixture

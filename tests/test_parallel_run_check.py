@@ -19,6 +19,7 @@ import pytest
 from sqlalchemy import insert, update
 
 from tests.test_deadline_watch import biz_id, db, make_order  # noqa: F401  同じ準備
+from src.core.clock import utc_now
 from src.domain_biz.models import BizMaster, ExecutionType
 from src.domain_notification.models import NotificationChannel, NotificationDestination, NotificationRule, QuietMode
 from src.domain_plan.models import PlanTemplate
@@ -37,12 +38,17 @@ QA = "ops-qa-team@corp.com"
 EXPECT = check.Expect(qa_address=QA)
 NOW = datetime(2031, 6, 1, 3, 0, tzinfo=UTC)  # 12:00 JST（ほかのテストのワーカーの行と混ざらない）
 
+# これから鳴る作業の時刻表とキーの取り消しを、同じ「いま」で確かめるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+
 
 @pytest.fixture
 def clean(db):
     """ほかのテストのルール・キーを、このトランザクションの中だけ無効にする"""
     db.execute(update(NotificationRule).values(enabled=False))
-    db.execute(update(StaffApiKey).values(revoked_at=datetime.now(UTC)))
+    db.execute(update(StaffApiKey).values(revoked_at=utc_now()))
     db.flush()
     return db
 
@@ -154,7 +160,7 @@ def test_template_review_csv(db, biz_id):
     biz.execution_type = ExecutionType.LIGHTWEIGHT
     db.get(PlanTemplate, special.template_id).start_prompt = False  # type: ignore[union-attr]
     db.flush()
-    now = datetime.now(UTC)
+    now = utc_now()
     rows = [r for r in check.template_review_rows(db, now) if r[0] == biz.client_code]
     assert [(r[6], r[7], r[8], r[4]) for r in rows] == [("受領の確認", "スペシャル", "知らせない", "はい"), ("臨時の送信", "不定期", "知らせる", "はい")]
     assert rows[1][5] == str(adhoc.template_id) and rows[1][9].endswith("09:00") and rows[1][10:] == ["", ""]
