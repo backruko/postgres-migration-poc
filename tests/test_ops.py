@@ -223,18 +223,28 @@ def test_daily_dashboard_past_day_shows_voided_with_reasons(db, monkeypatch):
     assert occ.origin == InstanceOrigin.OVERRIDE and occ.is_override and occ.occurrence_date == day
 
 
-def test_daily_dashboard_defaults_and_validation(db):
+def test_daily_dashboard_defaults_and_validation(db, monkeypatch):
     dash = ops_services.get_daily_dashboard(db, None, "Asia/Tokyo")
     assert dash.date == datetime.now(JST).date()
     with pytest.raises(BadRequestError):
         ops_services.get_daily_dashboard(db, None, "Mars/Olympus")
 
-    # 生成済み区間（90日）より先の日付も、読むときに生成して返す
+    # 生成済み区間（90日）より先の日付も、読むときに生成して返す。
+    # 作るのはこのテストのテンプレートだけにする: 全部のままだと、ほかのテストが作ったテンプレートもすべて
+    # 200 日先まで（オーダーも）作り、かかる時間がテストの数と一緒に増える（16 秒かかっていた）
     code = make_client(db)
     t = make_template(db, make_biz(db, code).id, name="Far")
+    asked: list[datetime] = []
+
+    def only_mine(db, end):
+        asked.append(end)
+        services._materialize_templates(db, [t], end)
+
+    monkeypatch.setattr(services, "materialize_all_templates", only_mine)
     far = local_date_of(utc_now()) + timedelta(days=200)
     [business] = mine(ops_services.get_daily_dashboard(db, far, "Asia/Tokyo"), code)[code].businesses
     assert [o.template_id for o in business.occurrences] == [t.id]
+    assert asked == [datetime.combine(far + timedelta(days=1), time(0), tzinfo=JST)]  # その日の終わりまで作らせる
 
 
 def test_daily_dashboard_shows_the_order_of_each_occurrence(db):
