@@ -142,6 +142,27 @@ def test_business_numbers_are_automatic_and_never_reused(db):
         new_biz(db, "ZZZ9")
 
 
+def test_business_codes_at_the_last_number_and_the_database_backstops(db):
+    from sqlalchemy.exc import IntegrityError
+    from src.domain_biz.models import BizMaster
+    client = new_client(db)
+    last = new_biz(db, client.code, name="last", seq=9999)
+    assert last.business_code == f"{client.code}9999"  # 4 桁に収まる最後の番号
+    with pytest.raises(BadRequestError, match="no business number left"):
+        new_biz(db, client.code, name="one more")
+
+    # サービスの確認を通らない直接の書き込みも、DB が断る（顧客が無い・同じ業務コードがある。
+    # 業務コードは削除された業務とも重ならない UNIQUE なので、未削除だけを見る部分インデックスより先に効く）
+    for values, constraint in (
+        (dict(client_code="ZZZ9", business_seq=1), "client_code_fkey"),
+        (dict(client_code=client.code, business_seq=9999), "biz_master_business_code_key"),
+    ):
+        db.add(BizMaster(name="direct", **values))
+        with pytest.raises(IntegrityError, match=constraint):
+            db.flush()
+        db.rollback()
+
+
 def test_business_list_by_client_with_deleted(db):
     client = new_client(db)
     other = new_client(db)
