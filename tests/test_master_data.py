@@ -156,6 +156,7 @@ def test_business_codes_at_the_last_number_and_the_database_backstops(db):
     for values, constraint in (
         (dict(client_code="ZZZ9", business_seq=1), "client_code_fkey"),
         (dict(client_code=client.code, business_seq=9999), "biz_master_business_code_key"),
+        (dict(client_code=client.code, business_seq=10000), "chk_business_seq_fits_code"),  # 切り捨てたコードを作らない
     ):
         db.add(BizMaster(name="direct", **values))
         with pytest.raises(IntegrityError, match=constraint):

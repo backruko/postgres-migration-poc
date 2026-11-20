@@ -190,6 +190,12 @@ class BizMaster(Base, SoftDeleteMixin):
             'business_seq > 0',
             name='chk_business_seq_positive'
         ),
+        # 業務コードの LPAD は 4 桁を超えると切り捨てる（10000 → '1000'）ので、DB も 9999 までに限る
+        # （services.MAX_BUSINESS_SEQ と同じ値）
+        CheckConstraint(
+            'business_seq <= 9999',
+            name='chk_business_seq_fits_code'
+        ),
         # 3. 自動リリースは予定日の当日〜30日前まで
         CheckConstraint(
             'release_days_before BETWEEN 0 AND 30',
