@@ -77,4 +77,4 @@ packages/
 # サーバーの準備で作る tar（deploy/README.md 3.2。scp で送ったら要らない）
 *.tar
 # 開発の引き継ぎメモ（手元だけ。リポジトリには入れない）
-
+MEMORY.md

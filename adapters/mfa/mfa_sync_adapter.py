@@ -182,7 +182,9 @@ def fetch_feed(s: Settings) -> dict:
         with urllib.request.urlopen(request, timeout=s.timeout_seconds) as response:
             feed = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
-        raise AdapterError(f"API が {error.code} を返しました（{url}）: {error.read()[:300]!r}", 3) from error
+        with error:  # 応答の本文を読んだら閉じる（閉じないと接続と一時ファイルが残る）
+            body = error.read()[:300]
+        raise AdapterError(f"API が {error.code} を返しました（{url}）: {body!r}", 3) from error
     except (urllib.error.URLError, OSError, ValueError) as error:
         raise AdapterError(f"API に接続できません（{url}）: {error}", 3) from error
     if feed.get("truncated"):

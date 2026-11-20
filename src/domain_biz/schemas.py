@@ -250,6 +250,8 @@ class SOPStepTemplateCreate(BaseModel):
     is_blocking: bool = Field(False, description="the next step opens only after this one is approved (otherwise on submit)")
 
 class SOPStepTemplateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     sop_version_id: int
     step_num: int
@@ -257,9 +259,6 @@ class SOPStepTemplateResponse(BaseModel):
     content: str | None
     condition: dict[str, Any]
     is_blocking: bool
-
-    class Config:
-        from_attributes = True
 
 class SOPStepTemplateUpdate(BaseModel):
     """草稿のステップの変更（送った項目だけ変わる。M2.2）。番号は並べ替え（SOPStepOrderIn）で変える"""
