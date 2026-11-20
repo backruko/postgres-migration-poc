@@ -1,5 +1,5 @@
 """
-並行稼働の事前確認（P.5a、2026-11-16）。読むだけで、何も変えない。並行稼働の初日の前と、期間中いつでも動かす。
+並行稼働の事前確認。読むだけで、何も変えない。並行稼働の初日の前と、期間中いつでも動かす。
 
     docker compose exec worker python -m scripts.parallel_run_check --qa-address ops-qa-team@corp.com
     docker compose exec worker python -m scripts.parallel_run_check --qa-address ops-qa-team@corp.com \\
@@ -7,7 +7,7 @@
 
 メールの設定はワーカーが読む環境変数なので、worker のコンテナの中で動かす（app のコンテナには SMTP の設定が無い）。
 
-確かめること（それぞれ OK / NG。2026-11-16 の決定）:
+確かめること（それぞれ OK / NG）:
 1. メール: SMTP のサーバーが設定されている（--smtp-host・--smtp-port・--smtp-from を渡せば、その値と同じか）
 2. 知らせない時間帯: 有効なルールすべてが --quiet（既定 22:00-07:00）で「終わってから知らせる」
 3. 宛先: 有効なルールが使う有効な宛先が、すべて --qa-address だけ（ほかのアドレスがあれば NG。並行稼働の間、顧客に届かないように）

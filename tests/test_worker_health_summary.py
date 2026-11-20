@@ -1,6 +1,6 @@
 # tests/test_worker_health_summary.py
 """
-ワーカーの健康のまとめ（src/worker_health/summary.py・services.py・router.py。並行稼働 P.4b）のテスト。
+ワーカーの健康のまとめ（src/worker_health/summary.py・services.py・router.py。並行稼働）のテスト。
 他のテストの行と混ざらないよう、遠い日付（2031 年）で組み立てる。
 
 筋書き（日本時間）: D = 2031-03-10、今 = D+1 12:00

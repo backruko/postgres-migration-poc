@@ -1,6 +1,6 @@
 # tests/test_credentials.py
 """
-ログインの部品（LG.1: src/domain_staff/credentials.py）のテスト: パスワードのハッシュと決まり、仮パスワード、
+ログインの部品（src/domain_staff/credentials.py）のテスト: パスワードのハッシュと決まり、仮パスワード、
 ログインの失敗の回数とロック（5 回で 15 分）、セッション（最後の利用から 12 時間・最長 7 日・終える）、
 信号の送信用の API キー（発行・確認・取り消し）。日時は now を渡して決める。
 """

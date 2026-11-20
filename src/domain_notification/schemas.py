@@ -1,4 +1,4 @@
-"""届かなかったアラーム（N.4b）の応答の形。画面（日次ダッシュボード）が日本語にする: 状態・理由は英語のコードのまま"""
+"""届かなかったアラームの応答の形。画面（日次ダッシュボード）が日本語にする: 状態・理由は英語のコードのまま"""
 from datetime import date, datetime, time
 
 from pydantic import BaseModel, Field
@@ -46,7 +46,7 @@ class NotificationFailuresResponse(BaseModel):
 
 
 # ==========================================
-# 通知の設定（宛先・ルール。N.5a）
+# 通知の設定（宛先・ルール）
 # ==========================================
 class StaffRef(BaseModel):
     id: int
@@ -151,7 +151,7 @@ class TestRequested(BaseModel):
 
 
 # ==========================================
-# 通知の記録（アラームの記録。N.5b）
+# 通知の記録（アラームの記録）
 # ==========================================
 class AttemptOut(BaseModel):
     attempt_no: int

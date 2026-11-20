@@ -19,7 +19,7 @@ export interface FormValues {
   template_type: TemplateType;
   name: string;
   category: TemplateCategory;
-  /** 開始時刻に知らせる（外からの合図を待つ作業はオフ。並行稼働 P.1） */
+  /** 開始時刻に知らせる（外からの合図を待つ作業はオフ。並行稼働） */
   start_prompt: boolean;
   start_time: Dayjs;
   duration_minutes: number;
@@ -37,7 +37,7 @@ export interface FormValues {
   offset_days?: number;
   offset_day_unit?: DayUnit;
   offset_minutes?: number;
-  // 締切（N.4）: 決め方ごとに使う項目だけ送る
+  // 締切: 決め方ごとに使う項目だけ送る
   deadline_mode: DeadlineMode;
   deadline_offset_minutes?: number;
   deadline_time?: Dayjs;
@@ -67,7 +67,7 @@ export const rruleRule = {
 
 /**
  * 開始時刻に知らせるかの初期値: 顧客側の出来事（ファイルの受領など、外からの合図を待つ）の業務はオフ、ほかはオン
- * （バックエンドの既定と同じ。鳴らないより鳴りすぎのほうが安全なので、迷う作業はオンのまま。2026-11-16 の決定）
+ * （バックエンドの既定と同じ。鳴らないより鳴りすぎのほうが安全なので、迷う作業はオンのまま）
  */
 export const defaultStartPrompt = (biz: { execution_type?: string | null } | null | undefined) => biz?.execution_type !== "lightweight";
 

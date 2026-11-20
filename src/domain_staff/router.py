@@ -108,7 +108,7 @@ def set_staff_status_endpoint(
     return set_staff_status(db=db, staff_id=staff_id, status=status_in.status, actor=current_staff)
 
 # ==========================================
-# パスワード・API キー（LG.2。システム管理者）
+# パスワード・API キー（システム管理者）
 # ==========================================
 
 @router.put("/{staff_id}/password", response_model=StaffResponse, responses={**COMMON_ERRORS, **AUTH_ERRORS})

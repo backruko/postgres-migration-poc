@@ -1,4 +1,4 @@
-"""出来事の一覧（読み取りのみ。通知の仕組み N.2b）のエンドポイント"""
+"""出来事の一覧（読み取りのみ。通知の仕組み）のエンドポイント"""
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query

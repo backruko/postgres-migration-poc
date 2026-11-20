@@ -1,6 +1,6 @@
 """
 サーバーの依存（requirements.txt・requirements-dev.txt）の既知の脆弱性を調べます（CI の「依存関係の既知の脆弱性（pip-audit）」。
-2026-11-17 の決定: 1 つでもあれば止める）。requirements-audit-ignore.txt に理由つきで書いた脆弱性だけを見送ります。
+1 つでもあれば止める）。requirements-audit-ignore.txt に理由つきで書いた脆弱性だけを見送ります。
 
     python -m scripts.audit_check              # リポジトリのルートで（開発 PC でも CI でも同じ）
     python -m scripts.audit_check <一覧のファイル>

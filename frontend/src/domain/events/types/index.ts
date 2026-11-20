@@ -1,4 +1,4 @@
-// 出来事（アウトボックス。通知の仕組み N.2）の型。OpenAPI から生成した型の別名で、手書きの型は持たない。
+// 出来事（アウトボックス。通知の仕組み）の型。OpenAPI から生成した型の別名で、手書きの型は持たない。
 import type { components } from "../../../shared/api/schema.gen";
 
 type Schemas = components["schemas"];

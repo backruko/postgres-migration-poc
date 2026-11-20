@@ -114,7 +114,7 @@ button, input, select { font: inherit; color: inherit; }
 /* 今日より前の日付（実績・変更不可） */
 .is-past-row > td { color: var(--muted); background: var(--past-bg); }
 .template-name .swatch { width: 12px; height: 12px; }
-/* テンプレートの変更依頼（Level 2）: 一覧の「承認待ち」、業務ごとの「変更依頼」の欄、下書きを見る窓 */
+/* テンプレートの変更依頼: 一覧の「承認待ち」、業務ごとの「変更依頼」の欄、下書きを見る窓 */
 .template-name .draft-tag { margin-inline-start: 4px; }
 .change-requests { display: grid; gap: 8px; margin: 12px 0; padding: 12px; border: 1px solid var(--rule); border-radius: 8px; }
 .draft-meta { margin-bottom: 12px; }
@@ -307,7 +307,7 @@ h1 .client { color: var(--accent); }
 .sop-impact-head { margin-bottom: 4px; }
 .sop-impact-list { margin: 0; padding-left: 18px; font-size: 13px; }
 .sop-impact-list li { margin: 2px 0; }
-/* ログイン・パスワードの変更（LG.3） */
+/* ログイン・パスワードの変更 */
 .login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .login-card { width: min(400px, 100%); background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px; padding: 28px 28px 24px; box-shadow: 0 2px 12px rgb(0 0 0 / .06); }
 .api-key-value { word-break: break-all; }
@@ -340,11 +340,11 @@ h1 .client { color: var(--accent); }
 .pv-day.k-manual, .pv-swatch.k-manual { background: var(--select); border: 1.5px dashed var(--accent); color: var(--ink); }
 .pv-details { margin-top: 14px; }
 .pv-list { margin: 0; padding-left: 18px; columns: 2 240px; font-size: 12.5px; }
-/* 細かな権限（P.4）: SOP の版の作成・編集の人、承認待ちの画面の見出し、版の履歴 */
+/* 細かな権限: SOP の版の作成・編集の人、承認待ちの画面の見出し、版の履歴 */
 .sop-authors { font-size: 12.5px; margin: 6px 0 10px; }
 .section-title { margin: 20px 0 8px !important; }
 .history-entry { display: flex; flex-direction: column; gap: 2px; }
-/* マーカーの日付の年のカレンダー（E.4）: 升目はボタン。.pv-* の形を使い、色だけ足す */
+/* マーカーの日付の年のカレンダー: 升目はボタン。.pv-* の形を使い、色だけ足す */
 .mc-months { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .mc-day { border: 1px solid transparent; cursor: pointer; font: inherit; padding: 0; }
 .mc-day:disabled { cursor: default; }
@@ -358,13 +358,13 @@ h1 .client { color: var(--accent); }
 .mc-past-dated, .pv-swatch.mc-past-dated { background: color-mix(in srgb, var(--select) 55%, var(--sheet)); opacity: 0.8; }
 .mc-outside { visibility: hidden; }
 
-/* 記録された出来事（N.2c） */
+/* 記録された出来事 */
 .event-delay { color: var(--ant-color-warning, #d48806); font-size: 12px; }
 .event-truncated { margin-bottom: 12px; }
 .event-detail { max-width: 900px; }
 .event-payload { margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
 
-/* 届かなかったアラーム（N.4b-2） */
+/* 届かなかったアラーム */
 .failure-banner { margin-bottom: 12px; }
 .failures-panel > .ant-typography { display: block; margin-bottom: 8px; }
 .failure-meta { font-size: 12px; }
@@ -374,11 +374,11 @@ h1 .client { color: var(--accent); }
 .failure-confirmed-title { margin-top: 16px !important; }
 .failure-confirmed-row { opacity: 0.6; }
 
-/* 通知の設定（N.5c） */
+/* 通知の設定 */
 .rule-limits { font-size: 12px; }
 .destination-test .ant-tag { margin-inline-end: 6px; }
 
-/* 通知の記録（N.5d） */
+/* 通知の記録 */
 .alarm-detail { display: grid; gap: 12px; max-width: 1000px; }
 .alarm-delivery { border-left: 3px solid var(--ant-color-border, #ddd); padding-left: 10px; }
 .alarm-address-changed { margin-inline-start: 8px; }
@@ -390,7 +390,7 @@ h1 .client { color: var(--accent); }
 .event-alarms-list { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; }
 .event-alarms-list li + li { margin-top: 4px; }
 
-/* ワーカーの状態（並行稼働 P.4c） */
+/* ワーカーの状態（並行稼働） */
 .text-danger { color: #cf1322; }
 .worker-status { margin-bottom: 12px; }
 .worker-verdict { margin-bottom: 12px; }

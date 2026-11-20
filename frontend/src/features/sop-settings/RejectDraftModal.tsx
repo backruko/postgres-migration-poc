@@ -13,7 +13,7 @@ interface Props {
 }
 
 /**
- * 依頼された SOP の草稿の差し戻し（業務管理者。P.4）。理由は必須で、版の記録に残り、書いた人が履歴で読める。
+ * 依頼された SOP の草稿の差し戻し（業務管理者）。理由は必須で、版の記録に残り、書いた人が履歴で読める。
  * 差し戻すと草稿に戻り、また直せる。
  */
 export function RejectDraftModal({ open, draft, onClose, onRejected }: Props) {

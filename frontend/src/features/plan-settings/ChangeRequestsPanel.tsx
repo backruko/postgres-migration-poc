@@ -18,7 +18,7 @@ interface Props {
 const when = (iso: string | null | undefined) => (iso ? inZone(iso, TIMEZONE).format("M/D HH:mm") : "—");
 
 /**
- * 予定テンプレートの画面の「変更依頼」の欄（Level 2、D.5）。選んでいる業務の承認待ちの下書き（新しいテンプレートの下書きを含む）と、
+ * 予定テンプレートの画面の「変更依頼」の欄。選んでいる業務の承認待ちの下書き（新しいテンプレートの下書きを含む）と、
  * 自分の下書きのうち 30 日以内に決まったもの（差し戻しの理由つき）。何も無ければ出さない。
  */
 export function ChangeRequestsPanel({ data, loading, error, onReload, onView }: Props) {

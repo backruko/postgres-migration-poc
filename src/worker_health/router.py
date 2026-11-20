@@ -1,4 +1,4 @@
-"""ワーカーの健康（並行稼働 P.4b）のエンドポイント"""
+"""ワーカーの健康（並行稼働）のエンドポイント"""
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query

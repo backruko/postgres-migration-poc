@@ -59,7 +59,7 @@ const columns: ColumnsType<PlanTemplate> = [
       return (
         <span>
           <Tag color={CATEGORY_COLOR[c]}>{CATEGORY_LABEL[c]}</Tag>
-          {/* 開始時刻に知らせる（並行稼働 P.1）: 鳴る作業（不定期・スペシャルでオン）と、知らせない作業に印。並行稼働の前の見直し用 */}
+          {/* 開始時刻に知らせる（並行稼働）: 鳴る作業（不定期・スペシャルでオン）と、知らせない作業に印。並行稼働の前の見直し用 */}
           {t.start_prompt && c !== "regular" && <Tag color="blue" className="start-prompt-on" title="予定の開始の時刻に「始めて」と知らせる">開始を知らせる</Tag>}
           {!t.start_prompt && <Tag className="start-prompt-off" title="開始時刻に知らせない（外からの合図を待つ作業）">知らせない</Tag>}
         </span>

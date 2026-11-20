@@ -1,6 +1,6 @@
 # tests/test_template_approval.py
 """
-テンプレートの下書きの承認・差し戻しと、業務管理者の直接の保存の記録（Level 2、D.3）。
+テンプレートの下書きの承認・差し戻しと、業務管理者の直接の保存の記録。
 - 承認はすぐ反映され、直接の保存と同じ処理（オーダーも同じように追従する）。変更前の値・反映後の revision を残す
 - 当てはめで誤りになれば何も変わらず、下書きは承認待ちのまま
 - 差し戻しは理由つき、テンプレートは変わらない。決まった下書きはもう承認・差し戻しできない
@@ -110,7 +110,7 @@ def test_name_and_display_only_drafts_are_kept_and_applied(db, daily, releaser, 
         ({"name": "Renamed"}, lambda t: t.name == "Renamed"),
         ({"ui_metadata": {"bg_color": "#00FF00"}}, lambda t: t.ui_metadata == {"bg_color": "#00FF00"}),
         ({"warn_before_minutes": 30}, lambda t: t.warn_before_minutes == 30),
-        ({"start_prompt": False}, lambda t: t.start_prompt is False),  # 開始時刻に知らせる（並行稼働 P.1）
+        ({"start_prompt": False}, lambda t: t.start_prompt is False),  # 開始時刻に知らせる（並行稼働）
     ):
         draft = template_changes.create_draft(db, update(daily.id, changes), releaser)
         template_changes.approve_draft(db, draft.id, admin)

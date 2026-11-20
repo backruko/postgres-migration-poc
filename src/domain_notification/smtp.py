@@ -1,5 +1,5 @@
 """
-メールのチャネル（SMTP。通知の仕組み N.4a、2026-11-12）。設定は環境変数 SMTP_*（src/infrastructure/config.py）。
+メールのチャネル（SMTP。通知の仕組み）。設定は環境変数 SMTP_*（src/infrastructure/config.py）。
 
 開発では Mailpit・MailHog のような受けるだけのサーバー、本番では社内の SMTP サーバーを、設定だけで替えられる。
 

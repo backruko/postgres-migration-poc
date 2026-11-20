@@ -1,4 +1,4 @@
-// テンプレートの締切（N.1 / N.4）の表示用ラベルと説明。UI から独立した純粋な処理。
+// テンプレートの締切の表示用ラベルと説明。UI から独立した純粋な処理。
 import type { DeadlineMode, PlanTemplate } from "../types";
 
 export const DEADLINE_MODE_LABEL: Record<DeadlineMode, string> = {

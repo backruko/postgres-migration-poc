@@ -7,7 +7,7 @@ from src.infrastructure.repositories import client_repo
 from src.core.exceptions import BadRequestError, DuplicatedRecordError, NotFoundError
 from src.domain_staff.scope import ALL_CLIENTS, ClientScope
 
-# 顧客は削除しない（業務・シート・オーダーの履歴が参照する）。使わなくなった顧客は無効にする（M1.1）
+# 顧客は削除しない（業務・シート・オーダーの履歴が参照する）。使わなくなった顧客は無効にする
 
 def create_client(db: Session, client_in: ClientCreate) -> ClientMaster:
     code = client_in.code.upper()

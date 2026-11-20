@@ -1,6 +1,6 @@
 # tests/test_worker_health.py
 """
-ワーカーの健康の記録（src/worker_health、scripts/worker.py。並行稼働 P.4a）のテスト。
+ワーカーの健康の記録（src/worker_health、scripts/worker.py。並行稼働）のテスト。
 - 起動で worker_run に 1 行、1 回りごとに心拍と回数、止まると時刻と理由（signal / crash）
 - 仕事の失敗は 1 回につき worker_error に 1 行（種類・文面・トレースバック）。ほかの仕事は続く
 - DB に書けない間はメモリーにためて、書けたときにまとめて書く（起動の日時・失敗の日時はもとのまま）。ためきれない分は数だけ
@@ -245,7 +245,7 @@ class CommitFails:
 
 
 def test_a_write_that_fails_at_commit_keeps_everything_for_the_next_write(connection):
-    # R.6 / C901 で _write を分ける前に固定する: 途中で失敗した書き込みは何も残さず、すべてを次に持ち越す
+    # C901（複雑さの上限）で _write を分ける前に固定する: 途中で失敗した書き込みは何も残さず、すべてを次に持ち越す
     from src.worker_health.models import WorkerBeat
 
     clock = Clock()

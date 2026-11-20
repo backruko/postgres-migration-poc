@@ -19,7 +19,7 @@ order_sync.register()
 # 通知の仕組みの表（アウトボックス・通知）も create_all で作る（まだルーターから読み込まれないため、ここで読み込む）
 import src.domain_events.models  # noqa: E402
 import src.domain_notification.models  # noqa: E402
-import src.worker_health.models  # noqa: E402,F401  (ワーカーの健康の記録 P.4a)
+import src.worker_health.models  # noqa: E402,F401  (ワーカーの健康の記録)
 
 # テスト用 DB のエンジン（ENVIRONMENT=test なので .env.test の URL。CI では環境変数の DATABASE_URL が優先）
 engine = create_engine(settings.database_url)

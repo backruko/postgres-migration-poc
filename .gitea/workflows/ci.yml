@@ -1,4 +1,4 @@
-# 自動チェック（C.2）とデプロイ（C.3）。
+# 自動チェックとデプロイ。
 # - main への push のたびに、チェック（backend・frontend）だけが動く。失敗すると Gitea のコミットと
 #   Actions の画面に赤い印がつく（メールは送らない）
 # - デプロイは手動: Actions の画面でこのワークフローの「Run workflow」を main で押す。押した人がリポジトリの
@@ -13,7 +13,7 @@
 #   frontend … node:24（web のイメージのビルドと同じ Node）
 #   gate     … python:3.14-slim（ボタンのときだけ。押した人と枝を確かめ、版の名前を決める）
 #   deploy   … docker:28-cli。サーバーの Docker のソケットと /srv/ops を同じパスでつなぐ（ランナーの設定で
-#              この 2 つだけを許す。C.4）。同じパスなので deploy/install.sh も compose のパスもそのまま動く
+#              この 2 つだけを許す）。同じパスなので deploy/install.sh も compose のパスもそのまま動く
 #
 # デプロイの流れ（USB の zip と同じ置き場所と同じ install.sh）:
 #   1. このコミットを /srv/ops/releases/ops-<コミットの日付>-<コミット>/ に展開（zip と同じ名前。あれば使い回す）
@@ -24,7 +24,7 @@
 # ソースは actions/checkout（github.com から取ってくる）を使わず、Gitea の API からこのコミットの
 # アーカイブを取る（ジョブごとに Gitea が発行するトークンで読む）。Gitea は同じサーバーにあるので、
 # プロキシの設定があっても通さずに直接つなぐ。
-# pip・npm・イメージは、ふつうはインターネットから直接取る（2026-11-17: 会社のプロキシはたぶん要らない）。
+# pip・npm・イメージは、ふつうはインターネットから直接取る（会社のプロキシはふつう要らない。要るときは deploy/README.md の付録）。
 # プロキシが要るときだけ、HTTP_PROXY / HTTPS_PROXY / NO_PROXY と会社の証明書（PIP_CERT / NODE_EXTRA_CA_CERTS）を
 # ランナーの設定がジョブに渡す（deploy/gitea-runbook.md のプロキシの節）。
 name: checks and deploy
@@ -117,7 +117,7 @@ jobs:
         run: ruff check --no-cache --output-format concise .
 
       # requirements*.txt はすべての依存を版つきで並べている（間接の依存も）ので、ファイルをそのまま調べる（--no-deps）。
-      # 既知の脆弱性が 1 つでもあれば止まる（2026-11-17 の決定: 止める）。直し方は修正版へ上げること。上げられない理由が
+      # 既知の脆弱性が 1 つでもあれば止まる（知らずに弱い版を本番に入れないため）。直し方は修正版へ上げること。上げられない理由が
       # あるときだけ、requirements-audit-ignore.txt に ID と理由を書いて見送る
       # （開発 PC でも同じ: python -m scripts.audit_check。理由の無い見送りの行も赤にする）
       - name: 依存関係の既知の脆弱性（pip-audit）
@@ -198,7 +198,7 @@ jobs:
         working-directory: frontend
         run: npm ci --no-audit --no-fund
 
-      # 画面に入る依存（dependencies）だけを調べ、high 以上で止める（2026-11-17 の決定）。開発用の道具
+      # 画面に入る依存（dependencies）だけを調べ、high 以上で止める。開発用の道具
       # （devDependencies: vite など）は配布物に入らないので止めない。直し方は package.json の版を上げて npm install。
       # 上げられない理由があるときだけ frontend/audit-ignore.txt に勧告の ID と理由を書く（npm audit 自身には一覧が無いので、
       # scripts/audit-check.mjs が npm audit --omit=dev の結果から外す）
@@ -278,7 +278,7 @@ jobs:
     timeout-minutes: 60
     container:
       image: docker:28-cli
-      # サーバーの Docker と /srv/ops を同じパスで（ランナーの valid_volumes でこの 2 つだけを許す。C.4）
+      # サーバーの Docker と /srv/ops を同じパスで（ランナーの valid_volumes でこの 2 つだけを許す）
       options: -v /var/run/docker.sock:/var/run/docker.sock -v /srv/ops:/srv/ops
     defaults:
       run:

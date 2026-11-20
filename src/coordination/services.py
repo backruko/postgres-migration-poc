@@ -59,7 +59,7 @@ def get_sla_report(
     db: Session, from_month: str | None, to_month: str | None, client_code: str | None, scope: ClientScope = ALL_CLIENTS,
 ) -> SlaResponse:
     """
-    SLA の集計（S.1、2026-11-05 の決定）: 顧客 × 締切の月（日本時間）。取消したオーダーは数えない。
+    SLA の集計: 顧客 × 締切の月（日本時間）。取消したオーダーは数えない。
     完了 = 完了（受領）したオーダー、遅れ = そのうち締切後に完了したもの、期限内率 = (完了 − 遅れ) / 完了、
     平均遅れ = 遅れたものだけの平均（分）、未完了の遅れ = まだ完了していないのに締切を過ぎたもの（ほかの数には入れない）。
     期間を省略すると、今月までの 12 か月。オーダーに保存した締切・完了日時だけで計算する（記録はたどらない）。
@@ -120,7 +120,7 @@ def get_sla_report(
 
 def get_attention(db: Session, limit: int = 200, scope: ClientScope = ALL_CLIENTS) -> AttentionResponse:
     """
-    遅れ・まもなくのオーダーの一覧（N.3）。保存した締切・「まもなく」の開始を部分インデックスで引くので、
+    遅れ・まもなくのオーダーの一覧。保存した締切・「まもなく」の開始を部分インデックスで引くので、
     数分おきに読まれても軽い。日付によらない（昨日から遅れているオーダーも出る）。
     """
     now = _now()

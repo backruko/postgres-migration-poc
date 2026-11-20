@@ -25,7 +25,7 @@ class BizMasterBase(BaseModel):
         return v.upper() if v else v
 
 class BizMasterCreate(BizMasterBase):
-    # 省略すると顧客の次の空き番号（削除された業務の番号も使い回さない）。業務コードは作成後に変えられない（M1.1）
+    # 省略すると顧客の次の空き番号（削除された業務の番号も使い回さない）。業務コードは作成後に変えられない
     business_seq: int | None = Field(None, gt=0, le=9999, description="sequence num 1-9999; omit for the client's next free number")
 
 class BizMasterUpdate(BaseModel):
@@ -36,7 +36,7 @@ class BizMasterUpdate(BaseModel):
     release_mode: ReleaseMode | None = Field(None, description="MANUAL_APPROVAL or AUTOMATIC")
     release_time: time | None = Field(None, description="automatic release time of day (JST)")
     release_days_before: int | None = Field(None, ge=0, le=30, description="automatic release N days before the scheduled day")
-    # 顧客側の出来事（Phase 7）。AUTOMATIC は LIGHTWEIGHT のみ・signal_type 必須（null で解除）
+    # 顧客側の出来事。AUTOMATIC は LIGHTWEIGHT のみ・signal_type 必須（null で解除）
     execution_type: ExecutionType | None = Field(None, description="SOP (steps) or LIGHTWEIGHT (client-side event, no steps)")
     completion_mode: CompletionMode | None = Field(None, description="MANUAL (operator marks received) or AUTOMATIC (signal)")
     signal_type: str | None = Field(None, min_length=1, max_length=50, description="signal type that completes the orders (AUTOMATIC only)")
@@ -73,7 +73,7 @@ class BizMasterResponse(BizMasterBase):
 # 📊 SOPVersion Schemas
 # ==========================================
 class SOPVersionCreate(BaseModel):
-    # 💡 ユーザー自身に自由に入力してもらう（例として見本を提示）
+    # ユーザー自身に自由に入力してもらう（例として見本を提示）
     version_tag: str = Field(
         ...,
         examples=["v1.1.0", "v2.0.0-draft-teamA"],
@@ -92,10 +92,10 @@ class SOPVersionCreate(BaseModel):
         return v
 
 class SOPVersionUpdate(SOPVersionCreate):
-    """草稿のタグの変更（M2.2。承認済みの版は変えられない）。形式の確認は SOPVersionCreate と同じ"""
+    """草稿のタグの変更（承認済みの版は変えられない）。形式の確認は SOPVersionCreate と同じ"""
 
 class SOPVersionScheduleIn(BaseModel):
-    """草稿の承認（M2.1）: この日の 0:00（日本時間）から有効にする。明日以降"""
+    """草稿の承認: この日の 0:00（日本時間）から有効にする。明日以降"""
     model_config = ConfigDict(str_strip_whitespace=True)
 
     effective_date: date = Field(..., description="first day (JST) the version applies to; tomorrow or later")
@@ -108,7 +108,7 @@ class SOPVersionScheduleIn(BaseModel):
 
 
 class BizReleaseUpdate(BaseModel):
-    """業務のリリース設定だけの変更（P.3。リリース担当・業務管理者）: 送った項目だけ変える。ほかの項目は受け付けない"""
+    """業務のリリース設定だけの変更（リリース担当・業務管理者）: 送った項目だけ変える。ほかの項目は受け付けない"""
     model_config = ConfigDict(extra="forbid")
 
     release_mode: ReleaseMode | None = Field(None, description="MANUAL_APPROVAL or AUTOMATIC")
@@ -133,7 +133,7 @@ class BizReleaseValues(BaseModel):
 
 
 class BizReleaseChangeResponse(BaseModel):
-    """リリース設定の変更 1 件（P.3）"""
+    """リリース設定の変更 1 件"""
     id: int
     biz_master_id: int
     changed_by_id: int | None
@@ -144,7 +144,7 @@ class BizReleaseChangeResponse(BaseModel):
 
 
 class SOPVersionReject(BaseModel):
-    """依頼された草稿の差し戻し（P.2）: 理由は必須"""
+    """依頼された草稿の差し戻し: 理由は必須"""
     model_config = ConfigDict(str_strip_whitespace=True)
 
     reason: str = Field(..., min_length=1, max_length=500, description="why the draft is sent back (required)")
@@ -158,13 +158,13 @@ class SOPVersionResponse(BaseModel):
     state: SopState = Field(description="draft / scheduled (approved, not yet in effect) / current / past, from the dates")
     effective_at: datetime | None
     expired_at: datetime | None = Field(description="end (exclusive): the next version's effective_at")
-    # P.2: 誰が作った・直した・承認を依頼した（この機能より前の版は null）
+    # 誰が作った・直した・承認を依頼した（この機能より前の版は null）
     created_by_id: int | None = Field(default=None, description="staff who created the version (null before 2026-11-11)")
     updated_by_id: int | None = Field(default=None, description="staff who last changed the draft")
     updated_at: datetime | None = Field(default=None, description="when the draft was last changed")
     submitted_by_id: int | None = Field(default=None, description="staff who asked for approval (only while it waits)")
     submitted_at: datetime | None = Field(default=None, description="when approval was asked for (only while it waits)")
-    # P.3: 名前（版を返す API はすべて付ける。職員が見つからなければ null）
+    # 名前（版を返す API はすべて付ける。職員が見つからなければ null）
     created_by_name: str | None = None
     updated_by_name: str | None = None
     submitted_by_name: str | None = None
@@ -173,7 +173,7 @@ class SOPVersionResponse(BaseModel):
 
 
 class SOPVersionEventResponse(BaseModel):
-    """SOP の版の記録 1 件（P.3）"""
+    """SOP の版の記録 1 件"""
     id: int
     event_type: SOPVersionEventType
     actor_id: int | None
@@ -193,7 +193,7 @@ class SubmittedSOPDraftCount(BaseModel):
 
 
 class SubmittedSOPDraftResponse(BaseModel):
-    """承認を依頼された SOP の草稿（承認待ちの一覧の 1 行。P.3）"""
+    """承認を依頼された SOP の草稿（承認待ちの一覧の 1 行）"""
     version_id: int
     version_tag: str
     biz_master_id: int
@@ -261,7 +261,7 @@ class SOPStepTemplateResponse(BaseModel):
     is_blocking: bool
 
 class SOPStepTemplateUpdate(BaseModel):
-    """草稿のステップの変更（送った項目だけ変わる。M2.2）。番号は並べ替え（SOPStepOrderIn）で変える"""
+    """草稿のステップの変更（送った項目だけ変わる）。番号は並べ替え（SOPStepOrderIn）で変える"""
     model_config = ConfigDict(str_strip_whitespace=True)
 
     title: str | None = Field(None, min_length=1, max_length=100)
@@ -288,7 +288,7 @@ class SOPVersionDetailResponse(SOPVersionResponse):
 
 
 # ==========================================
-# 業務間の依存関係（Phase 6）
+# 業務間の依存関係
 # ==========================================
 class BizDependencyCreate(BaseModel):
     """この業務（下流）が、upstream_biz_id の業務（上流）を待つ"""

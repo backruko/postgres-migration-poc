@@ -1,9 +1,9 @@
 # tests/test_order_sync_batching.py
 """
-オーダーの追従は、発生枠の数に比例して問い合わせを増やさない（2026-11-11、承認が 10 秒かかった件の回帰テスト）。
+オーダーの追従は、発生枠の数に比例して問い合わせを増やさない（2 年先まで作ったテンプレートの承認が 10 秒かかったことの回帰テスト）。
 - テンプレートの時刻の変更で 400 枠が動いても、文の数は枠の数に比例しない（以前は 1 枠に 3 文: 1,200 文以上）
 - 同じ日付・同じシート日付のつながりは、時刻だけが動いても変わらない（読み直さない）。つながりはそのまま残る
-- 「直前の上流」（予定開始で突き合わせる）のつながりは、時刻が動いた数百のオーダーでもまとめて直す（2026-11-12）
+- 「直前の上流」（予定開始で突き合わせる）のつながりは、時刻が動いた数百のオーダーでもまとめて直す
 ※ 顧客コードの先頭文字は空きがないため "I" を共有する
 """
 import uuid
@@ -247,7 +247,7 @@ def test_a_time_change_with_latest_before_relinks_hundreds_of_orders_with_a_hand
         plan_services.update_template(db, changed, PlanTemplateUpdate(start_time=new_time))
 
     db.expire_all()
-    # 直前の上流（L.2）: 下流の予定開始以前で最新の上流のオーダー。取消済みも候補（人が判断するまで待つ）。
+    # 直前の上流: 下流の予定開始以前で最新の上流のオーダー。取消済みも候補（人が判断するまで待つ）。
     # 同じ時刻なら id の大きいもの
     ups = sorted(db.scalars(select(OpeOrder).where(OpeOrder.template_id == upstream)), key=lambda o: (o.scheduled_start, o.id))
     # 時刻の変更で取り消された上流は無い（範囲の最後の日の枠も動く: 生成済みの範囲の境目 9:00 をまたいでも）

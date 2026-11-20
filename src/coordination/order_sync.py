@@ -12,7 +12,7 @@ plan がコミットする直前に、変更された発生枠の一覧を受け
 | 枠が消えた（システム）    | システムが取消   | 矛盾フラグ      | 矛盾フラグ             | 影響なし    |
 | 新しい枠                 | 新しい pending オーダー（今以降の予定のみ）                                  |
 
-※ 2026-11-10: 完了したオーダーの枠は、plan の側でも動かさない（予定ごと今のまま残す）。作業中のオーダーの枠は、
+※ 完了したオーダーの枠は、plan の側でも動かさない（予定ごと今のまま残す）。作業中のオーダーの枠は、
 テンプレートの変更では動かさず矛盾フラグも立てない（work_started_slots。休日・シートの日付の変更ではこの表のとおり）。
 取消されたオーダーは履歴として残り、同じ枠が戻ったときは新しいオーダーを作ります。
 オーダーの作成・取消・ルール上の日付の変更のたびに、業務間の依存関係の定義からオーダー同士のつながりを直します
@@ -50,7 +50,7 @@ FOLLOWING = (OrderStatus.PENDING, OrderStatus.READY, OrderStatus.ON_HOLD)
 
 def register() -> None:
     """
-    plan の発生枠の変更・biz の依存関係の定義の変更の受け手、顧客の無効化・業務の削除の前の確認（M1.1）として
+    plan の発生枠の変更・biz の依存関係の定義の変更の受け手、顧客の無効化・業務の削除の前の確認として
     登録します（何度呼んでも1回だけ登録される）。
     """
     register_slot_listener(apply_slot_changes)
@@ -62,7 +62,7 @@ def register() -> None:
 
 def work_started_slots(db: Session, template_id: int, lower: datetime, upper: datetime, reason: VoidReason) -> set[SimpleSlot]:
     """
-    plan の再照合で、今の予定のまま残す発生枠（2026-11-10 の決定）:
+    plan の再照合で、今の予定のまま残す発生枠:
     - オーダーが完了している枠: どの理由の再照合でも残す。終わった作業の予定は動かさない
       （動かすと、完了したオーダーが古い予定に残り、動いた先の予定にはオーダーが付かず、リリースも取消もできない行になる）
     - オーダーが作業中の枠: テンプレートの変更のときは残す（矛盾フラグも立てない。そのオーダーにとっては何も変わらないため）。
@@ -87,7 +87,7 @@ def work_started_slots(db: Session, template_id: int, lower: datetime, upper: da
 
 def apply_template_deadline_change(db: Session, template: PlanTemplate) -> None:
     """
-    テンプレートの締切の設定が変わった: リリース前のオーダーだけ、新しい決め方を写して締切を計算し直す（N.3、2026-11-05 の決定）。
+    テンプレートの締切の設定が変わった: リリース前のオーダーだけ、新しい決め方を写して締切を計算し直す。
     リリース後（準備済み・作業中・完了）と取消済みのオーダーは、作成時（リリース前の最後の写し直し）の決め方のまま。
     """
     for order in ope_order_repo.get_unreleased_of_template(db, template_id=template.id):

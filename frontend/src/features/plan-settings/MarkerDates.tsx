@@ -49,7 +49,7 @@ export function MarkerDates({ sheet, marker, today, canEdit, onChanged }: Props)
   const [showPast, setShowPast] = useState(false);
   // 追加・変更モーダル（event が null なら追加）。閉じる間の表示が切り替わらないよう、閉じても対象は残す
   const [editor, setEditor] = useState<{ open: boolean; event: ReferenceSheetEvent | null }>({ open: false, event: null });
-  // 年のカレンダーで日付をまとめて足す・消す（E.4。「日付を追加」の代わり）
+  // 年のカレンダーで日付をまとめて足す・消す（「日付を追加」の代わり）
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const run = async (action: () => Promise<unknown>, done: string) => {

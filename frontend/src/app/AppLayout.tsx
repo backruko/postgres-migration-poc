@@ -45,10 +45,10 @@ const STAFF_PATH = "/settings/staff";
 /** 承認待ちの画面（業務管理者には件数のバッジを付ける） */
 const APPROVALS_PATH = "/settings/approvals";
 
-/** 日次ダッシュボード（届かなかったアラームがあれば、どの画面からも見える赤い件数を付ける。N.4b-2） */
+/** 日次ダッシュボード（届かなかったアラームがあれば、どの画面からも見える赤い件数を付ける） */
 const DAILY_PATH = "/daily";
 
-/** ワーカーの状態（動いていなければ、どの画面からも見える赤い印を付ける。P.4c） */
+/** ワーカーの状態（動いていなければ、どの画面からも見える赤い印を付ける） */
 const WORKER_PATH = "/reports/worker";
 
 /** 今開いている設定の画面（無ければ undefined） */
@@ -57,7 +57,7 @@ export function currentSettingsPage(pathname: string): Page | undefined {
 }
 
 /**
- * 全画面共通のレイアウト（上部のナビゲーション + 各画面）。ログインしていなければログイン画面へ移す（LG.3）。
+ * 全画面共通のレイアウト（上部のナビゲーション + 各画面）。ログインしていなければログイン画面へ移す。
  * 仮パスワードのままなら、パスワードを変えるまでほかの画面は出さない（バックエンドも 403 にする）。
  */
 export function AppLayout() {
@@ -73,7 +73,7 @@ export function AppLayout() {
   const to = (p: Page) => ({ pathname: p.path, search: lastSearch.current[p.path] ?? "" });
 
   // 承認待ちの件数（業務管理者だけ。決めた直後と 2 分ごとに読み直す）。ほかの人には出さない（読まない）。
-  // テンプレートの下書きと、承認を依頼された SOP の草稿の合計（P.4）
+  // テンプレートの下書きと、承認を依頼された SOP の草稿の合計
   const isAdmin = templateWriteMode(me.data) === "direct";
   const pending = usePendingDraftCount(isAdmin);
   const pendingSop = useSubmittedSopDraftCount(isAdmin);

@@ -1,6 +1,6 @@
 # tests/test_parallel_run_check.py
 """
-並行稼働の事前確認（scripts/parallel_run_check.py。P.5a）のテスト。読むだけ（何も変えない）。
+並行稼働の事前確認（scripts/parallel_run_check.py）のテスト。読むだけ（何も変えない）。
 テスト用 DB のほかのルール・キーと混ざらないよう、同じトランザクションの中で無効にしてから確かめる（終わりに取り消す）。
 - メール: SMTP_HOST が空なら NG。期待する値と違えば NG
 - 知らせない時間帯: 有効なルールすべてが 22:00〜07:00・終わってから知らせる

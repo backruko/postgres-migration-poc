@@ -1,6 +1,6 @@
 # tests/test_master_data.py
 """
-顧客・業務のマスタ（M1.1）のテスト: 顧客の登録・一覧（無効を含む / 含まない）・名前の変更（コードは変えられない）・
+顧客・業務のマスタのテスト: 顧客の登録・一覧（無効を含む / 含まない）・名前の変更（コードは変えられない）・
 無効 / 有効（有効な業務が残る間は無効にできない。無効な顧客には業務・シートを作れず、業務を復元できない）、
 業務の連番の自動採番（削除された業務の番号も使い回さない）、業務の削除の確認（依存関係・テンプレート・未完了の
 オーダー）、業務の一覧の絞り込み。顧客・業務の書き込みは業務管理者のみ（ガードの目印で確認）。
@@ -238,4 +238,4 @@ def test_client_writes_need_admin_and_the_list_stays_open():
 
     get_op = app.openapi()["paths"]["/clients/"]["get"]
     names = {p["name"] for p in get_op.get("parameters", [])}
-    assert "include_inactive" in names and needs_login(get_op)  # 一覧はロールを問わない（ログインは必要。LG.2）
+    assert "include_inactive" in names and needs_login(get_op)  # 一覧はロールを問わない（ログインは必要）

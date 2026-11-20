@@ -1,6 +1,6 @@
 # tests/test_schedule_feed.py
 """
-mfa への作業の開始の時刻表（GET /ops/schedule-feed。並行稼働 P.1）のテスト。
+mfa への作業の開始の時刻表（GET /ops/schedule-feed。並行稼働）のテスト。
 - 時刻は予定の開始。開始の順。窓は from から days 日先まで（タイムゾーンのない from は日本時間）
 - 分類: 既定は不定期・スペシャルだけ（定例は出ない）。categories で変えられる。未設定の分類は定例。臨時の追加はスペシャル
 - 状態: 未リリース・リリース済だけ。取消・保留・作業中・完了は出ない

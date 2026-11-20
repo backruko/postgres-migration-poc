@@ -1,7 +1,7 @@
 """
 操作している職員の特定と、ロールによる権限の判定。
 
-操作する職員はログインのセッション（Cookie ops_session。LG.2）で決まります。X-Staff-Id ヘッダーは廃止しました。
+操作する職員はログインのセッション（Cookie ops_session）で決まります。X-Staff-Id ヘッダーは廃止しました。
 機械（信号を送るスクリプト・アラートを読むアダプター）は API キー（Authorization: Bearer ops_...）を使います。キーは、
 その職員の機械用のロールに許された呼び出し（API_KEY_ROUTES_BY_ROLE）でだけ通ります。
 すべての API は require_login（main.py でルーターごとに付ける）でログインを求めます。仮パスワードのままの職員は、
@@ -43,10 +43,10 @@ _GUARD_PARAM = "_require_roles_current_staff"
 
 SESSION_COOKIE = "ops_session"
 # API キー（Authorization: Bearer）で呼べるエンドポイント（メソッド, パス）を、機械用のロールごとに。
-# キーは、その職員が持つロールのどれかに許された呼び出しでだけ通る（それ以外は 401。2026-11-12: 読み取り専用のキー）
+# キーは、その職員が持つロールのどれかに許された呼び出しでだけ通る（それ以外は 401）
 API_KEY_ROUTES_BY_ROLE: dict[RoleCode, frozenset[tuple[str, str]]] = {
     RoleCode.SIGNAL_SENDER: frozenset({("POST", "/ope/signals")}),
-    # mfa のアダプターなど: 日々のアラート（まもなく・遅れ）、これから始める作業の時刻表（並行稼働 P.1）、日次の状況を読む。
+    # mfa のアダプターなど: 日々のアラート（まもなく・遅れ）、これから始める作業の時刻表（並行稼働）、日次の状況を読む。
     # キーが通るかの確認に自分の情報
     RoleCode.SYSTEM_AGENT: frozenset({
         ("GET", "/ops/attention"), ("GET", "/ops/schedule-feed"), ("GET", "/ops/daily"), ("GET", "/staff/me"),

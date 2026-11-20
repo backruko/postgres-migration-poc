@@ -1,6 +1,6 @@
 # tests/test_template_preview.py
 """
-テンプレートの変更の、保存の前の確認（POST /ops/templates/{id}/preview。Level 1、P.1）。
+テンプレートの変更の、保存の前の確認（POST /ops/templates/{id}/preview）。
 - 確認の結果は、実際に保存したときの結果と同じ（予定の違い・オーダーへの影響。人が変更・取消した日は残る）
 - 確認は何も保存しない
 """
@@ -285,7 +285,7 @@ def test_dry_run_refuses_a_commit_and_rolls_back(db, biz_id):
 
 
 # ==========================================
-# 新しいテンプレートの確認（P.2）
+# 新しいテンプレートの確認
 # ==========================================
 def new_template(biz_id, **kwargs) -> RRuleTemplateCreate:
     data = dict(
@@ -349,8 +349,8 @@ def test_preview_endpoints_need_a_login_and_releaser_or_admin_while_saving_stays
         op = paths[path]["post"]
         assert needs_login(op) and {"401", "403"} <= set(op["responses"]), path
     routes = [r for r in router.routes if isinstance(r, APIRoute) and r.path.endswith("/preview")]
-    assert len(routes) == 3  # 作成・変更の確認と、下書きの確認（Level 2、D.4）
-    # 確認は何も保存しないので、リリース担当にも開く（2026-11-10）
+    assert len(routes) == 3  # 作成・変更の確認と、下書きの確認
+    # 確認は何も保存しないので、リリース担当にも開く
     for route in routes:
         assert set(getattr(route.endpoint, "__required_roles__")) == {RoleCode.RELEASER, RoleCode.ADMIN}, route.path
 
@@ -407,7 +407,7 @@ def test_a_slot_that_already_started_today_is_not_generated_again(db, biz_id, mo
 
 
 # ==========================================
-# 作業が終わった・始まった発生枠は、テンプレートを変えても動かさない（2026-11-10）
+# 作業が終わった・始まった発生枠は、テンプレートを変えても動かさない
 # ==========================================
 def finish(db, order):
     order = db.get(OpeOrder, order.id)

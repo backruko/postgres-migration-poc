@@ -30,7 +30,7 @@ def _get_staff(db: Session, staff_id: int) -> StaffUser:
 
 def _check_machine_only(codes: list[RoleCode], staff: StaffUser | None = None) -> None:
     """
-    system_agent（読み取りの API キー用）は機械用のアカウントだけ（2026-11-12）: ほかに持てるのは signal_sender だけで、
+    system_agent（読み取りの API キー用）は機械用のアカウントだけ: ほかに持てるのは signal_sender だけで、
     パスワードのある（画面にログインできる）アカウントには付けられない。キーが漏れても読み取りより先へ進めないようにする。
     """
     if RoleCode.SYSTEM_AGENT not in codes:
@@ -164,7 +164,7 @@ def set_staff_status(db: Session, staff_id: int, status: StaffStatus, actor: Sta
 
 
 # ==========================================
-# ログイン・パスワード・API キー（LG.2）
+# ログイン・パスワード・API キー
 # ==========================================
 
 

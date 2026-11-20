@@ -22,7 +22,7 @@ interface Props {
 const ALL = "__all__";
 
 /**
- * 宛先を作る・直す（N.5c）。届け方は今はメールだけ。担当顧客が限られた業務管理者は、自分の顧客の宛先だけ
+ * 宛先を作る・直す。届け方は今はメールだけ。担当顧客が限られた業務管理者は、自分の顧客の宛先だけ
  * （「全顧客」は選べない）。アドレスを直すと、まだ再試行中の配信も新しいアドレスへ送る。
  */
 export function DestinationFormModal({ open, destination, me, onClose, onSaved }: Props) {

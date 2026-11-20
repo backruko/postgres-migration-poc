@@ -11,7 +11,7 @@ interface Props {
 }
 
 /**
- * 出来事から作った通知（N.5d）。出来事の行を開いたときに読む（通知の記録を event_id で絞る。出来事の側は通知を知らない）。
+ * 出来事から作った通知。出来事の行を開いたときに読む（通知の記録を event_id で絞る。出来事の側は通知を知らない）。
  * まだ処理していない出来事には、何もない。
  */
 export function EventAlarms({ eventId, onOpenInLog }: Props) {

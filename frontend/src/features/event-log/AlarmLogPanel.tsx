@@ -62,7 +62,7 @@ function LogEntryDetailView({ entry }: { entry: LogEntry }) {
 }
 
 /**
- * 通知の記録（N.5d）。出来事のページの「通知」タブ。どの出来事から・どのルールで・どの宛先へ・何回目にどのアドレスへ送り、
+ * 通知の記録。出来事のページの「通知」タブ。どの出来事から・どのルールで・どの宛先へ・何回目にどのアドレスへ送り、
  * どうなったかを新しい順に。絞り込みは URL の ?tab=alarms&status=&kind=&client=&event=&from=&to= に保持する。
  */
 export function AlarmLogPanel() {

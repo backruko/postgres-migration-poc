@@ -1,4 +1,4 @@
-// マーカーの日付を年のカレンダーで足す・消す（E.4、2026-11-11）。UI から独立した純粋な処理。
+// マーカーの日付を年のカレンダーで足す・消す。UI から独立した純粋な処理。
 // 日をクリックすると、保存前の変更（足す / 消す）に入る・外れる。保存は 1 回（まとめての API）。最終的な判定はバックエンド。
 import type { ReferenceSheet, ReferenceSheetEvent, ReferenceSheetMarker } from "../../domain/plan/types";
 

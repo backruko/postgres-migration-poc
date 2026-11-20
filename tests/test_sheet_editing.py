@@ -1,6 +1,6 @@
 # tests/test_sheet_editing.py
 """
-年間計画シートの編集（E.1、2026-11-11）。
+年間計画シートの編集。
 - シートの名前・期間: 名前は同じ顧客で重複不可。期間を延ばすとルールのマーカーが新しい期間まで作り、参照する
   テンプレートの予定も直る。縮めるのは、外に残る日付（取り込み・人の日付）が無いときだけ（ルールの未来の日付は消える）
 - マーカーの名前の変更: 参照するテンプレート（削除済みも）が同じ名前に変わり、予定は動かない。業務管理者の操作は
@@ -221,7 +221,7 @@ def test_a_used_marker_cannot_be_deleted_and_an_unused_one_goes_with_its_dates(d
     with pytest.raises(BusinessException) as exc:
         plan.delete_marker(db, world["sheet"], "受領")
     assert code_of(exc) == ErrorCode.DELETE_FAILED_RECORD_IN_USE and f"#{template_id}" in exc.value.message
-    # 画面が日本語で書くための理由（S.1）: 参照しているテンプレートの ID と名前
+    # 画面が日本語で書くための理由: 参照しているテンプレートの ID と名前
     name = db.get(PlanTemplate, template_id).name
     assert exc.value.details == {
         "marker": "受領", "templates": [{"id": template_id, "name": name}], "deleted_templates": [], "draft_change_ids": [],
@@ -250,7 +250,7 @@ def test_a_used_marker_cannot_be_deleted_and_an_unused_one_goes_with_its_dates(d
 
 
 # ==========================================
-# まとめての日付の変更（E.2）
+# まとめての日付の変更
 # ==========================================
 from src.domain_plan.models import PlanInstanceVoid, ReferenceSheetEvent  # noqa: E402
 from src.domain_plan.schemas import ReferenceSheetEventsBatch  # noqa: E402
@@ -331,7 +331,7 @@ def test_a_batch_recalculates_templates_once_and_ends_like_single_calls(db, worl
 
 
 # ==========================================
-# エラーの details（S.1）: あるときだけ応答に入る
+# エラーの details: あるときだけ応答に入る
 # ==========================================
 def test_business_error_body_has_details_only_when_given():
     import asyncio

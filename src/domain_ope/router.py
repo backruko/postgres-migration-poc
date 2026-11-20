@@ -23,7 +23,7 @@ from src.domain_staff.models import RoleCode, StaffUser
 
 router = APIRouter(prefix="/ope", tags=["ope"])
 
-# 誰が操作できるか（2026-10-28 / 10-30 の決定）
+# 誰が操作できるか
 OPERATOR = [RoleCode.OPERATOR]
 HOLDERS = [RoleCode.OPERATOR, RoleCode.RELEASER, RoleCode.ADMIN]
 PRIVILEGED = [RoleCode.RELEASER, RoleCode.ADMIN]  # リリース・SOP バージョンの指定・取消・矛盾の解決
@@ -167,7 +167,7 @@ def reject_step_endpoint(step_id: int, body: OrderReasonIn, db: Session = Depend
 
 
 # ==========================================
-# SOP バージョンの影響（M2.3。承認の画面が承認前に見せる）
+# SOP バージョンの影響（承認の画面が承認前に見せる）
 # ==========================================
 
 @router.get("/sop-impact", response_model=SopImpactResponse, responses=RESPONSES, dependencies=[BIZ_IN_SCOPE])
@@ -187,7 +187,7 @@ def sop_impact_endpoint(
 
 
 # ==========================================
-# Signal（顧客側の出来事の信号。Phase 7）
+# Signal（顧客側の出来事の信号）
 # ==========================================
 
 @router.get("/signals", response_model=list[SignalResponse], responses=RESPONSES)

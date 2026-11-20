@@ -1,11 +1,11 @@
 """
-通知のドメイン（N.1、2026-11-12）: だれに（宛先）、何を（ルール）、知らせたか（通知と、宛先ごとの配信）。
+通知のドメイン: だれに（宛先）、何を（ルール）、知らせたか（通知と、宛先ごとの配信）。
 
 - NotificationDestination: 知らせる先（チャネル + 宛先）。最初はメールだけ。秘密（パスワードなど）は持たず、その在りかの名前だけ
 - NotificationRule: どの出来事を、どの顧客・業務について、どの宛先に、どの文面で知らせるか（rule_destination で宛先を選ぶ）
 - Notification: 1 件のアラート（出来事 × ルール）。同じルールで同じ事実（dedupe_key）は 1 回だけ
 - NotificationDelivery: 宛先ごとの配信（試みた回数・次の試み・最後の失敗）。同じ宛先には 1 回だけ届ける
-ルール・宛先は、だれがいつ作り・変えたかを持ち、論理削除する（通知の記録がルール・宛先を指し続けるため。2026-11-12）。
+ルール・宛先は、だれがいつ作り・変えたかを持ち、論理削除する（通知の記録がルール・宛先を指し続けるため）。
 文面は当面コードにある（template_code で選ぶ）。出来事は src/domain_events の domain_event（アウトボックス）。
 """
 import enum
@@ -21,7 +21,7 @@ from sqlalchemy.sql import func
 
 from src.core.mixin import SoftDeleteMixin
 # 作った・変えた職員（staff_user）への外部キーを解決するため、職員の表を必ず読み込む。ワーカーやスクリプトのように
-# ルーターを読まないプロセスでも、ルール・宛先を書けるように（N.3a で見つけた: 読み込まないと書くときに失敗する）
+# ルーターを読まないプロセスでも、ルール・宛先を書けるように（読み込まないと書くときに失敗する）
 import src.domain_staff.models  # noqa: F401
 from src.infrastructure.database import Base
 
@@ -55,7 +55,7 @@ class DeliveryStatus(str, enum.Enum):
 
 
 class _WhoAndWhen:
-    """設定（ルール・宛先）を、だれがいつ作り・変えたか（2026-11-12: 変更前後の履歴は後で足す）"""
+    """設定（ルール・宛先）を、だれがいつ作り・変えたか（変更前後の履歴はまだ持たない）"""
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("staff_user.id", ondelete="SET NULL"), comment="作った職員")
     updated_at: Mapped[datetime] = mapped_column(
@@ -146,7 +146,7 @@ class Notification(Base):
     event_id: Mapped[int] = mapped_column(
         ForeignKey("domain_event.id", ondelete="RESTRICT"), nullable=False, index=True, comment="もとの出来事"
     )
-    # 空 = 宛先のテスト送信（N.5a）。ルールを通さず、頼まれた宛先だけに送る（届かなかったアラームの帯には出さない）
+    # 空 = 宛先のテスト送信。ルールを通さず、頼まれた宛先だけに送る（届かなかったアラームの帯には出さない）
     rule_id: Mapped[int | None] = mapped_column(
         ForeignKey("notification_rule.id", ondelete="RESTRICT"), comment="当てはまったルール（空 = 宛先のテスト送信）"
     )
@@ -161,7 +161,7 @@ class Notification(Base):
     link: Mapped[str | None] = mapped_column(String(500), comment="画面へのリンク（例: そのオーダーの日次ダッシュボード）")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="配信が終わった日時（成功・失敗とも）")
-    # 届かなかったアラームを、職員が「確認した」（N.4b、2026-11-12）。確認するまで日次ダッシュボードに出続ける
+    # 届かなかったアラームを、職員が「確認した」。確認するまで日次ダッシュボードに出続ける
     failure_acknowledged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), comment="届かなかったことを職員が確認した日時（failed / partly_failed のときだけ）"
     )
@@ -233,8 +233,8 @@ class NotificationDelivery(Base):
 
 class NotificationDeliveryAttempt(Base):
     """
-    配信の 1 回ごとの試み（N.5b、2026-11-12）。送ったときのアドレスを残す: 宛先のアドレスを直すと再試行は新しいアドレスに
-    送るので（2026-11-12 の決定）、どの回がどこへ送ったかを、後から確かめられるように。追記だけ
+    配信の 1 回ごとの試み。送ったときのアドレスを残す: 宛先のアドレスを直すと再試行は新しいアドレスに
+    送るので、どの回がどこへ送ったかを、後から確かめられるように。追記だけ
     """
     __tablename__ = "notification_delivery_attempt"
 

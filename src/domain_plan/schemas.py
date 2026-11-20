@@ -148,7 +148,7 @@ class ReferenceSheetCreate(BaseModel):
 
 class ReferenceSheetUpdate(BaseModel):
     """
-    シートの名前・期間の変更（E.1、2026-11-11。業務管理者）。送った項目だけ変える。
+    シートの名前・期間の変更（業務管理者）。送った項目だけ変える。
     期間はいつでも延ばせる（ルールで日付を作るマーカーは新しい期間まで作る）。縮めるのは、新しい期間の外に残る日付が
     無いときだけ（あれば 400 で日付を挙げる。取り込みと同じ規則）。
     """
@@ -203,7 +203,7 @@ class ReferenceSheetMarkerUpdate(BaseModel):
     """
     rule: 指定するとルールを置き換えて再生成（手動の日付は維持）。null で生成をやめ、今ある日付をそのまま残す。
     cancel_future_dates: 生成をやめる（rule: null）と同時に、今日以降の日付をすべて取り消す（業務が終わった場合）。
-    name: マーカーの名前を変える（E.1）。参照しているテンプレートも同じ名前に変わる（日付は変わらない）。
+    name: マーカーの名前を変える。参照しているテンプレートも同じ名前に変わる（日付は変わらない）。
     """
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -229,7 +229,7 @@ class ReferenceSheetEventsCreate(BaseModel):
 
 
 class ReferenceSheetEventsBatch(BaseModel):
-    """マーカーの日付をまとめて足す・消す（E.2）。少なくとも 1 件。1 回で最大 2,000 件ずつ"""
+    """マーカーの日付をまとめて足す・消す。少なくとも 1 件。1 回で最大 2,000 件ずつ"""
     model_config = ConfigDict(extra="forbid")
 
     add: list[date] = Field(default_factory=list, max_length=2000, description="dates to add (from today on, inside the period)")
@@ -383,7 +383,7 @@ class ReferenceSheetImportResult(BaseModel):
 
 # ==========================================
 # PlanTemplate
-# 0. 締切（N.1）: 決め方ごとに必要な項目
+# 0. 締切: 決め方ごとに必要な項目
 # ==========================================
 DEADLINE_FIELDS = ("deadline_mode", "deadline_offset_minutes", "deadline_time", "deadline_day_offset", "warn_before_minutes")
 
@@ -582,7 +582,7 @@ class PlanTemplateUpdate(BaseModel):
     # 表示用（null でクリア。部分マージではなく全体を置き換えます）
     ui_metadata: UIMetadata | None = None
 
-    # 開始時刻に知らせる（生成には影響しない。並行稼働 P.1）
+    # 開始時刻に知らせる（生成には影響しない。並行稼働）
     start_prompt: bool | None = None
 
     # 締切（生成には影響しない）。決め方を変えると、使わない項目はサービスで空にする
@@ -608,7 +608,7 @@ class ExplicitDatesAdd(BaseModel):
 
 
 # ==========================================
-# テンプレートの変更依頼（下書き → 承認 → 反映。Level 2）
+# テンプレートの変更依頼（下書き → 承認 → 反映）
 # 本文は kind で判別: 新規作成 / 変更（項目 + 指定日）/ 削除。中身は直接の保存と同じ本文
 # ==========================================
 class TemplateCreateDraft(BaseModel):

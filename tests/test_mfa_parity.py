@@ -1,6 +1,6 @@
 # tests/test_mfa_parity.py
 """
-新旧 mfa.txt の照合（adapters/mfa/parity_report.py。並行稼働 P.3a）のテスト。DB は使わない。
+新旧 mfa.txt の照合（adapters/mfa/parity_report.py。並行稼働）のテスト。DB は使わない。
 旧の行は、いまの mfa.txt の実物の形（命令の後ろの空白の数がばらばら、全角空白と「※」の付け足し、Shell・Mplay の行）。
 - 一致: 同じ顧客・同じ作業・開始の差 3 分以内（日付をまたいでも）。1 対 1（同じ作業が 2 回なら 2 つの対応が要る）
 - 時刻ずれ・欠け → NG（欠けには同じ顧客・同じ時刻の新の行を候補として出す）。余り → 要確認（NG にしない）
@@ -157,7 +157,7 @@ def test_main_writes_csv_and_summary_and_returns_exit_codes(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 毎晩の写しと期間のまとめ（P.3c）
+# 毎晩の写しと期間のまとめ
 # ---------------------------------------------------------------------------
 def _msg(day: int, task: str, hhmm: str = "09:41") -> bytes:
     return f"26/09/{day:02d} {hhmm} Msg    【EFGH】{task}を【11時まで】に実施してください\r\n".encode("cp932")
@@ -256,7 +256,7 @@ def test_rollup_recompares_every_night_with_todays_aliases(tmp_path):
 
 
 # ==========================================
-# 照合の結果をまるごと固定する（R.6 で compare を分ける前に。分けた後も同じ結果になること）
+# 照合の結果をまるごと固定する（compare を分ける前に。分けた後も同じ結果になること）
 # ==========================================
 SNAPSHOT_OLD = "\r\n".join([
     r"26/09/16 09:00 Mplay  Repeat E:\sound\a.wav",                       # 1 同じ分に Msg がある音（一覧に出ない）

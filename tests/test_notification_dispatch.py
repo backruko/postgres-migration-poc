@@ -1,6 +1,6 @@
 # tests/test_notification_dispatch.py
 """
-通知の振り分け（通知の仕組み N.3a）のテスト。
+通知の振り分け（通知の仕組み）のテスト。
 - 当てはまるルールごとに通知 1 件・宛先ごとに配信（待ち）。出来事は処理済み。同じ事実から 2 通目は出ない
 - 当てはまらない: ほかの顧客・ほかの業務・ほかの種類・無効・削除したルール
 - 知らせない: 重複の期間（同じルール・オーダー・種類。まもなくは遅れを消さない）・知らせない時間帯（知らせない）・
@@ -321,7 +321,7 @@ def test_settings_are_checked_when_created(db, client):
 
 
 def test_notification_models_resolve_their_foreign_keys_in_a_fresh_process():
-    """ワーカーのようにルーターを読まないプロセスでも、職員の表への外部キーを解決できる（N.3a で見つけた不具合）"""
+    """ワーカーのようにルーターを読まないプロセスでも、職員の表への外部キーを解決できる（そうでないと書くときに失敗した）"""
     import os
     import subprocess
     import sys
@@ -337,7 +337,7 @@ def test_notification_models_resolve_their_foreign_keys_in_a_fresh_process():
 
 
 # ==========================================
-# 1 回の数え方と、その回の中で覚えること（R.6 / C901 で dispatch_events を分ける前に固定する）
+# 1 回の数え方と、その回の中で覚えること（C901（複雑さの上限）で dispatch_events を分ける前に固定する）
 # ==========================================
 def test_one_pass_counts_what_it_made_and_remembers_it_for_the_next_event(db, client):
     dispatch(db)  # 先に、ほかの未処理の出来事を片づける（この回が数える出来事を、この 4 件にする）

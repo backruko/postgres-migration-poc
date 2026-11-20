@@ -4,7 +4,7 @@
 
     python -m scripts.create_staff <login_id> <氏名> --roles system_admin [--email someone@example.com]
 
-パスワードを 2 回たずねます（画面に出ません。LG.2）。この職員はそのパスワードでログインできます（仮パスワードではない）。
+パスワードを 2 回たずねます（画面に出ません）。この職員はそのパスワードでログインできます（仮パスワードではない）。
 接続先は .env の DATABASE_URL（環境変数 DATABASE_URL が優先）。
 """
 import argparse

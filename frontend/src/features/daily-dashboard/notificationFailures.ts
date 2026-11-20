@@ -1,4 +1,4 @@
-// 日次ダッシュボードの「届かなかったアラーム」（N.4b-2）の純粋な処理（帯の文・状態の言葉・確認の前後の分け方）。UI から独立している。
+// 日次ダッシュボードの「届かなかったアラーム」の純粋な処理（帯の文・状態の言葉・確認の前後の分け方）。UI から独立している。
 import type { FailedDelivery, FailedNotification, NotificationFailures } from "../../domain/notifications/types";
 import { dayjs } from "../../shared/lib/datetime";
 

@@ -23,8 +23,8 @@ import { AppLayout } from "./AppLayout";
  * - /                     日々の利用: 顧客の月カレンダー（予定の変更・取消・臨時追加）
  * - /daily                日々の利用: 全顧客横断の日次ダッシュボード（参照のみ）
  * - /reports/sla          集計: SLA（顧客 × 締切の月の完了・遅れ・期限内率。CSV 出力）
- * - /reports/events       確認: 記録された出来事と通知（タブ: 出来事 / 通知の記録。参照のみ。N.2c / N.5d）
- * - /reports/worker       確認: ワーカーの状態（いまの状態・1 日ごとの心拍とエラー・期間の判定。参照のみ。?from=&to=。P.4c）
+ * - /reports/events       確認: 記録された出来事と通知（タブ: 出来事 / 通知の記録。参照のみ）
+ * - /reports/worker       確認: ワーカーの状態（いまの状態・1 日ごとの心拍とエラー・期間の判定。参照のみ。?from=&to=）
  * - /settings/clients     事前設定: 顧客の管理（一覧・登録・顧客名の変更・無効 / 有効）
  * - /settings/businesses  事前設定: 顧客の業務の管理（一覧・登録・編集・削除・元に戻す。?client=）
  * - /settings/sop         事前設定: 業務の SOP（版の一覧・ステップ・新しい版・草稿の削除。?biz=&version=）
@@ -34,7 +34,7 @@ import { AppLayout } from "./AppLayout";
  * - /settings/holidays    事前設定: 営業日カレンダーの休日の管理
  * - /settings/dependencies 事前設定: 業務の依存関係（上流 → 下流）の管理（顧客ごと）
  * - /settings/staff       事前設定: 職員の管理（一覧・登録・編集・ロール・有効化／利用停止）
- * - /settings/notifications 事前設定: 通知の設定（ルール・宛先・テスト送信。?tab=。N.5c）
+ * - /settings/notifications 事前設定: 通知の設定（ルール・宛先・テスト送信。?tab=）
  */
 export function AppRoutes() {
   return (

@@ -1,4 +1,4 @@
-// テンプレートの変更依頼（下書き → 承認 → 反映。Level 2）の表示用ラベルと、画面の出し分け。UI から独立した純粋な処理。
+// テンプレートの変更依頼（下書き → 承認 → 反映）の表示用ラベルと、画面の出し分け。UI から独立した純粋な処理。
 // 出し分けはボタンを隠す・無効にするだけ。最終的な判定はバックエンド（src/domain_plan/template_changes.py）。
 import { ApiError } from "../../../shared/api/http";
 import type { Staff } from "../../staff/types";
@@ -34,7 +34,7 @@ export const DRAFT_SAVED_MESSAGE = "下書きを保存しました。業務管�
 const isActive = (s: Staff | null | undefined): s is Staff => s?.status === "active";
 
 /**
- * テンプレートを変えるときの形（2026-11-11 の決定）。
+ * テンプレートを変えるときの形。
  * - direct: 業務管理者。これまでどおり直接保存する（自分の下書きを自分で承認できるため、下書きは手間が増えるだけ）
  * - draft: 業務管理者でないリリース担当。下書きとして保存し、業務管理者の承認を待つ
  * - none: それ以外（見るだけ）
