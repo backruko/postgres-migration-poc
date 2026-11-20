@@ -42,3 +42,11 @@ def db_session():
     finally:
         session.rollback()
         session.close()
+
+
+# 止めた時計（tests/frozen_clock.py）。日付・時刻で結果が変わるテストは、ファイルの先頭で
+# `pytestmark = pytest.mark.usefixtures("frozen_clock")` とするか、引数で受けて frozen_clock.now / .today / .advance を使う
+@pytest.fixture
+def frozen_clock(monkeypatch):
+    from tests.frozen_clock import freeze
+    return freeze(monkeypatch)

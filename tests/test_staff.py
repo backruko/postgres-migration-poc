@@ -20,8 +20,11 @@ from src.domain_staff import services
 from src.domain_staff.auth import check_roles, get_current_staff, require_active, require_roles
 from src.domain_staff.models import RoleCode, StaffStatus
 from src.domain_staff.schemas import StaffCreate, StaffResponse, StaffUpdate
+from src.core.clock import utc_now
 from src.infrastructure.database import SessionLocal
-from datetime import UTC
+
+# セッションの期限（無操作 12 時間・最長 7 日）とロックの時刻を、実行の時刻に左右されずに確かめるため
+pytestmark = pytest.mark.usefixtures("frozen_clock")
 
 
 # ==========================================
@@ -172,14 +175,12 @@ def _request(method: str, path: str):
 
 
 def test_get_current_staff_reads_the_session_or_an_api_key(db):
-    from datetime import datetime
-
     from fastapi.security import HTTPAuthorizationCredentials
 
     from src.domain_staff import credentials
     from src.domain_staff.auth import require_login
 
-    now = datetime.now(UTC)
+    now = utc_now()
     staff = make_staff(db, RoleCode.VIEWER)
     token = credentials.create_session(db, staff, now=now).token
     db.commit()

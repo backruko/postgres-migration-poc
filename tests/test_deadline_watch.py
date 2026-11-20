@@ -35,6 +35,9 @@ from src.infrastructure.repositories import biz_master_repo, client_repo
 JST = ZoneInfo("Asia/Tokyo")
 MINUTE = timedelta(minutes=1)
 
+# 「今日」の枠が作られるかは実行の時刻で変わる（開始を過ぎた枠は作らない）ので、時計を止める
+pytestmark = pytest.mark.usefixtures("frozen_clock")
+
 
 @pytest.fixture
 def db():

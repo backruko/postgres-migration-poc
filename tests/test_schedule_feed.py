@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from tests.test_deadline_watch import biz_id, db, make_order  # noqa: F401  同じ準備（毎日 9:00 開始・締切は開始の 5 時間後）
 from src.coordination.schedule_feed import get_schedule_feed
+from src.core.clock import utc_now
 from src.core.exceptions import BadRequestError
 from src.domain_ope.models import OpeOrder, OrderStatus
 from src.domain_plan import services as plan_services
@@ -24,6 +25,9 @@ from src.domain_staff.models import RoleCode
 from src.domain_staff.scope import ClientScope
 
 JST = ZoneInfo("Asia/Tokyo")
+
+# 窓は「いま」から決まり、今日の枠は開始を過ぎると作られないので、時計を止める（make_order の時計も止まる）
+pytestmark = pytest.mark.usefixtures("frozen_clock")
 
 
 def feed(db, o: OpeOrder, **kw):
@@ -66,7 +70,7 @@ def test_lines_start_at_the_scheduled_start_with_names_and_deadline(db, biz_id):
 def test_only_orders_that_still_need_doing(db, biz_id):
     orders = [make_order(db, biz_id, ui_metadata={"category": "adhoc"}, index=i) for i in (3, 4, 5, 6, 7)]
     ready, started, held, done, gone = orders
-    now = datetime.now(UTC)
+    now = utc_now()
     ready.status, ready.released_at = OrderStatus.READY, now
     started.status, started.released_at = OrderStatus.IN_PROGRESS, now
     held.status, held.status_before_hold = OrderStatus.ON_HOLD, OrderStatus.PENDING
