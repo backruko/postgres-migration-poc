@@ -7,19 +7,22 @@ from logging.handlers import RotatingFileHandler
 # LOG_BACKUPS（既定 5）個より古いものは消す（合計で最大 約 (LOG_BACKUPS + 1) × LOG_MAX_MB）。
 # ファイル名は LOG_FILE で変えられる（同じフォルダで別のサーバーを動かすときは別の名前にする:
 # Windows では、開いている別のプロセスがあるとローテーションの名前の変更に失敗する）。
-logging.basicConfig(
-    level=logging.INFO,  # INFOレベル以上のログを出力
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        RotatingFileHandler(
-            os.environ.get("LOG_FILE", "app.log"),
-            maxBytes=int(os.environ.get("LOG_MAX_MB", "10")) * 1024 * 1024,
-            backupCount=int(os.environ.get("LOG_BACKUPS", "5")),
-            encoding="utf-8",
-        ),
-        logging.StreamHandler(),  # コンソールにも表示
-    ],
-)
+# ログがもう設定済み（テストで別のスクリプトが先に設定したとき）なら basicConfig は何もしないので、
+# ファイルも開かない（開いたまま捨てられるファイルを作らない）。
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,  # INFOレベル以上のログを出力
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            RotatingFileHandler(
+                os.environ.get("LOG_FILE", "app.log"),
+                maxBytes=int(os.environ.get("LOG_MAX_MB", "10")) * 1024 * 1024,
+                backupCount=int(os.environ.get("LOG_BACKUPS", "5")),
+                encoding="utf-8",
+            ),
+            logging.StreamHandler(),  # コンソールにも表示
+        ],
+    )
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
